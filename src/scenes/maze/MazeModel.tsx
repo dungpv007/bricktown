@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { COLORS, colorMaterialKind } from '../../core/colors'
 import { DEFAULT_MAZE_FLOOR_COLOR, MAZE_CELL, parseCellKey, type Cell, type Maze } from '../../core/maze'
@@ -31,43 +31,33 @@ export const cellCenter = (cell: Cell): [number, number] => [(cell.cx + 0.5) * M
 function Floor({ w, h, color }: { w: number; h: number; color: number }) {
   const sx = w * MAZE_CELL
   const sz = h * MAZE_CELL
-  const material = useMemo(() => {
-    const map = floorStudTexture().clone() // own repeat per maze size; shares the canvas image
-    map.repeat.set(sx, sz)
-    map.needsUpdate = true
-    return new THREE.MeshStandardMaterial({ map, roughness: 0.6 })
-  }, [sx, sz])
-  useEffect(
-    () => () => {
-      material.map?.dispose()
-      material.dispose()
-    },
-    [material],
-  )
-  useLayoutEffect(() => {
-    material.color.set(COLORS[color]?.hex ?? COLORS[DEFAULT_MAZE_FLOOR_COLOR].hex)
-  }, [material, color])
-
+  // Declared in JSX (R3F creates and disposes them); the stud texture is a shared cached one.
   const grid = useMemo(() => {
     const points: number[] = []
     for (let i = 0; i <= w; i++) points.push(i * MAZE_CELL, 0, 0, i * MAZE_CELL, 0, sz)
     for (let j = 0; j <= h; j++) points.push(0, 0, j * MAZE_CELL, sx, 0, j * MAZE_CELL)
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
-    return g
+    return new Float32Array(points)
   }, [w, h, sx, sz])
-  useEffect(() => () => grid.dispose(), [grid])
 
   return (
     <group>
-      <mesh position={[sx / 2, -FLOOR_THICKNESS / 2, sz / 2]} receiveShadow material={material}>
+      <mesh position={[sx / 2, -FLOOR_THICKNESS / 2, sz / 2]} receiveShadow>
         <boxGeometry args={[sx, FLOOR_THICKNESS, sz]} />
+        <meshStandardMaterial
+          map={floorStudTexture(sx, sz)}
+          color={COLORS[color]?.hex ?? COLORS[DEFAULT_MAZE_FLOOR_COLOR].hex}
+          roughness={0.6}
+        />
       </mesh>
       <mesh position={[sx / 2, -FLOOR_THICKNESS, sz / 2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[sx + GRASS_BORDER * 2, sz + GRASS_BORDER * 2]} />
         <meshStandardMaterial color={GRASS} roughness={1} />
       </mesh>
-      <lineSegments geometry={grid} position={[0, 0.02, 0]}>
+      <lineSegments position={[0, 0.02, 0]}>
+        {/* Keyed: a new size is a new geometry (a buffer attribute cannot grow). */}
+        <bufferGeometry key={`${w}x${h}`}>
+          <bufferAttribute attach="attributes-position" args={[grid, 3]} />
+        </bufferGeometry>
         <lineBasicMaterial color="#000000" transparent opacity={GRID_OPACITY} depthWrite={false} />
       </lineSegments>
     </group>

@@ -83,10 +83,27 @@ function buildCoin(): THREE.BufferGeometry {
   )
 }
 
+/** A flat hint arrow pointing to -Z (heading 0), lying on the floor: about 60% of a cell long. */
+function buildArrow(): THREE.BufferGeometry {
+  const k = MAZE_CELL / 8 // drawn for an 8-stud cell
+  const s = new THREE.Shape()
+  s.moveTo(0, 2.6 * k)
+  s.lineTo(2.2 * k, 0.2 * k)
+  s.lineTo(0.9 * k, 0.2 * k)
+  s.lineTo(0.9 * k, -2.4 * k)
+  s.lineTo(-0.9 * k, -2.4 * k)
+  s.lineTo(-0.9 * k, 0.2 * k)
+  s.lineTo(-2.2 * k, 0.2 * k)
+  s.closePath()
+  // The shape's +Y (the tip) becomes -Z once laid flat.
+  return new THREE.ShapeGeometry(s).rotateX(-Math.PI / 2)
+}
+
 let wallBlock: THREE.BufferGeometry | null = null
 let wallStuds: THREE.BufferGeometry | null = null
 let coin: THREE.BufferGeometry | null = null
 let hedge: THREE.BufferGeometry | null = null
+let arrow: THREE.BufferGeometry | null = null
 
 export function wallBlockGeometry(): THREE.BufferGeometry {
   return (wallBlock ??= buildWallBlock())
@@ -104,6 +121,10 @@ export function coinGeometry(): THREE.BufferGeometry {
   return (coin ??= buildCoin())
 }
 
+export function arrowGeometry(): THREE.BufferGeometry {
+  return (arrow ??= buildArrow())
+}
+
 function canvasTexture(size: number, draw: (ctx: CanvasRenderingContext2D, size: number) => void): THREE.Texture {
   const canvas = document.createElement('canvas')
   canvas.width = size
@@ -118,12 +139,11 @@ function canvasTexture(size: number, draw: (ctx: CanvasRenderingContext2D, size:
 
 let studTexture: THREE.Texture | null = null
 let checkerTexture: THREE.Texture | null = null
+/** The stud texture repeated over a floor of a given size, by "sx x sz" (a handful of maze sizes). */
+const floorTextures = new Map<string, THREE.Texture>()
 
-/**
- * One stud seen from above (near-white, multiplied by the floor colour), repeated once per stud:
- * the floor looks studded without thousands of stud meshes.
- */
-export function floorStudTexture(): THREE.Texture {
+/** One stud seen from above (near-white, multiplied by the floor colour). */
+function studTile(): THREE.Texture {
   if (studTexture) return studTexture
   studTexture = canvasTexture(64, (ctx, s) => {
     ctx.fillStyle = '#ffffff'
@@ -144,9 +164,25 @@ export function floorStudTexture(): THREE.Texture {
     ctx.arc(c, c, r - 3, Math.PI * 0.9, Math.PI * 1.6)
     ctx.stroke()
   })
-  studTexture.wrapS = THREE.RepeatWrapping
-  studTexture.wrapT = THREE.RepeatWrapping
   return studTexture
+}
+
+/**
+ * The floor's stud texture for an `sx` x `sz` stud floor: one stud per world unit, so the floor
+ * looks studded without thousands of stud meshes. Cached per size (clones share the canvas image).
+ */
+export function floorStudTexture(sx: number, sz: number): THREE.Texture {
+  const key = `${sx}x${sz}`
+  let texture = floorTextures.get(key)
+  if (!texture) {
+    texture = studTile().clone()
+    texture.wrapS = THREE.RepeatWrapping
+    texture.wrapT = THREE.RepeatWrapping
+    texture.repeat.set(sx, sz)
+    texture.needsUpdate = true
+    floorTextures.set(key, texture)
+  }
+  return texture
 }
 
 /** Black and white squares (4 x 4) for the finish flag and pad. */
