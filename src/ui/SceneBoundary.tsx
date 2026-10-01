@@ -8,10 +8,7 @@ import SceneLoading from './SceneLoading'
 function SceneError() {
   const t = useT()
   const setMode = useApp((s) => s.setMode)
-  const goHome = () => {
-    resetFailedScenes() // entering the scene again retries the download
-    setMode('menu')
-  }
+  const goHome = () => setMode('menu') // entering the scene again retries the download (retryFailedScenesOnMenu)
   return (
     <div className="bt-screen bt-placeholder" data-testid="scene-error" role="alert">
       <span className="bt-scene-error-icon" aria-hidden="true">🧱💥</span>
@@ -42,6 +39,17 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean
   render() {
     return this.state.failed ? <SceneError /> : this.props.children
   }
+}
+
+/**
+ * Forgets failed scene loads whenever the app returns to the main menu, by any route (the error
+ * screen's 🏠 or the top bar ←), so entering a scene again always retries its download.
+ * Returns an unsubscribe.
+ */
+export function retryFailedScenesOnMenu(): () => void {
+  return useApp.subscribe((s, prev) => {
+    if (s.mode === 'menu' && prev.mode !== 'menu') resetFailedScenes()
+  })
 }
 
 /**

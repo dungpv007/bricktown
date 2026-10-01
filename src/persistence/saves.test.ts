@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createEmptySave, SCHEMA_VERSION } from '../core/serialize'
 import type { SaveData } from '../core/types'
 import { db } from './db'
-import { deleteSlot, listSlots, loadSlot, saveSlot } from './saves'
+import { deleteSlot, listBackups, listSlots, loadSlot, saveSlot } from './saves'
 
 function sampleSave(): SaveData {
   const save = createEmptySave()
@@ -76,6 +76,12 @@ describe('saves', () => {
     expect(await db.backups.count()).toBe(1)
   })
 
+  it('concurrent loads of the same unreadable record make one backup', async () => {
+    await db.slots.put({ id: 1, name: 'x', updatedAt: 1, data: { nonsense: true } as unknown as SaveData })
+    await Promise.all([loadSlot(1), loadSlot(1)])
+    expect(await db.backups.count()).toBe(1)
+  })
+
   it('a read exception is an error, not an empty slot, and makes no backup', async () => {
     await saveSlot(1, sampleSave())
     vi.spyOn(db.slots, 'get').mockRejectedValue(new Error('boom'))
@@ -119,5 +125,35 @@ describe('saves', () => {
     expect(await loadSlot(1)).toEqual({ status: 'error' })
     expect(await listSlots()).toEqual([])
     expect(await deleteSlot(1)).toBe(false)
+  })
+
+  it('listBackups lists every backup, by slot then newest first', async () => {
+    expect(await listBackups()).toEqual([])
+    await db.backups.bulkAdd([
+      { slotId: 2, savedAt: 10, raw: { id: 2, data: 'a' } },
+      { slotId: 1, savedAt: 5, raw: { id: 1, data: 'old' } },
+      { slotId: 1, savedAt: 20, raw: { id: 1, data: 'new' } },
+    ])
+    const list = await listBackups()
+    expect(list.map((b) => [b.slotId, b.savedAt])).toEqual([
+      [1, 20],
+      [1, 5],
+      [2, 10],
+    ])
+    expect(list[0].raw).toEqual({ id: 1, data: 'new' })
+    expect(list.every((b) => typeof b.id === 'number')).toBe(true)
+  })
+
+  it('a backup made from an unreadable slot is listed for download', async () => {
+    await db.slots.put({ id: 3, name: 'x', updatedAt: 1, data: { nonsense: true } as unknown as SaveData })
+    await loadSlot(3)
+    const [backup] = await listBackups()
+    expect(backup.slotId).toBe(3)
+    expect(backup.raw).toMatchObject({ id: 3, data: { nonsense: true } })
+  })
+
+  it('listBackups is empty when the database fails', async () => {
+    vi.spyOn(db.backups, 'toArray').mockRejectedValue(new Error('boom'))
+    expect(await listBackups()).toEqual([])
   })
 })

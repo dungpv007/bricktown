@@ -141,6 +141,16 @@
   box-shadow: var(--bt-shadow);
 }
 
+.bt-save-warning {
+  background: var(--bt-red); /* the yellow ⚠️ stands out on red */
+}
+
+.bt-save-help {
+  margin: 0;
+  font-size: 20px;
+  text-align: center;
+}
+
 .bt-placeholder {
   align-items: center;
   justify-content: center;
@@ -358,6 +368,7 @@
   position: fixed;
   inset: 0;
   z-index: 20;
+  pointer-events: auto; /* catches taps even inside a pass-through overlay (the celebration) */
   display: flex;
   align-items: center;
   justify-content: center;

@@ -1,5 +1,6 @@
 import { exportSave, importSave } from '../core/serialize'
 import type { SaveData } from '../core/types'
+import type { Backup } from './saves'
 
 function todayStamp(): string {
   const d = new Date()
@@ -7,17 +8,29 @@ function todayStamp(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-/** Triggers a download of `data` as `bricktown-slot<N>-<yyyy-mm-dd>.json`. */
-export function downloadSave(data: SaveData, slotId: number): void {
-  const blob = new Blob([exportSave(data)], { type: 'application/json' })
+function downloadJson(json: string, fileName: string): void {
+  const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `bricktown-slot${slotId}-${todayStamp()}.json`
+  a.download = fileName
   document.body.appendChild(a)
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Triggers a download of `data` as `bricktown-slot<N>-<yyyy-mm-dd>.json`. */
+export function downloadSave(data: SaveData, slotId: number): void {
+  downloadJson(exportSave(data), `bricktown-slot${slotId}-${todayStamp()}.json`)
+}
+
+/**
+ * Triggers a download of a backed-up unreadable slot record, exactly as it was stored, as
+ * `bricktown-slot<N>-backup<id>.json`, so it can be recovered by hand or by a future version.
+ */
+export function downloadBackup(backup: Backup): void {
+  downloadJson(JSON.stringify(backup.raw, null, 2) ?? 'null', `bricktown-slot${backup.slotId}-backup${backup.id}.json`)
 }
 
 export type ImportOutcome =

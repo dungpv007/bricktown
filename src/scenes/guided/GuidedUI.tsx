@@ -174,10 +174,11 @@ function CelebrationOverlay({ onBrowse }: { onBrowse: () => void }) {
             📋
           </button>
         </div>
-        {confirming && (
-          <ConfirmDialog messageKey="confirmReplaceWorkshop" onYes={openInWorkshop} onNo={() => setConfirming(false)} />
-        )}
       </div>
+      {/* Outside the card: its entry animation would make it the containing block of the fixed backdrop. */}
+      {confirming && (
+        <ConfirmDialog messageKey="confirmReplaceWorkshop" onYes={openInWorkshop} onNo={() => setConfirming(false)} />
+      )}
     </div>
   )
 }

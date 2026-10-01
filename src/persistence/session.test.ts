@@ -7,7 +7,7 @@ import { useGame } from '../state/useGame'
 import { flushAutosave } from './autosave'
 import { db } from './db'
 import { loadSlot } from './saves'
-import { applySave, deleteSlotById, loadCurrentSlot, switchSlot } from './session'
+import { applySave, deleteSlotById, importIntoCurrentSlot, loadCurrentSlot, switchSlot } from './session'
 import { usePersistStatus } from './status'
 
 const brick = { id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0 as const, c: 0 }
@@ -98,5 +98,26 @@ describe('deleteSlotById', () => {
     vi.spyOn(db.slots, 'delete').mockRejectedValue(new Error('boom'))
     expect(await deleteSlotById(1)).toBe(false)
     expect(useGame.getState().data.workshop.bricks).toHaveLength(1)
+  })
+})
+
+describe('slot operations block app-update reloads while they run', () => {
+  const activity = () => usePersistStatus.getState().slotActivity
+
+  it('switch, delete and import each count as slot activity until they settle', async () => {
+    for (const run of [() => switchSlot(2), () => deleteSlotById(2), () => importIntoCurrentSlot(savedWithBrick())]) {
+      const running = run()
+      expect(activity()).toBe(1)
+      expect(await running).toBe(true)
+      expect(activity()).toBe(0)
+    }
+  })
+
+  it('a failed operation ends its activity too', async () => {
+    vi.spyOn(db.slots, 'put').mockRejectedValue(new Error('quota'))
+    const running = importIntoCurrentSlot(savedWithBrick())
+    expect(activity()).toBe(1)
+    expect(await running).toBe(false)
+    expect(activity()).toBe(0)
   })
 })

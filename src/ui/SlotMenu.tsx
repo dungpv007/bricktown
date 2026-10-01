@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { SaveData } from '../core/types'
 import { flushAutosave } from '../persistence/autosave'
-import { downloadSave, pickAndImportSave } from '../persistence/file'
-import { listSlots, type SlotSummary } from '../persistence/saves'
+import { downloadBackup, downloadSave, pickAndImportSave } from '../persistence/file'
+import { listBackups, listSlots, type Backup, type SlotSummary } from '../persistence/saves'
 import { deleteSlotById, importIntoCurrentSlot, switchSlot } from '../persistence/session'
 import { useApp, type SlotId } from '../state/useApp'
-import { usePersistStatus } from '../persistence/status'
+import { beginSlotActivity, usePersistStatus } from '../persistence/status'
 import { useGame } from '../state/useGame'
 import ConfirmDialog from './ConfirmDialog'
 import { useT, type TKey } from './i18n'
@@ -19,22 +19,29 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
   const lang = useApp((s) => s.lang)
   const slotId = useApp((s) => s.slotId)
   const [summaries, setSummaries] = useState<SlotSummary[]>([])
+  const [backups, setBackups] = useState<Backup[]>([])
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const persistError = usePersistStatus((s) => s.error)
 
+  // While this menu is open an app update must not reload the page (a choice could be pending).
+  useEffect(() => beginSlotActivity(), [])
+
   const refresh = useCallback(async () => {
     await flushAutosave()
     setSummaries(await listSlots())
+    setBackups(await listBackups())
   }, [])
 
   useEffect(() => {
     let alive = true
     void (async () => {
       await flushAutosave()
-      const list = await listSlots()
-      if (alive) setSummaries(list)
+      const [list, saved] = await Promise.all([listSlots(), listBackups()])
+      if (!alive) return
+      setSummaries(list)
+      setBackups(saved)
     })()
     return () => {
       alive = false
@@ -130,7 +137,8 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
             aria-label={t('exportSave')}
             disabled={busy}
             onClick={() => {
-              void flushAutosave()
+              const end = beginSlotActivity() // also if the menu closes before the save lands
+              void flushAutosave().finally(end)
               downloadSave(useGame.getState().data, slotId)
             }}
           >
@@ -146,6 +154,20 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
             ⬆️ {t('importSave')}
           </button>
         </div>
+        {backups.length > 0 && (
+          <div className="bt-row" data-testid="backups">
+            {backups.map((b) => (
+              <button
+                key={b.id}
+                className="bt-btn"
+                data-testid={`download-backup-${b.id}`}
+                onClick={() => downloadBackup(b)}
+              >
+                🛟 {t('downloadBackup')} {b.slotId} <small>{dateFmt.format(b.savedAt)}</small>
+              </button>
+            ))}
+          </div>
+        )}
         {persistError === 'load' && (
           <p className="bt-error" data-testid="slot-load-warning" role="alert">
             ⚠️ {t('loadWarning')}

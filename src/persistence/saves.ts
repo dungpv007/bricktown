@@ -1,6 +1,6 @@
 import { migrate } from '../core/serialize'
 import type { SaveData } from '../core/types'
-import { db } from './db'
+import { db, type BackupRecord } from './db'
 
 export interface SlotSummary {
   id: number
@@ -32,12 +32,17 @@ function readRecordData(raw: unknown): SaveData | null {
   }
 }
 
-/** Copies the raw record into `backups` (once per distinct content). Throws on failure. */
+/**
+ * Copies the raw record into `backups` (once per distinct content). Throws on failure. One
+ * transaction, so concurrent loads (React StrictMode runs the boot load twice) cannot both add it.
+ */
 async function backupRaw(slotId: number, raw: unknown): Promise<void> {
   const serialized = JSON.stringify(raw) ?? 'undefined'
-  const existing = await db.backups.where('slotId').equals(slotId).toArray()
-  if (existing.some((b) => (JSON.stringify(b.raw) ?? 'undefined') === serialized)) return
-  await db.backups.add({ slotId, savedAt: Date.now(), raw })
+  await db.transaction('rw', db.backups, async () => {
+    const existing = await db.backups.where('slotId').equals(slotId).toArray()
+    if (existing.some((b) => (JSON.stringify(b.raw) ?? 'undefined') === serialized)) return
+    await db.backups.add({ slotId, savedAt: Date.now(), raw })
+  })
 }
 
 export async function loadSlot(id: number): Promise<LoadResult> {
@@ -86,5 +91,19 @@ export async function deleteSlot(id: number): Promise<boolean> {
   } catch (e) {
     console.error('bricktown: failed to delete slot', id, e)
     return false
+  }
+}
+
+/** A stored backup of an unreadable slot record. */
+export type Backup = Required<BackupRecord>
+
+/** Every backup of unreadable slot records, by slot then newest first (empty when the database fails). */
+export async function listBackups(): Promise<Backup[]> {
+  try {
+    const recs = (await db.backups.toArray()) as Backup[]
+    return recs.sort((a, b) => a.slotId - b.slotId || b.savedAt - a.savedAt)
+  } catch (e) {
+    console.error('bricktown: failed to list backups', e)
+    return []
   }
 }

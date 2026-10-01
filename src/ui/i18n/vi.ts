@@ -98,4 +98,6 @@ export const vi = {
   driveChange: 'Đổi xe',
   driveSteer: 'Lái',
   sceneError: 'Ôi, phần này chưa mở được',
+  saveHelp: 'Xuất file để giữ mô hình an toàn',
+  downloadBackup: 'Tải bản sao lưu',
 } as const

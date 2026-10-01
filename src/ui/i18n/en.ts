@@ -100,4 +100,6 @@ export const en: Record<keyof typeof vi, string> = {
   driveChange: 'Change car',
   driveSteer: 'Steer',
   sceneError: 'Oops, this part could not open',
+  saveHelp: 'Export a file to keep your models safe',
+  downloadBackup: 'Download backup',
 }

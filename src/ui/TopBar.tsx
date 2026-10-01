@@ -1,6 +1,7 @@
 import type { TKey } from './i18n'
 import { useT } from './i18n'
 import { useApp } from '../state/useApp'
+import SaveWarning from './SaveWarning'
 
 export default function TopBar({ titleKey }: { titleKey: TKey }) {
   const t = useT()
@@ -13,6 +14,7 @@ export default function TopBar({ titleKey }: { titleKey: TKey }) {
       <span className="bt-topbar-title" data-testid="mode-title">
         {t(titleKey)}
       </span>
+      <SaveWarning />
     </div>
   )
 }
