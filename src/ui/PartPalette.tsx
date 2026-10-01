@@ -3,7 +3,9 @@ import { COLORS } from '../core/colors'
 import { PART_CATEGORIES, PARTS } from '../core/parts/catalog'
 import type { PartCategory, PartDef, PartShape } from '../core/types'
 import { useEditor } from '../state/useEditor'
+import { getPartThumbnail } from '../render/thumbnails'
 import { useT, type TKey } from './i18n'
+import { useThumbnail } from './useThumbnail'
 
 const CATEGORY_TABS: Record<PartCategory, { icon: string; labelKey: TKey }> = {
   brick: { icon: '🧱', labelKey: 'catBrick' },
@@ -16,7 +18,7 @@ const CATEGORY_TABS: Record<PartCategory, { icon: string; labelKey: TKey }> = {
   nature: { icon: '🌳', labelKey: 'catNature' },
 }
 
-/** Shapes without a simple silhouette get an emoji until real thumbnails arrive (Task 8). */
+/** Shapes without a simple silhouette get an emoji (fallback while a thumbnail renders, and in compact lists). */
 const SHAPE_EMOJI: Partial<Record<PartShape, string>> = {
   wheel: '🛞', window: '🪟', door: '🚪', fence: '🚧', table: '🪑', chair: '🪑', counter: '🗄️',
   stove: '🍳', fridge: '🧊', sign: '🪧', lamp: '💡', tree: '🌳', bush: '🌿', flower: '🌷',
@@ -97,6 +99,13 @@ export function PartIcon({ part, color }: { part: PartDef; color: string }) {
   )
 }
 
+/** Rendered thumbnail of the part in the current colour; the SVG / emoji icon shows until it is ready. */
+function PartButtonImage({ part, color, hex }: { part: PartDef; color: number; hex: string }) {
+  const url = useThumbnail(`part:${part.id}:${color}`, () => getPartThumbnail(part.id, color))
+  if (!url) return <PartIcon part={part} color={hex} />
+  return <img className="bt-part-thumb" src={url} alt="" draggable={false} />
+}
+
 const sizeLabel = (p: PartDef) => `${p.w}×${p.d}`
 
 interface Props {
@@ -169,7 +178,7 @@ export default function PartPalette({ allowedParts }: Props = {}) {
               setTool('place')
             }}
           >
-            <PartIcon part={p} color={hex} />
+            <PartButtonImage part={p} color={color} hex={hex} />
             <span className="bt-part-label">{sizeLabel(p)}</span>
           </button>
         ))}

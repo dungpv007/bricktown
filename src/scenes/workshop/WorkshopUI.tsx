@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { Baseplate, BlueprintKind } from '../../core/types'
+import type { Baseplate, Blueprint, BlueprintKind } from '../../core/types'
 import { useEditor } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
+import BlueprintLibrary from '../../ui/BlueprintLibrary'
 import ColorPicker from '../../ui/ColorPicker'
+import ConfirmDialog from '../../ui/ConfirmDialog'
 import { useT, type TKey } from '../../ui/i18n'
 import PartPalette from '../../ui/PartPalette'
+import SaveBlueprintDialog from '../../ui/SaveBlueprintDialog'
 import Toolbar from '../../ui/Toolbar'
 
 interface ModelOption {
@@ -110,9 +113,44 @@ function ErrorBadge() {
 export default function WorkshopUI() {
   const t = useT()
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [pendingOpen, setPendingOpen] = useState<Blueprint | null>(null)
+  const hasBricks = useGame((s) => s.data.workshop.bricks.length > 0)
+  const loadBricks = useEditor((s) => s.loadBricks)
+
+  const open = (bp: Blueprint) => {
+    loadBricks(bp.bricks, bp.kind, bp.baseplate, bp.id)
+    setPendingOpen(null)
+    setLibraryOpen(false)
+  }
+  const onPick = (bp: Blueprint) => {
+    // Opening replaces the model being built, so ask first unless there is nothing to lose.
+    const { workshop } = useGame.getState().data
+    if (workshop.bricks.length > 0 && workshop.editingBlueprintId !== bp.id) setPendingOpen(bp)
+    else open(bp)
+  }
+
   return (
     <div className="bt-workshop-ui">
       <div className="bt-topright">
+        <button
+          className="bt-btn bt-icon-btn"
+          data-testid="open-library"
+          aria-label={t('open')}
+          onClick={() => setLibraryOpen(true)}
+        >
+          📂
+        </button>
+        <button
+          className="bt-btn bt-icon-btn"
+          data-testid="save-blueprint"
+          aria-label={t('save')}
+          disabled={!hasBricks}
+          onClick={() => setSaveOpen(true)}
+        >
+          💾
+        </button>
         <button
           className="bt-btn bt-icon-btn"
           data-testid="new-model"
@@ -127,6 +165,11 @@ export default function WorkshopUI() {
       <PartPalette />
       <ErrorBadge />
       {pickerOpen && <NewModelPicker onClose={() => setPickerOpen(false)} />}
+      {saveOpen && <SaveBlueprintDialog onClose={() => setSaveOpen(false)} />}
+      {libraryOpen && <BlueprintLibrary onPick={onPick} onClose={() => setLibraryOpen(false)} />}
+      {pendingOpen && (
+        <ConfirmDialog messageKey="confirmReplaceModel" onYes={() => open(pendingOpen)} onNo={() => setPendingOpen(null)} />
+      )}
     </div>
   )
 }

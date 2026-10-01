@@ -36,3 +36,15 @@ export const ghostMaterial = new THREE.MeshStandardMaterial({
 export function createGhostMaterial(): THREE.MeshStandardMaterial {
   return ghostMaterial.clone()
 }
+
+/** For baked models (`bakeBricks`): colours live in the geometry's `color` attribute. Never dispose. */
+export const bakedMaterial = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0, vertexColors: true })
+
+export const bakedGlassMaterial = new THREE.MeshStandardMaterial({
+  roughness: 0.1,
+  metalness: 0,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.45,
+  depthWrite: false,
+})
