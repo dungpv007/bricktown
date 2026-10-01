@@ -16,12 +16,21 @@ const CATEGORY_TABS: Record<PartCategory, { icon: string; labelKey: TKey }> = {
   wheel: { icon: '🛞', labelKey: 'catWheel' },
   furniture: { icon: '🪑', labelKey: 'catFurniture' },
   nature: { icon: '🌳', labelKey: 'catNature' },
+  decor: { icon: '🖼️', labelKey: 'catDecor' },
 }
 
 /** Shapes without a simple silhouette get an emoji (fallback while a thumbnail renders, and in compact lists). */
 const SHAPE_EMOJI: Partial<Record<PartShape, string>> = {
   wheel: '🛞', window: '🪟', door: '🚪', fence: '🚧', table: '🪑', chair: '🪑', counter: '🗄️',
   stove: '🍳', fridge: '🧊', sign: '🪧', lamp: '💡', tree: '🌳', bush: '🌿', flower: '🌷',
+  nose_cone: '🚀', dish: '📡', antenna: '📶', bars: '⛓️', steering: '🛞', computer: '💻', bed: '🛏️',
+  flag: '🚩', fin: '🚀', engine: '🔥', tile_print: '🖼️',
+}
+
+/** Printed tiles show their picture (fallback while the thumbnail renders, and in the rotate button). */
+const PRINT_EMOJI: Record<string, string> = {
+  police: '🚓', fire: '🚒', clock: '🕙', stop: '🛑', arrow: '➡️', menu: '📋', screen: '🖥️',
+  robot_eyes: '🤖', number_112: '🔢', heart: '❤️', star: '⭐',
 }
 
 const ICON = 44
@@ -29,7 +38,7 @@ const STROKE = 'rgba(0,0,0,0.35)'
 
 /** Small SVG silhouette of a part: top view for boxes / round parts, side view for slopes. */
 export function PartIcon({ part, color }: { part: PartDef; color: string }) {
-  const emoji = SHAPE_EMOJI[part.shape]
+  const emoji = (part.print && PRINT_EMOJI[part.print]) || SHAPE_EMOJI[part.shape]
   if (emoji) return <span className="bt-part-emoji" aria-hidden="true">{emoji}</span>
 
   const cell = Math.min(10, (ICON - 4) / Math.max(part.w, part.d))

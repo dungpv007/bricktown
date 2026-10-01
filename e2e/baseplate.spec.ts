@@ -163,3 +163,22 @@ test('baseplate: growing toward the camera keeps the plate and every button reac
     await page.screenshot({ path: info.outputPath(`baseplate-ipad-grown-${expected.w}x${expected.d}.png`) })
   }
 })
+
+test('baseplate: rotating the tablet re-frames a fully shown plate for the new screen', async ({ page }, info) => {
+  await openWorkshop(page)
+  await expectSettledClearOfHud(page)
+  const plateWidth = () => page.evaluate(() => {
+    const b = (window as unknown as BtWindow).__bt.plateScreen.bounds
+    return b ? b.right - b.left : 0
+  })
+  const landscape = await plateWidth()
+
+  await page.setViewportSize({ width: 810, height: 1080 }) // portrait
+  await expectSettledClearOfHud(page)
+  await page.screenshot({ path: info.outputPath('baseplate-portrait.png') })
+
+  await page.setViewportSize({ width: 1080, height: 810 }) // and back
+  await expectSettledClearOfHud(page)
+  // Framed again for the wide screen, not left at the narrower portrait size.
+  await expect.poll(plateWidth, { timeout: 10_000 }).toBeGreaterThan(landscape * 0.9)
+})

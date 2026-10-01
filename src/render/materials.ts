@@ -1,5 +1,7 @@
 import * as THREE from 'three'
+import type { BakedKind } from '../core/bake'
 import type { MaterialKind } from '../core/colors'
+import { createPrintTexture } from './printAtlas'
 
 const OPAQUE = { roughness: 0.35, metalness: 0 }
 /** See-through colours (glass, trans red...): the instance colour tints a translucent brick. */
@@ -20,8 +22,10 @@ function createStudioEnvironment(): THREE.DataTexture {
     [0.58, 150],
     [1, 70], // straight down
   ]
+  // Equirect sampling puts v = 1 straight up, and DataTexture rows are not flipped (flipY false):
+  // row 0 is v near 0, straight down. `v` below runs the other way, from the top.
   for (let y = 0; y < H; y++) {
-    const v = (y + 0.5) / H
+    const v = 1 - (y + 0.5) / H
     const i = stops.findIndex(([at]) => at >= v)
     const [a0, b0] = stops[Math.max(0, i - 1)]
     const [a1, b1] = stops[i]
@@ -50,8 +54,24 @@ export const brickMaterials: Record<MaterialKind, THREE.MeshStandardMaterial> = 
   metal: new THREE.MeshStandardMaterial(METAL),
 }
 
-/** Whether bricks of a material kind cast shadows (see-through ones do not). */
-export const castsShadow = (kind: MaterialKind): boolean => kind !== 'trans'
+/**
+ * Prints (printed tiles, screens): the shared print atlas, in its own colours (no instance or
+ * vertex colour). Transparent atlas pixels are cut out (alpha test, smoothed by alpha-to-coverage
+ * when antialiased) so the brick colour shows around a picture; polygon offset keeps the print in
+ * front of the surface it lies on. Serves instanced and baked prints alike. Never dispose.
+ */
+export const printMaterial = new THREE.MeshStandardMaterial({
+  ...OPAQUE,
+  map: createPrintTexture(),
+  alphaTest: 0.5,
+  alphaToCoverage: true,
+  polygonOffset: true,
+  polygonOffsetFactor: -1,
+  polygonOffsetUnits: -2,
+})
+
+/** Whether meshes of a kind cast shadows (see-through bricks do not; a print lies on a body that does). */
+export const castsShadow = (kind: BakedKind): boolean => kind === 'opaque' || kind === 'metal'
 
 export const GHOST_OPACITY = 0.5
 
@@ -76,11 +96,12 @@ export function createGhostMaterial(): THREE.MeshStandardMaterial {
 }
 
 /**
- * For baked models (`bakeBricks`), per material kind: colours live in the geometry's `color`
- * attribute. Same look as `brickMaterials`. Never dispose.
+ * For baked models (`bakeBricks`), per baked kind: body colours live in the geometry's `color`
+ * attribute; prints use `printMaterial`. Same look as `brickMaterials`. Never dispose.
  */
-export const bakedMaterials: Record<MaterialKind, THREE.MeshStandardMaterial> = {
+export const bakedMaterials: Record<BakedKind, THREE.MeshStandardMaterial> = {
   opaque: new THREE.MeshStandardMaterial({ ...OPAQUE, vertexColors: true }),
   trans: new THREE.MeshStandardMaterial({ ...TRANS, vertexColors: true }),
   metal: new THREE.MeshStandardMaterial({ ...METAL, vertexColors: true }),
+  print: printMaterial,
 }

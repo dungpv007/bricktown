@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { bakeBricksUncached, bakedGeometries, disposeBaked, type BakedModel } from '../core/bake'
+import { getPart } from '../core/parts/catalog'
 import type { Brick } from '../core/types'
 import { bakedMaterials } from './materials'
 
@@ -14,6 +15,8 @@ export const PART_THUMB_SIZE = 128
 
 /** Fixed 3/4 isometric viewing direction: front-right, from above (matches the Workshop view). */
 const VIEW_DIR = new THREE.Vector3(1, 0.9, 1).normalize()
+/** Steeper, from the front, for flat printed tiles: the picture is what tells them apart. */
+const PRINT_VIEW_DIR = new THREE.Vector3(0.3, 1.6, 0.8).normalize()
 const FIT_MARGIN = 1.12
 
 let renderer: THREE.WebGLRenderer | null = null
@@ -51,11 +54,11 @@ function createScene(): THREE.Scene {
 }
 
 /** Orthographic camera looking at the box's centre along VIEW_DIR, sized to just contain it. */
-function fitCamera(box: THREE.Box3): THREE.OrthographicCamera {
+function fitCamera(box: THREE.Box3, viewDir: THREE.Vector3): THREE.OrthographicCamera {
   const center = box.getCenter(new THREE.Vector3())
   const radius = box.getSize(new THREE.Vector3()).length() / 2 || 1
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, radius * 8)
-  camera.position.copy(center).addScaledVector(VIEW_DIR, radius * 4)
+  camera.position.copy(center).addScaledVector(viewDir, radius * 4)
   camera.lookAt(center)
   camera.updateMatrixWorld(true)
 
@@ -78,7 +81,7 @@ function fitCamera(box: THREE.Box3): THREE.OrthographicCamera {
   return camera
 }
 
-function render(bricks: Brick[], size: number): string {
+function render(bricks: Brick[], size: number, viewDir: THREE.Vector3): string {
   const gl = getRenderer()
   if (!gl || bricks.length === 0) return ''
   const scene = createScene()
@@ -95,7 +98,7 @@ function render(bricks: Brick[], size: number): string {
       scene.add(mesh)
     }
     gl.setSize(size, size, false)
-    gl.render(scene, fitCamera(box))
+    gl.render(scene, fitCamera(box, viewDir))
     return gl.domElement.toDataURL('image/png')
   } catch {
     return ''
@@ -108,13 +111,18 @@ function render(bricks: Brick[], size: number): string {
  * PNG data URL of a model, memoised by `key` (include whatever makes the picture change, e.g.
  * `${blueprint.id}:${blueprint.updatedAt}`). Resolves to '' if rendering is impossible.
  */
-export function getThumbnail(key: string, bricks: Brick[], size = BLUEPRINT_THUMB_SIZE): Promise<string> {
+export function getThumbnail(
+  key: string,
+  bricks: Brick[],
+  size = BLUEPRINT_THUMB_SIZE,
+  viewDir: THREE.Vector3 = VIEW_DIR,
+): Promise<string> {
   const cached = memo.get(key)
   if (cached) return cached
   // One render per macrotask so a burst of requests never blocks input.
   const result = queue
     .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
-    .then(() => render(bricks, size))
+    .then(() => render(bricks, size, viewDir))
     .then((url) => {
       if (!url) memo.delete(key) // failures are not remembered, so a later request can retry
       return url
@@ -127,5 +135,11 @@ export function getThumbnail(key: string, bricks: Brick[], size = BLUEPRINT_THUM
 /** Thumbnail of a single part in the given colour index. */
 export function getPartThumbnail(partId: string, color: number): Promise<string> {
   const brick: Brick = { id: 'thumb', p: partId, x: 0, y: 0, z: 0, r: 0, c: color }
-  return getThumbnail(`part:${partId}:${color}`, [brick], PART_THUMB_SIZE)
+  let viewDir = VIEW_DIR
+  try {
+    if (getPart(partId).shape === 'tile_print') viewDir = PRINT_VIEW_DIR
+  } catch {
+    // Unknown part: render() resolves '' for it anyway.
+  }
+  return getThumbnail(`part:${partId}:${color}`, [brick], PART_THUMB_SIZE, viewDir)
 }

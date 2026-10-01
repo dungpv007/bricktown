@@ -1,7 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { bakedGeometries, type BakedModel } from '../../core/bake'
-import type { MaterialKind } from '../../core/colors'
+import { bakedGeometries, type BakedKind, type BakedModel } from '../../core/bake'
 import { CELL, footprintCells } from '../../core/city'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
@@ -42,7 +41,7 @@ function BakedInstances({
   placements,
 }: {
   geometry: THREE.BufferGeometry
-  kind: MaterialKind
+  kind: BakedKind
   baseplate: Baseplate
   placements: CityPlacement[]
 }) {

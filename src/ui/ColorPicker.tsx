@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { COLORS, colorMaterialKind, type MaterialKind } from '../core/colors'
 import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
@@ -14,13 +14,37 @@ const SWATCH_CLASS: Record<MaterialKind, string> = {
   metal: 'bt-swatch bt-swatch-metal',
 }
 
-/** Right column of big colour swatches (two wide, scrolls when they do not all fit). */
+/** Pixels of slack before the column counts as scrolled to the end. */
+const END_SLACK = 4
+
+/** True while part of the scrollable element's content is hidden below its visible area. */
+function useMoreBelow(ref: RefObject<HTMLElement | null>): boolean {
+  const [more, setMore] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () => setMore(el.scrollTop + el.clientHeight < el.scrollHeight - END_SLACK)
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
+    resize?.observe(el)
+    return () => {
+      el.removeEventListener('scroll', update)
+      resize?.disconnect()
+    }
+  }, [ref])
+  return more
+}
+
+/** Right column of big colour swatches (two wide, scrolls when they do not all fit, with a cue). */
 export default function ColorPicker() {
   const lang = useApp((s) => s.lang)
   const current = useEditor((s) => s.color)
   const setColor = useEditor((s) => s.setColor)
+  const panel = useRef<HTMLDivElement>(null)
+  const more = useMoreBelow(panel)
   return (
-    <div className="bt-colors bt-hud-panel" role="group">
+    <div ref={panel} className="bt-colors bt-hud-panel" role="group">
       {PICKER_COLORS.map((c) => (
         <button
           key={c.id}
@@ -32,6 +56,11 @@ export default function ColorPicker() {
           onClick={() => setColor(c.id)}
         />
       ))}
+      {more && (
+        <div className="bt-colors-more" data-testid="colors-more" aria-hidden="true">
+          <span>▼</span>
+        </div>
+      )}
     </div>
   )
 }

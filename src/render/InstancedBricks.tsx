@@ -2,11 +2,13 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { COLORS, colorMaterialKind, type MaterialKind } from '../core/colors'
+import type { BakedKind } from '../core/bake'
 import { getPartGeometry } from '../core/parts/geometry'
+import { getPrintGeometry } from '../core/parts/printGeometry'
 import { brickCenter } from '../core/rotation'
 import type { Brick } from '../core/types'
 import { useInstanceCapacity } from './instanceCapacity'
-import { brickMaterials, castsShadow } from './materials'
+import { brickMaterials, castsShadow, printMaterial } from './materials'
 
 export type BrickPointerHandler = (e: ThreeEvent<PointerEvent>, brick: Brick) => void
 
@@ -19,7 +21,8 @@ interface Props {
 interface BrickGroupData {
   key: string
   partId: string
-  kind: MaterialKind
+  /** A colour's material kind (the part body), or 'print' (the part's print overlay). */
+  kind: BakedKind
   bricks: Brick[]
 }
 
@@ -27,8 +30,7 @@ const MIN_CAPACITY = 16
 
 function groupBricks(bricks: Brick[]): BrickGroupData[] {
   const groups = new Map<string, BrickGroupData>()
-  for (const b of bricks) {
-    const kind = colorMaterialKind(b.c)
+  const add = (b: Brick, kind: BakedKind) => {
     const key = `${b.p}|${kind}`
     let g = groups.get(key)
     if (!g) {
@@ -37,8 +39,15 @@ function groupBricks(bricks: Brick[]): BrickGroupData[] {
     }
     g.bricks.push(b)
   }
+  for (const b of bricks) {
+    add(b, colorMaterialKind(b.c))
+    // Printed parts also get their print, in its own colours, whatever the body colour.
+    if (getPrintGeometry(b.p)) add(b, 'print')
+  }
   return [...groups.values()]
 }
+
+const materialFor = (kind: BakedKind): THREE.Material => (kind === 'print' ? printMaterial : brickMaterials[kind as MaterialKind])
 
 const tmpMatrix = new THREE.Matrix4()
 const tmpPos = new THREE.Vector3()
@@ -50,7 +59,8 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0)
 function BrickGroup({ partId, kind, bricks, onBrickPointer }: Omit<BrickGroupData, 'key'> & Pick<Props, 'onBrickPointer'>) {
   const ref = useRef<THREE.InstancedMesh>(null)
   const capacity = useInstanceCapacity(bricks.length, MIN_CAPACITY)
-  const geometry = getPartGeometry(partId)
+  const isPrint = kind === 'print'
+  const geometry = isPrint ? getPrintGeometry(partId)! : getPartGeometry(partId)
 
   useLayoutEffect(() => {
     const mesh = ref.current
@@ -59,7 +69,8 @@ function BrickGroup({ partId, kind, bricks, onBrickPointer }: Omit<BrickGroupDat
       tmpPos.set(...brickCenter(b))
       tmpQuat.setFromAxisAngle(Y_AXIS, (b.r * Math.PI) / 2)
       mesh.setMatrixAt(i, tmpMatrix.compose(tmpPos, tmpQuat, tmpScale))
-      mesh.setColorAt(i, tmpColor.set(COLORS[b.c]?.hex ?? '#ffffff'))
+      // Prints keep their own colours: no instance colour (it would tint the texture).
+      if (!isPrint) mesh.setColorAt(i, tmpColor.set(COLORS[b.c]?.hex ?? '#ffffff'))
     })
     mesh.count = bricks.length
     mesh.instanceMatrix.needsUpdate = true
@@ -67,7 +78,7 @@ function BrickGroup({ partId, kind, bricks, onBrickPointer }: Omit<BrickGroupDat
     // Raycasting and frustum culling use these; they go stale whenever instances move.
     mesh.computeBoundingSphere()
     mesh.boundingBox = null
-  }, [bricks, capacity])
+  }, [bricks, capacity, isPrint])
 
   const handle = onBrickPointer
     ? (e: ThreeEvent<PointerEvent>) => {
@@ -80,7 +91,7 @@ function BrickGroup({ partId, kind, bricks, onBrickPointer }: Omit<BrickGroupDat
     <instancedMesh
       key={capacity}
       ref={ref}
-      args={[geometry, brickMaterials[kind], capacity]}
+      args={[geometry, materialFor(kind), capacity]}
       castShadow={castsShadow(kind)}
       receiveShadow
       onPointerDown={handle}
@@ -90,7 +101,7 @@ function BrickGroup({ partId, kind, bricks, onBrickPointer }: Omit<BrickGroupDat
   )
 }
 
-/** All bricks of a model, one InstancedMesh per (part, material kind) group. */
+/** All bricks of a model, one InstancedMesh per (part, material kind) group, plus one per printed part for its prints. */
 export default function InstancedBricks({ bricks, onBrickPointer }: Props) {
   const groups = useMemo(() => groupBricks(bricks), [bricks])
   return (

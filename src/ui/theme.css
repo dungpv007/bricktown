@@ -252,19 +252,74 @@
   transform: scale(1.06);
 }
 
-/* See-through: a shine streak over the colour, with a checkerboard showing through it. */
+/*
+ * See-through: a shine streak over the colour, with a checkerboard showing through it. The base
+ * layers work everywhere (a translucent checker over the solid colour); where color-mix() exists
+ * (Safari 16.2+) the colour itself turns translucent over an opaque checker instead. The color-mix
+ * version must sit behind @supports: a var() declaration an older browser cannot compute does not
+ * fall back to the rule above, it drops the background altogether.
+ */
 .bt-swatch-trans {
   background:
     linear-gradient(135deg, transparent 0 22%, rgba(255, 255, 255, 0.85) 22% 34%, transparent 34%),
-    linear-gradient(color-mix(in srgb, var(--bt-swatch-color) 62%, transparent),
-      color-mix(in srgb, var(--bt-swatch-color) 62%, transparent)),
-    repeating-conic-gradient(#ffffff 0 25%, #b9c4ce 0 50%) 0 0 / 16px 16px;
+    repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0 25%, rgba(185, 196, 206, 0.35) 0 50%) 0 0 / 16px 16px,
+    var(--bt-swatch-color);
 }
 
-/* Metal: a bright-to-dark sheen. */
+/* Metal: a bright-to-dark sheen (white and black overlays; color-mix tints them where available). */
 .bt-swatch-metal {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--bt-swatch-color) 35%, #ffffff) 0%,
-      var(--bt-swatch-color) 45%, color-mix(in srgb, var(--bt-swatch-color) 60%, #000000) 100%);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.4) 100%),
+    var(--bt-swatch-color);
+}
+
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .bt-swatch-trans {
+    background:
+      linear-gradient(135deg, transparent 0 22%, rgba(255, 255, 255, 0.85) 22% 34%, transparent 34%),
+      linear-gradient(color-mix(in srgb, var(--bt-swatch-color) 62%, transparent),
+        color-mix(in srgb, var(--bt-swatch-color) 62%, transparent)),
+      repeating-conic-gradient(#ffffff 0 25%, #b9c4ce 0 50%) 0 0 / 16px 16px;
+  }
+
+  .bt-swatch-metal {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--bt-swatch-color) 35%, #ffffff) 0%,
+        var(--bt-swatch-color) 45%, color-mix(in srgb, var(--bt-swatch-color) 60%, #000000) 100%);
+  }
+}
+
+/*
+ * Scroll cue: while more swatches hide below the fold, a fade with a bouncing arrow sits on the
+ * bottom of the colour column (sticky, so it stays put while scrolling; taps pass through it).
+ */
+.bt-colors-more {
+  position: sticky;
+  bottom: -6px; /* over the panel's bottom padding too */
+  grid-column: 1 / -1;
+  height: 44px;
+  margin: -44px -6px -6px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 2px;
+  border-radius: 0 0 var(--bt-radius) var(--bt-radius);
+  background: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.95));
+  color: var(--bt-ink);
+  font-size: 22px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.bt-colors-more > span {
+  animation: bt-colors-more-bob 1.2s ease-in-out infinite;
+}
+
+@keyframes bt-colors-more-bob {
+  50% { transform: translateY(-5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-colors-more > span { animation: none; }
 }
 
 .bt-palette {

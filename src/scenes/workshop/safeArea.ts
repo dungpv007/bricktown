@@ -27,7 +27,10 @@ if (typeof window !== 'undefined') window.addEventListener('resize', invalidate)
  */
 export function safeRect(canvas: HTMLElement): PxRect {
   if (cached) return cached
-  const c = canvas.getBoundingClientRect()
+  // The canvas' wrapper, laid out by CSS: right after a window resize the canvas element itself
+  // still has its old size until three resizes it, which happens after scene effects run.
+  const box = canvas.parentElement ?? canvas
+  const c = box.getBoundingClientRect()
   const rect: PxRect = { left: 0, top: 0, right: c.width, bottom: c.height }
   const found: Element[] = []
   for (const [edge, selectors] of Object.entries(HUD_EDGES)) {
@@ -56,7 +59,7 @@ export function safeRect(canvas: HTMLElement): PxRect {
       if (first) first = false
       else invalidate()
     })
-    for (const el of [canvas, ...found]) observer.observe(el)
+    for (const el of [box, ...found]) observer.observe(el)
     cached = out
   }
   return out

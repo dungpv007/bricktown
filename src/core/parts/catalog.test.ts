@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { PARTS, PART_BY_ID, PART_CATEGORIES, getPart } from './catalog'
+import { PRINT_BY_ID } from '../prints'
 
 describe('part catalog', () => {
-  it('has 41 unique part ids', () => {
-    expect(PARTS).toHaveLength(41)
-    expect(new Set(PARTS.map((p) => p.id)).size).toBe(41)
+  it('has 62 unique part ids', () => {
+    expect(PARTS).toHaveLength(62)
+    expect(new Set(PARTS.map((p) => p.id)).size).toBe(62)
   })
 
   it('every part has w, d, h >= 1 as integers', () => {
@@ -19,12 +20,12 @@ describe('part catalog', () => {
   it('every part category is listed in PART_CATEGORIES', () => {
     for (const p of PARTS) expect(PART_CATEGORIES).toContain(p.category)
     expect(PART_CATEGORIES).toEqual([
-      'brick', 'plate', 'slope', 'round', 'door_window', 'wheel', 'furniture', 'nature',
+      'brick', 'plate', 'slope', 'round', 'door_window', 'wheel', 'furniture', 'nature', 'decor',
     ])
   })
 
   it('PART_BY_ID indexes every part', () => {
-    expect(Object.keys(PART_BY_ID)).toHaveLength(41)
+    expect(Object.keys(PART_BY_ID)).toHaveLength(62)
     for (const p of PARTS) expect(PART_BY_ID[p.id]).toBe(p)
   })
 
@@ -41,5 +42,43 @@ describe('part catalog', () => {
     expect(getPart('wheel_large')).toMatchObject({ w: 2, d: 3, h: 8, sym: 2, tags: ['wheel'] })
     expect(getPart('lamp_1x1')).toMatchObject({ h: 12, sym: 4 })
     expect(getPart('flower_1x1')).toMatchObject({ category: 'nature', h: 2, sym: 4 })
+  })
+
+  it('has the rocket, police and furniture parts', () => {
+    expect(getPart('cone_2x2')).toMatchObject({ category: 'round', w: 2, d: 2, h: 6, studs: false, sym: 4 })
+    expect(getPart('dish_2x2')).toMatchObject({ w: 2, d: 2, h: 2, studs: false, sym: 4 })
+    expect(getPart('antenna_1x1')).toMatchObject({ w: 1, d: 1, h: 6, studs: false, sym: 4 })
+    expect(getPart('bars_1x4x3')).toMatchObject({ category: 'door_window', w: 4, d: 1, h: 9, sym: 2 })
+    expect(getPart('steering_1x2')).toMatchObject({ category: 'furniture', w: 2, d: 1, h: 3, sym: 1 })
+    expect(getPart('computer_1x2')).toMatchObject({ category: 'furniture', w: 2, d: 1, h: 4, sym: 1, print: 'screen' })
+    expect(getPart('bed_2x4')).toMatchObject({ category: 'furniture', w: 2, d: 4, h: 3, sym: 1 })
+    expect(getPart('flag_1x2')).toMatchObject({ category: 'decor', w: 2, d: 1, h: 9, sym: 1 })
+    expect(getPart('fin_1x3')).toMatchObject({ w: 1, d: 3, h: 6, studs: false, sym: 1 })
+    expect(getPart('engine_2x2')).toMatchObject({ w: 2, d: 2, h: 3, studs: false, sym: 4 })
+  })
+
+  it('has flat printed tiles in the decor category, long side along X', () => {
+    const printed = PARTS.filter((p) => p.shape === 'tile_print')
+    expect(printed.map((p) => p.id)).toEqual([
+      'print_police_2x2', 'print_fire_2x2', 'print_clock_2x2', 'print_stop_2x2', 'print_arrow_2x2',
+      'print_menu_1x2', 'print_screen_1x2', 'print_eyes_1x2', 'print_number_1x2',
+      'print_heart_1x1', 'print_star_1x1',
+    ])
+    for (const p of printed) {
+      // A print looks different after a quarter turn, so no rotational symmetry.
+      expect(p, p.id).toMatchObject({ category: 'decor', h: 1, studs: false, sym: 1 })
+      expect(p.w, p.id).toBeGreaterThanOrEqual(p.d)
+      expect(p.print, p.id).toBeDefined()
+    }
+    expect(getPart('print_menu_1x2')).toMatchObject({ w: 2, d: 1 })
+    expect(getPart('print_heart_1x1')).toMatchObject({ w: 1, d: 1 })
+  })
+
+  it('every print a part carries exists and has the size of the area it is drawn on', () => {
+    for (const p of PARTS.filter((q) => q.print)) {
+      const print = PRINT_BY_ID[p.print!]
+      expect(print, p.id).toBeDefined()
+      if (p.shape === 'tile_print') expect([print.w, print.h], p.id).toEqual([p.w, p.d])
+    }
   })
 })

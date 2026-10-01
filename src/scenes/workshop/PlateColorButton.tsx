@@ -8,7 +8,7 @@ import { useT } from '../../ui/i18n'
 
 const chip = (c: number) => ({ '--bt-plate-color': COLORS[c].hex }) as CSSProperties
 
-/** Top-bar button showing the baseplate colour; opens the five plate colours (undoable choice). */
+/** Top-bar button showing the baseplate colour; opens the plate colours (undoable choice). */
 export default function PlateColorButton() {
   const t = useT()
   const lang = useApp((s) => s.lang)

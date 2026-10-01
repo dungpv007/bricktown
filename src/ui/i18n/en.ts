@@ -42,6 +42,7 @@ export const en: Record<keyof typeof vi, string> = {
   catWheel: 'Wheels',
   catFurniture: 'Furniture',
   catNature: 'Nature',
+  catDecor: 'Signs & decorations',
   loading: 'Loading...',
   slotEmpty: 'Empty',
   exportSave: 'Export file',

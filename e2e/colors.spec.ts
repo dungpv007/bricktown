@@ -41,7 +41,7 @@ test('baseplate colour: pick gray, undo back to green, redo; saved with the work
   expect((await plate(page)).c).toBeUndefined()
 
   await page.getByTestId('plate-color').click()
-  for (const c of [24, 5, 3, 10, 0]) await expect(page.getByTestId(`plate-color-${c}`)).toBeVisible()
+  for (const c of [24, 5, 3, 10, 0, 8]) await expect(page.getByTestId(`plate-color-${c}`)).toBeVisible()
   await expect(page.getByTestId('plate-color-5')).toHaveAttribute('aria-pressed', 'true')
   await page.getByTestId('plate-color-24').click()
   await expect(page.getByTestId('plate-color-24')).toBeHidden()
@@ -59,4 +59,17 @@ test('baseplate colour: pick gray, undo back to green, redo; saved with the work
       return saved && { v: saved.schemaVersion, c: saved.workshop.baseplate.c }
     })
     .toEqual({ v: 2, c: 24 })
+})
+
+test('colours: a scroll cue shows while swatches hide below, and goes at the end', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 700 }) // short screen: the column overflows
+  await openWorkshop(page)
+  const panel = page.locator('.bt-colors')
+  await expect(page.getByTestId('colors-more')).toBeVisible()
+  await panel.evaluate((el) => el.scrollTo({ top: el.scrollHeight }))
+  await expect(page.getByTestId('colors-more')).toHaveCount(0)
+  await panel.evaluate((el) => el.scrollTo({ top: 0 }))
+  await expect(page.getByTestId('colors-more')).toBeVisible()
+  // Taps go through the cue to the swatch under it.
+  expect(await page.getByTestId('colors-more').evaluate((el) => getComputedStyle(el).pointerEvents)).toBe('none')
 })

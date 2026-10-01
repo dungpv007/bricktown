@@ -40,6 +40,7 @@ export const vi = {
   catWheel: 'Bánh xe',
   catFurniture: 'Nội thất',
   catNature: 'Cây cối',
+  catDecor: 'Biển hiệu & trang trí',
   loading: 'Đang tải...',
   slotEmpty: 'Trống',
   exportSave: 'Xuất file',

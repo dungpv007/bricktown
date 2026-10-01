@@ -12,12 +12,14 @@ export interface Brick {
 }
 
 export type PartCategory =
-  | 'brick' | 'plate' | 'slope' | 'round' | 'door_window' | 'wheel' | 'furniture' | 'nature'
+  | 'brick' | 'plate' | 'slope' | 'round' | 'door_window' | 'wheel' | 'furniture' | 'nature' | 'decor'
 
 export type PartShape =
   | 'box' | 'tile' | 'slope' | 'slope_inv' | 'cylinder' | 'cone' | 'wheel'
   | 'window' | 'door' | 'fence' | 'table' | 'chair' | 'counter' | 'stove'
   | 'fridge' | 'sign' | 'lamp' | 'tree' | 'bush' | 'flower'
+  | 'nose_cone' | 'dish' | 'antenna' | 'bars' | 'steering' | 'computer' | 'bed' | 'flag' | 'fin' | 'engine'
+  | 'tile_print'
 
 export interface PartDef {
   id: string
@@ -29,6 +31,8 @@ export interface PartDef {
   studs: boolean // render studs on top
   sym: 1 | 2 | 4 // rotational symmetry order around Y
   tags?: string[] // e.g. ['wheel']
+  /** Id of the print (see `PRINTS` in core/prints) drawn on the part in its own fixed colours. */
+  print?: string
 }
 
 export interface Baseplate {

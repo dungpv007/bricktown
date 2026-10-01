@@ -191,9 +191,15 @@ describe('canShrink', () => {
 })
 
 describe('baseplate colour', () => {
-  it('offers gray, green, blue, tan and white', () => {
-    expect(BASEPLATE_COLORS).toEqual([24, 5, 3, 10, 0])
-    expect(BASEPLATE_COLORS.map((c) => COLORS[c].name.en)).toEqual(['Light bluish gray', 'Green', 'Blue', 'Tan', 'White'])
+  it('offers gray, green, blue, tan, white and dark gray', () => {
+    expect(BASEPLATE_COLORS).toEqual([24, 5, 3, 10, 0, 8])
+    expect(BASEPLATE_COLORS.map((c) => COLORS[c].name.en)).toEqual(['Light bluish gray', 'Green', 'Blue', 'Tan', 'White', 'Dark gray'])
+  })
+
+  it('offers every kind default, so a default plate colour is selectable', () => {
+    for (const kind of ['building', 'vehicle', 'prop'] as const) {
+      expect(BASEPLATE_COLORS).toContain(plateColor(bp(8, 8), kind))
+    }
   })
 
   it('defaults to green', () => {

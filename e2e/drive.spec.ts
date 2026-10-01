@@ -26,6 +26,8 @@ interface BtWindow {
 }
 
 const CELL = 8
+/** The car's forward speed limit (DRIVE.MAX_SPEED in core/drive). */
+const TOP_SPEED = 15
 
 /** Where the car is (dev-only telemetry published by the vehicle every physics step). */
 const carState = (page: Page) =>
@@ -193,11 +195,12 @@ test('drive: lifting one of two fingers on the gas keeps driving', async ({ page
   const b = { x: g.x + 12, y: g.y + 12, id: 2 }
   await touch('touchStart', [a])
   await touch('touchStart', [a, b])
-  await page.waitForTimeout(500)
   await touch('touchEnd', [a]) // finger a lifts, b still holds the pedal
   const atLift = await speedOf(page)
-  await page.waitForTimeout(700)
-  expect(await speedOf(page)).toBeGreaterThan(atLift + 1) // still accelerating
+  // Still driven: the car keeps speeding up (a released pedal would let it coast down). Polled, not
+  // sampled after a fixed wait, and capped below the speed limit, so a slow machine cannot flake it.
+  const target = Math.min(atLift + 1, TOP_SPEED * 0.9)
+  await expect.poll(() => speedOf(page), { timeout: 5000 }).toBeGreaterThan(target)
   await touch('touchEnd', [])
 })
 

@@ -103,9 +103,9 @@ export function CameraRig({ size, shift, fit = false }: { size: BaseplateSize; s
   const canvas = useThree((s) => s.gl.domElement)
   const view = useThree((s) => s.size)
   // Fixed at mount: later size changes must not snap the view back to the plate centre.
-  const [{ target, position }] = useState(() => {
+  const [{ target, position, safe }] = useState(() => {
     const frame = frameView(size)
-    if (!fit) return frame
+    if (!fit) return { ...frame, safe: null }
     const dir = unit([frame.position[0] - frame.target[0], frame.position[1], frame.position[2] - frame.target[2]])
     return fitPlate(size, dir, canvas, view.width, view.height)
   })
@@ -133,31 +133,39 @@ export function CameraRig({ size, shift, fit = false }: { size: BaseplateSize; s
     }
   }, [shift])
 
+  // What the last framing check saw: plate size, canvas size and the HUD-free rect (NDC) then.
+  const fitted = useRef({ w: size.w, d: size.d, width: view.width, height: view.height, safe })
   // Declared after the shift effect: a resize's shift is applied before checking the fit.
-  const fittedSize = useRef({ w: size.w, d: size.d })
   useLayoutEffect(() => {
-    if (!fit || (fittedSize.current.w === size.w && fittedSize.current.d === size.d)) return
-    fittedSize.current = { w: size.w, d: size.d }
+    const f = fitted.current
+    const plateChanged = f.w !== size.w || f.d !== size.d
+    const viewChanged = f.width !== view.width || f.height !== view.height
+    if (!fit || (!plateChanged && !viewChanged)) return
     const cam = camera.current
     const ctl = controls.current
     if (!cam || !ctl) return
     const p: Vec3 = [cam.position.x, cam.position.y, cam.position.z]
     const t: Vec3 = [ctl.target.x, ctl.target.y, ctl.target.z]
     const next = fitPlate(size, unit([p[0] - t[0], p[1] - t[1], p[2] - t[2]]), canvas, view.width, view.height)
-    const shown = projectBounds(plateCorners(size), p, t, FOV, view.width / view.height)
-    if (shown && rectInside(shown, next.safe, 0.01)) return
-    glide.current = { from: { p, t }, to: { p: next.position, t: next.target }, start: performance.now() }
+    let refit: boolean
+    if (plateChanged) {
+      // The plate grew or shrank: glide only when it no longer fits the free area.
+      const shown = projectBounds(plateCorners(size), p, t, FOV, view.width / view.height)
+      refit = !(shown && rectInside(shown, next.safe, 0.01))
+    } else {
+      // The window resized or the device rotated: a plate that was fully shown is framed again
+      // for the new screen; a close-up the player zoomed into is left alone.
+      const before = projectBounds(plateCorners(size), p, t, FOV, f.width / f.height)
+      refit = before !== null && f.safe !== null && rectInside(before, f.safe, 0.01)
+    }
+    fitted.current = { w: size.w, d: size.d, width: view.width, height: view.height, safe: next.safe }
+    if (refit) glide.current = { from: { p, t }, to: { p: next.position, t: next.target }, start: performance.now() }
   }, [fit, size, canvas, view])
 
-  // Any camera drag by the player cancels a glide.
-  useEffect(() => {
-    const ctl = controls.current
-    if (!ctl) return
-    const cancel = () => {
-      glide.current = null
-    }
-    ctl.addEventListener('start', cancel)
-    return () => ctl.removeEventListener('start', cancel)
+  // Any camera drag by the player cancels a glide. Passed as a prop so it follows the controls
+  // instance drei recreates (e.g. when the default camera changes), not just the first one.
+  const cancelGlide = useCallback(() => {
+    glide.current = null
   }, [])
 
   useFrame(() => {
@@ -180,6 +188,7 @@ export function CameraRig({ size, shift, fit = false }: { size: BaseplateSize; s
       <OrbitControls
         ref={controls}
         makeDefault
+        onStart={cancelGlide}
         target={target}
         enableDamping
         dampingFactor={0.12}

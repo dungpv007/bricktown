@@ -7,8 +7,8 @@ export const PLATE_STEP = 8
 export const PLATE_MIN = 8
 export const PLATE_MAX = 48
 
-/** Colours a baseplate can be painted, in picker order: light bluish gray, green, blue, tan, white. */
-export const BASEPLATE_COLORS: readonly number[] = [24, 5, 3, 10, 0]
+/** Colours a baseplate can be painted, in picker order: light bluish gray, green, blue, tan, white, dark gray (every kind default is offered). */
+export const BASEPLATE_COLORS: readonly number[] = [24, 5, 3, 10, 0, 8]
 
 /** A building plate is green unless painted. */
 export const DEFAULT_PLATE_COLOR = 5

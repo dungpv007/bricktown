@@ -4,6 +4,7 @@ import { bakeBricks, bakeCacheSize, bakeKey, bakedGeometries, evictBakes } from 
 import { COLORS } from './colors'
 import { bounds } from './model'
 import { getPartGeometry } from './parts/geometry'
+import { getPrintGeometry } from './parts/printGeometry'
 import { brickCenter } from './rotation'
 import { platesToWorld } from './units'
 import type { Brick } from './types'
@@ -72,10 +73,54 @@ describe('bakeBricks', () => {
   })
 
   it('returns an empty opaque geometry and no other groups for an empty model', () => {
-    const { opaque, trans, metal } = bakeBricks([])
+    const { opaque, trans, metal, print } = bakeBricks([])
     expect(vertexCount(opaque)).toBe(0)
     expect(trans).toBeNull()
     expect(metal).toBeNull()
+    expect(print).toBeNull()
+  })
+
+  it('has no print geometry when no brick carries a print', () => {
+    expect(bakeBricks([b('a', 'tile_2x2', 0, 0, 0), b('b', 'brick_2x4', 2, 0, 0)]).print).toBeNull()
+  })
+
+  it('bakes the prints of printed parts into their own textured geometry (any body colour)', () => {
+    const bricks = [
+      b('a', 'brick_2x4', 0, 0, 0),
+      b('c', 'print_clock_2x2', 0, 3, 0, 0, 2),
+      b('h', 'print_heart_1x1', 3, 0, 0, 0, TRANS_RED),
+      b('m', 'computer_1x2', 4, 0, 0, 0, GOLD),
+    ]
+    const { opaque, trans, metal, print } = bakeBricks(bricks)
+    // Bodies stay with their colour's material kind.
+    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') + partVertices('print_clock_2x2'))
+    expect(vertexCount(trans!)).toBe(partVertices('print_heart_1x1'))
+    expect(vertexCount(metal!)).toBe(partVertices('computer_1x2'))
+    // The prints keep their own colours: texture coordinates, no vertex colour.
+    expect(print).not.toBeNull()
+    const printVerts = (p: string) => vertexCount(getPrintGeometry(p)!)
+    expect(vertexCount(print!)).toBe(printVerts('print_clock_2x2') + printVerts('print_heart_1x1') + printVerts('computer_1x2'))
+    expect(print!.getAttribute('uv').count).toBe(vertexCount(print!))
+    expect(print!.getAttribute('normal').count).toBe(vertexCount(print!))
+    expect(print!.getAttribute('color')).toBeUndefined()
+  })
+
+  it.each([0, 1, 2, 3] as const)('places a print like the Workshop instance transform at rotation %i', (r) => {
+    const brick = b('a', 'print_menu_1x2', 3, 2, 5, r)
+    const [cx, cy, cz] = brickCenter(brick)
+    const matrix = new THREE.Matrix4().compose(
+      new THREE.Vector3(cx, cy, cz),
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), (r * Math.PI) / 2),
+      new THREE.Vector3(1, 1, 1),
+    )
+    const expected = getPrintGeometry('print_menu_1x2')!.clone().applyMatrix4(matrix)
+    const { print } = bakeBricks([brick])
+    for (const name of ['position', 'normal', 'uv']) {
+      const got = print!.getAttribute(name).array
+      const want = expected.getAttribute(name).array
+      expect(got.length).toBe(want.length)
+      for (let i = 0; i < got.length; i++) expect(got[i]).toBeCloseTo(want[i], 4)
+    }
   })
 
   it('bounding box matches bounds() in world units (studs poke above the top)', () => {
@@ -180,18 +225,24 @@ describe('bakedGeometries', () => {
     ])
     const onlyMetal = bakeBricks([b('m', 'brick_1x1', 0, 0, 0, 0, SILVER)])
     expect(bakedGeometries(onlyMetal)).toEqual([['metal', onlyMetal.metal]])
+    const printed = bakeBricks([b('s', 'print_star_1x1', 0, 0, 0, 0, 4)])
+    expect(bakedGeometries(printed)).toEqual([
+      ['opaque', printed.opaque],
+      ['print', printed.print],
+    ])
     expect(bakedGeometries(bakeBricks([]))).toEqual([])
   })
 })
 
-describe('evictBakes metal', () => {
-  it('disposes metal geometries too', () => {
+describe('evictBakes metal and prints', () => {
+  it('disposes metal and print geometries too', () => {
     evictBakes(new Set())
-    const baked = bakeBricks([b('m', 'brick_1x1', 0, 0, 0, 0, SILVER)])
-    const seen = { value: false }
-    baked.metal!.addEventListener('dispose', () => (seen.value = true))
+    const baked = bakeBricks([b('m', 'brick_1x1', 0, 0, 0, 0, SILVER), b('p', 'print_star_1x1', 1, 0, 0)])
+    const seen = { metal: false, print: false }
+    baked.metal!.addEventListener('dispose', () => (seen.metal = true))
+    baked.print!.addEventListener('dispose', () => (seen.print = true))
     evictBakes(new Set())
-    expect(seen.value).toBe(true)
+    expect(seen).toEqual({ metal: true, print: true })
   })
 })
 

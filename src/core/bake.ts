@@ -1,13 +1,15 @@
 import * as THREE from 'three'
 import { COLORS, colorMaterialKind, type MaterialKind } from './colors'
 import { getPartGeometry } from './parts/geometry'
+import { getPrintGeometry } from './parts/printGeometry'
 import { brickCenter, QUARTER_COS, QUARTER_SIN } from './rotation'
 import type { Brick, Rot } from './types'
 
 /**
  * Baking merges a whole brick model into one geometry per material kind (see `MaterialKind`), so
- * the City can draw hundreds of buildings with a handful of draw calls. Each baked vertex carries
- * its brick's colour in a linear-space `color` attribute (render with `vertexColors` materials).
+ * the City can draw hundreds of buildings with a handful of draw calls. Each baked body vertex
+ * carries its brick's colour in a linear-space `color` attribute (render with `vertexColors`
+ * materials). Prints (see core/prints) go in one more geometry with atlas texture coordinates.
  */
 export interface BakedModel {
   opaque: THREE.BufferGeometry
@@ -15,14 +17,23 @@ export interface BakedModel {
   trans: THREE.BufferGeometry | null
   /** Bricks painted with a metallic colour; null when the model has none. */
   metal: THREE.BufferGeometry | null
+  /**
+   * The prints of printed parts, whatever their body colour: `position`, `normal` and atlas `uv`,
+   * no `color` (prints keep their own colours). Null when no brick carries a print.
+   */
+  print: THREE.BufferGeometry | null
 }
 
-/** The model's non-empty geometries with the material kind each renders with, opaque first. */
-export function bakedGeometries(baked: BakedModel): Array<[MaterialKind, THREE.BufferGeometry]> {
-  const out: Array<[MaterialKind, THREE.BufferGeometry]> = []
+/** Which shared material a baked geometry renders with: a colour's material kind, or the print atlas. */
+export type BakedKind = MaterialKind | 'print'
+
+/** The model's non-empty geometries with the kind each renders with: opaque, trans, metal, print. */
+export function bakedGeometries(baked: BakedModel): Array<[BakedKind, THREE.BufferGeometry]> {
+  const out: Array<[BakedKind, THREE.BufferGeometry]> = []
   if (baked.opaque.getAttribute('position').count > 0) out.push(['opaque', baked.opaque])
   if (baked.trans) out.push(['trans', baked.trans])
   if (baked.metal) out.push(['metal', baked.metal])
+  if (baked.print) out.push(['print', baked.print])
   return out
 }
 
@@ -31,6 +42,7 @@ export function disposeBaked(baked: BakedModel): void {
   baked.opaque.dispose()
   baked.trans?.dispose()
   baked.metal?.dispose()
+  baked.print?.dispose()
 }
 
 const FALLBACK_HEX = '#ffffff'
@@ -41,21 +53,32 @@ export function bakeKey(bricks: Brick[]): string {
   return bricks.map((b) => `${b.p},${b.x},${b.y},${b.z},${b.r},${b.c}`).join(';')
 }
 
-function mergeBricks(bricks: Brick[]): THREE.BufferGeometry {
+/**
+ * Merges one source geometry per brick, each moved by its brick's transform. With `colored`, every
+ * vertex gets its brick's colour; a source `uv` attribute is carried over unchanged.
+ */
+function mergeBricks(
+  bricks: Brick[],
+  geometryOf: (b: Brick) => THREE.BufferGeometry,
+  colored: boolean,
+): THREE.BufferGeometry {
   const sources = bricks.map((b) => {
-    const g = getPartGeometry(b.p)
+    const g = geometryOf(b)
     return g.index ? g.toNonIndexed() : g
   })
   const total = sources.reduce((n, g) => n + g.getAttribute('position').count, 0)
+  const withUv = sources.length > 0 && sources.every((g) => g.getAttribute('uv') !== undefined)
   const positions = new Float32Array(total * 3)
   const normals = new Float32Array(total * 3)
-  const colors = new Float32Array(total * 3)
+  const colors = colored ? new Float32Array(total * 3) : null
+  const uvs = withUv ? new Float32Array(total * 2) : null
 
   let offset = 0
   bricks.forEach((b, i) => {
     const src = sources[i]
     const pos = src.getAttribute('position')
     const nor = src.getAttribute('normal')
+    const uv = src.getAttribute('uv')
     const [cx, cy, cz] = brickCenter(b)
     const cos = QUARTER_COS[b.r as Rot]
     const sin = QUARTER_SIN[b.r as Rot]
@@ -71,20 +94,31 @@ function mergeBricks(bricks: Brick[]): THREE.BufferGeometry {
       normals[offset] = nx * cos + nz * sin
       normals[offset + 1] = nor.getY(v)
       normals[offset + 2] = -nx * sin + nz * cos
-      colors[offset] = tmpColor.r
-      colors[offset + 1] = tmpColor.g
-      colors[offset + 2] = tmpColor.b
+      if (colors) {
+        colors[offset] = tmpColor.r
+        colors[offset + 1] = tmpColor.g
+        colors[offset + 2] = tmpColor.b
+      }
+      if (uvs) {
+        const k = (offset / 3) * 2
+        uvs[k] = uv.getX(v)
+        uvs[k + 1] = uv.getY(v)
+      }
     }
   })
 
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  if (colors) geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+  if (uvs) geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
   geometry.computeBoundingBox()
   geometry.computeBoundingSphere()
   return geometry
 }
+
+const bodyOf = (b: Brick) => getPartGeometry(b.p)
+const printOf = (b: Brick) => getPrintGeometry(b.p)!
 
 /**
  * Bakes without touching the cache. The caller owns the returned geometries and must dispose them.
@@ -93,8 +127,14 @@ function mergeBricks(bricks: Brick[]): THREE.BufferGeometry {
 export function bakeBricksUncached(bricks: Brick[]): BakedModel {
   const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
   for (const b of bricks) byKind[colorMaterialKind(b.c)].push(b)
-  const optional = (list: Brick[]) => (list.length > 0 ? mergeBricks(list) : null)
-  return { opaque: mergeBricks(byKind.opaque), trans: optional(byKind.trans), metal: optional(byKind.metal) }
+  const printed = bricks.filter((b) => getPrintGeometry(b.p) !== null)
+  const optional = (list: Brick[]) => (list.length > 0 ? mergeBricks(list, bodyOf, true) : null)
+  return {
+    opaque: mergeBricks(byKind.opaque, bodyOf, true),
+    trans: optional(byKind.trans),
+    metal: optional(byKind.metal),
+    print: printed.length > 0 ? mergeBricks(printed, printOf, false) : null,
+  }
 }
 
 const cache = new Map<string, BakedModel>()
