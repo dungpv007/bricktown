@@ -7,7 +7,7 @@ import { addRoads, CELL, footprintCells } from '../../core/city'
 import { clampCell, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
 import { paintRoadLine } from '../../core/roads'
 import type { Blueprint, CityState } from '../../core/types'
-import { TAP_MAX_MS, TAP_MAX_PX } from '../../input/tapGesture'
+import { createGestureTracker, sampleOf } from '../../input/tapGesture'
 import { createGhostMaterial } from '../../render/materials'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
@@ -203,14 +203,6 @@ interface HitBox {
   box: THREE.Box3
 }
 
-interface Down {
-  id: number
-  x: number
-  y: number
-  t: number
-  mouse: boolean
-}
-
 function CityWorld() {
   const city = useGame((s) => s.data.city)
   const blueprints = useGame((s) => s.data.blueprints)
@@ -284,9 +276,9 @@ function CityWorld() {
     const raycaster = new THREE.Raycaster()
     const ndc = new THREE.Vector2()
     const hit = new THREE.Vector3()
-    const active = new Set<number>()
-    let down: Down | null = null
-    let multi = false
+    const gestures = createGestureTracker()
+    /** The gesture in progress started with a mouse (its hover ghost survives a camera drag). */
+    let mouseGesture = false
     let painting: { id: number; from: Cell; to: Cell } | null = null
 
     const aim = (e: PointerEvent) => {
@@ -320,17 +312,15 @@ function CityWorld() {
     }
 
     const onDown = (e: PointerEvent) => {
-      active.add(e.pointerId)
-      if (active.size > 1) {
+      if (!gestures.down(sampleOf(e))) {
         // Second finger: this is a pinch / rotate, not a tap or a road.
-        multi = true
         stopPainting()
         updatePlan(null)
         return
       }
-      down = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, mouse: e.pointerType === 'mouse' }
-      multi = e.button !== 0 // only the primary button edits; others move the camera
-      if (multi) return
+      mouseGesture = e.pointerType === 'mouse'
+      if (painting) stopPainting() // left over from a gesture whose release was lost
+      if (e.button !== 0) return // only the primary button edits; others move the camera
       const point = groundPoint(e)
       const { tool: t } = useCityEditor.getState()
       if (t === 'road' && point) {
@@ -357,19 +347,16 @@ function CityWorld() {
     }
 
     const onUp = (e: PointerEvent) => {
-      active.delete(e.pointerId)
-      const d = down
-      if (!d || d.id !== e.pointerId) return
-      down = null
+      const gesture = gestures.up(sampleOf(e))
+      if (!gesture.ended) return
       if (painting && painting.id === e.pointerId) {
         const { from, to } = painting
         stopPainting()
-        if (!multi) useCityEditor.getState().paintRoad(from, to)
+        if (!gesture.multi) useCityEditor.getState().paintRoad(from, to)
         return
       }
-      const isTap = !multi && e.timeStamp - d.t <= TAP_MAX_MS && Math.hypot(e.clientX - d.x, e.clientY - d.y) < TAP_MAX_PX
-      if (!isTap) {
-        if (!d.mouse) updatePlan(null) // a touch ghost does not follow the camera drag
+      if (!gesture.tap) {
+        if (!mouseGesture) updatePlan(null) // a touch ghost does not follow the camera drag
         return
       }
       const ed = useCityEditor.getState()
@@ -387,8 +374,7 @@ function CityWorld() {
     }
 
     const onCancel = (e: PointerEvent) => {
-      active.delete(e.pointerId)
-      if (down?.id === e.pointerId) down = null
+      gestures.cancel(e.pointerId)
       if (painting?.id === e.pointerId) stopPainting()
     }
     const onLeave = (e: PointerEvent) => {

@@ -200,3 +200,25 @@ test('city: placements whose blueprint is gone or broken show as blocks the eras
   expect((await cityData(page)).placements).toHaveLength(0)
   expect(errors).toEqual([])
 })
+
+test('city: a finger whose release got lost does not block later taps', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('menu-city').click()
+  const canvas = page.getByTestId('mode-city').locator('canvas')
+  await expect(canvas).toBeVisible()
+  const box = (await canvas.boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+
+  // A second (non-primary) finger goes down and its pointerup never arrives (e.g. lifted off-screen).
+  await page.evaluate(([x, y]) => {
+    const el = document.querySelector('[data-testid="mode-city"] canvas')!
+    el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 77, isPrimary: false, clientX: x, clientY: y, bubbles: true }))
+  }, [cx + 60, cy + 90])
+
+  await page.getByTestId('src-tpl-tree').click()
+  await page.mouse.click(cx, cy + 90)
+  const city = await cityData(page)
+  expect(city.placements).toHaveLength(1)
+  expect(city.placements[0].source).toBe('tpl:tree')
+})
