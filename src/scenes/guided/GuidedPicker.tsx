@@ -9,6 +9,7 @@ import { KIND_ICON } from '../../ui/blueprintKinds'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import { useT } from '../../ui/i18n'
 import { useThumbnail } from '../../ui/useThumbnail'
+import '../../ui/share/share.css'
 
 /** Emoji shown while a thumbnail renders (or when it cannot): by template id, then by kind + tag, then by kind. */
 const ID_ICON: Record<string, string> = {
@@ -39,7 +40,7 @@ const iconOf = (t: Template) =>
 
 /** Picture of the finished model; the emoji stands in while it renders or if WebGL is unavailable. */
 function TemplateThumb({ template }: { template: Template }) {
-  const key = `tpl:${template.id}`
+  const key = `tpl:${template.id}` // shared ids (`shared_<hex>`) never clash with built-in ones
   const url = useThumbnail(key, () => getThumbnail(key, template.bricks))
   if (!url) return <span className="bt-card-icon" aria-hidden="true">{iconOf(template)}</span>
   return <img className="bt-tpl-thumb" src={url} alt="" draggable={false} />
@@ -54,6 +55,7 @@ export default function GuidedPicker({ onPick }: { onPick: () => void }) {
   const lang = useApp((s) => s.lang)
   const completed = useGame((s) => s.data.completedTemplates)
   const inProgress = useGame((s) => s.data.guided?.templateId)
+  const shared = useGame((s) => s.data.sharedTemplates)
 
   const [pendingId, setPendingId] = useState<string | null>(null)
 
@@ -68,36 +70,47 @@ export default function GuidedPicker({ onPick }: { onPick: () => void }) {
     else pick(id)
   }
 
+  const card = (tpl: Template, i: number, testId: string) => (
+    <button
+      key={tpl.id}
+      className="bt-card bt-tpl-card"
+      style={{ background: CARD_COLORS[i % CARD_COLORS.length] }}
+      data-testid={testId}
+      onClick={() => onCard(tpl.id)}
+    >
+      {completed.includes(tpl.id) && (
+        <span className="bt-tpl-badge bt-tpl-done" role="img" aria-label={t('guidedCompleted')}>
+          ✓
+        </span>
+      )}
+      {inProgress === tpl.id && (
+        <span className="bt-tpl-badge bt-tpl-progress" role="img" aria-label={t('guidedInProgress')}>
+          ▶
+        </span>
+      )}
+      <TemplateThumb template={tpl} />
+      {tpl.name[lang]}
+      <span className="bt-tpl-stars" aria-label={`${tpl.difficulty}/3`}>
+        {'⭐'.repeat(tpl.difficulty)}
+      </span>
+    </button>
+  )
+
   return (
     <div className="bt-guided-picker" data-testid="guided-picker">
       <h2 className="bt-picker-title">{t('guidedPick')}</h2>
-      <div className="bt-cards">
-        {TEMPLATES.map((tpl, i) => (
-          <button
-            key={tpl.id}
-            className="bt-card bt-tpl-card"
-            style={{ background: CARD_COLORS[i % CARD_COLORS.length] }}
-            data-testid={`tpl-${tpl.id}`}
-            onClick={() => onCard(tpl.id)}
-          >
-            {completed.includes(tpl.id) && (
-              <span className="bt-tpl-badge bt-tpl-done" role="img" aria-label={t('guidedCompleted')}>
-                ✓
-              </span>
-            )}
-            {inProgress === tpl.id && (
-              <span className="bt-tpl-badge bt-tpl-progress" role="img" aria-label={t('guidedInProgress')}>
-                ▶
-              </span>
-            )}
-            <TemplateThumb template={tpl} />
-            {tpl.name[lang]}
-            <span className="bt-tpl-stars" aria-label={`${tpl.difficulty}/3`}>
-              {'⭐'.repeat(tpl.difficulty)}
-            </span>
-          </button>
-        ))}
-      </div>
+      {/* Friends' models first: below the built-in ones they would be far down the list. */}
+      {shared.length > 0 && (
+        <>
+          <h3 className="bt-guided-shared-title" data-testid="guided-shared">
+            <span aria-hidden="true">🎁</span> {t('guidedShared')}
+          </h3>
+          <div className="bt-cards bt-guided-shared-grid">
+            {shared.map((tpl, i) => card(tpl, i + 2, `shared-tpl-${tpl.id}`))}
+          </div>
+        </>
+      )}
+      <div className="bt-cards">{TEMPLATES.map((tpl, i) => card(tpl, i, `tpl-${tpl.id}`))}</div>
       {pendingId !== null && (
         <ConfirmDialog
           messageKey="confirmReplaceBuild"

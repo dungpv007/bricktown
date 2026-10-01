@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { buildModelPackage } from '../core/share'
 import type { Blueprint } from '../core/types'
 import { getThumbnail } from '../render/thumbnails'
 import { useGame } from '../state/useGame'
+import { useShareImport } from '../state/useShareImport'
 import { KIND_ICON } from './blueprintKinds'
 import ConfirmDialog from './ConfirmDialog'
 import { useT } from './i18n'
+import ShareDialog from './share/ShareDialog'
 import { useThumbnail } from './useThumbnail'
 
 interface Props {
@@ -22,12 +25,18 @@ function BlueprintThumb({ blueprint }: { blueprint: Blueprint }) {
   return <img className="bt-thumb" src={url} alt="" draggable={false} />
 }
 
-/** Grid of the kid's saved models as picture buttons. */
+function ShareModel({ blueprint, onClose }: { blueprint: Blueprint; onClose: () => void }) {
+  const build = useCallback((withSteps: boolean) => buildModelPackage(blueprint, { withSteps }), [blueprint])
+  return <ShareDialog build={build} offerSteps icon={KIND_ICON[blueprint.kind]} onClose={onClose} />
+}
+
+/** Grid of the kid's saved models as picture buttons; each can be shared, and friends' models imported (📥). */
 export default function BlueprintLibrary({ onPick, onClose, allowDelete = true }: Props) {
   const t = useT()
   const blueprints = useGame((s) => s.data.blueprints)
   const deleteBlueprint = useGame((s) => s.deleteBlueprint)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [sharing, setSharing] = useState<Blueprint | null>(null)
   const sorted = useMemo(() => [...blueprints].sort((a, b) => b.updatedAt - a.updatedAt), [blueprints])
 
   return (
@@ -58,6 +67,14 @@ export default function BlueprintLibrary({ onPick, onClose, allowDelete = true }
                     <span aria-hidden="true">{KIND_ICON[bp.kind]}</span> {bp.name}
                   </span>
                 </button>
+                <button
+                  className="bt-btn bt-icon-btn bt-share-chip"
+                  data-testid={`share-model-${bp.id}`}
+                  aria-label={t('share')}
+                  onClick={() => setSharing(bp)}
+                >
+                  🔗
+                </button>
                 {allowDelete && (
                   <button
                     className="bt-btn bt-icon-btn bt-library-delete"
@@ -72,10 +89,21 @@ export default function BlueprintLibrary({ onPick, onClose, allowDelete = true }
             ))}
           </div>
         )}
-        <button className="bt-btn" data-testid="blueprint-library-close" aria-label={t('close')} onClick={onClose}>
-          ✕
-        </button>
+        <div className="bt-row">
+          <button
+            className="bt-btn"
+            data-testid="library-import"
+            aria-label={t('importShared')}
+            onClick={() => useShareImport.getState().openPicker()}
+          >
+            📥 {t('importShared')}
+          </button>
+          <button className="bt-btn" data-testid="blueprint-library-close" aria-label={t('close')} onClick={onClose}>
+            ✕
+          </button>
+        </div>
       </div>
+      {sharing && <ShareModel blueprint={sharing} onClose={() => setSharing(null)} />}
       {pendingDelete !== null && (
         <ConfirmDialog
           messageKey="confirmDeleteBlueprint"

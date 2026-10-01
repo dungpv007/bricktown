@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
-import { getTemplate } from '../content/templates'
 import { figOf, isFigure } from '../core/figures'
 import { getPart } from '../core/parts/catalog'
 import {
@@ -11,6 +10,7 @@ import {
   type PlacedCandidate,
 } from '../core/template'
 import type { Brick, GuidedState, Template } from '../core/types'
+import { findGuidedTemplate } from './guidedTemplates'
 import { useApp } from './useApp'
 import { useEditor } from './useEditor'
 import { useGame } from './useGame'
@@ -52,7 +52,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
   /** The saved build and its template, or null when there is none (or its template is gone). */
   const active = (): { g: GuidedState; t: Template } | null => {
     const g = saved()
-    const t = g ? getTemplate(g.templateId) : undefined
+    const t = g ? findGuidedTemplate(g.templateId) : undefined
     return g && t ? { g, t } : null
   }
 
@@ -108,7 +108,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     celebration: null,
 
     start: (templateId) => {
-      const t = getTemplate(templateId)
+      const t = findGuidedTemplate(templateId)
       if (!t) return
       useGame.getState().setGuided({ templateId, step: 0, placed: [] })
       set({ viewStep: 0, celebration: null })
@@ -118,7 +118,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     resume: () => {
       const g = saved()
       if (!g) return
-      const t = getTemplate(g.templateId)
+      const t = findGuidedTemplate(g.templateId)
       if (!t) {
         useGame.getState().setGuided(null)
         return

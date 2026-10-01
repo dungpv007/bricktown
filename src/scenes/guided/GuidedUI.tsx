@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { getTemplate } from '../../content/templates'
+import { findGuidedTemplate, useGuidedTemplate } from '../../state/guidedTemplates'
 import { COLORS } from '../../core/colors'
 import { PART_BY_ID } from '../../core/parts/catalog'
 import type { Brick, GuidedState, Template } from '../../core/types'
@@ -109,7 +109,7 @@ function CelebrationOverlay({ onBrowse }: { onBrowse: () => void }) {
   const celebration = useGuided((s) => s.celebration)
   const [confirming, setConfirming] = useState(false)
   if (!celebration) return null
-  const template = getTemplate(celebration.templateId)
+  const template = findGuidedTemplate(celebration.templateId)
 
   const toCity = () => {
     useGuided.getState().dismissCelebration()
@@ -170,7 +170,7 @@ export default function GuidedUI({ onBrowse }: { onBrowse: () => void }) {
   const celebrating = useGuided((s) => s.celebration !== null)
   const viewStep = useGuided((s) => s.viewStep)
   const easy = useApp((s) => s.difficulty === 'easy')
-  const template = guided ? getTemplate(guided.templateId) : undefined
+  const template = useGuidedTemplate(guided?.templateId)
 
   if (celebrating) return <CelebrationOverlay onBrowse={onBrowse} />
   if (!guided || !template) return null

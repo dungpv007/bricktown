@@ -3,6 +3,7 @@ import type { Mode } from '../state/useApp'
 import { persistWarning, usePersistStatus } from '../persistence/status'
 import { snap } from '../audio/sfx'
 import { useApp } from '../state/useApp'
+import { useShareImport } from '../state/useShareImport'
 import { useT, type TKey } from './i18n'
 import InstallHint from './InstallHint'
 import Onboarding from './Onboarding'
@@ -61,6 +62,14 @@ export default function MainMenu() {
           onClick={() => setSlotsOpen(true)}
         >
           ⚙️ {t('slot')}
+        </button>
+        <button
+          className="bt-btn"
+          data-testid="menu-import"
+          aria-label={t('importShared')}
+          onClick={() => useShareImport.getState().openPicker()}
+        >
+          📥 {t('importShared')}
         </button>
         <button
           className="bt-btn"
