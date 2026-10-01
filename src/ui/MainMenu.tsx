@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Mode } from '../state/useApp'
 import { persistWarning, usePersistStatus } from '../persistence/status'
+import { primeMusic } from '../audio/music'
 import { snap } from '../audio/sfx'
 import { useApp } from '../state/useApp'
 import { useShareImport } from '../state/useShareImport'
@@ -25,8 +26,10 @@ export default function MainMenu() {
   const lang = useApp((s) => s.lang)
   const setLang = useApp((s) => s.setLang)
   const setMode = useApp((s) => s.setMode)
-  const muted = useApp((s) => s.muted)
-  const setMuted = useApp((s) => s.setMuted)
+  const musicOn = useApp((s) => s.musicOn)
+  const setMusicOn = useApp((s) => s.setMusicOn)
+  const sfxOn = useApp((s) => s.sfxOn)
+  const setSfxOn = useApp((s) => s.setSfxOn)
   const saveWarning = usePersistStatus(persistWarning)
   const [slotsOpen, setSlotsOpen] = useState(false)
   const [touring, setTouring] = useState(onboardingPending)
@@ -76,15 +79,28 @@ export default function MainMenu() {
         </button>
         <button
           className="bt-btn"
-          data-testid="mute-toggle"
-          aria-label={t('sound')}
-          aria-pressed={!muted}
+          data-testid="music-toggle"
+          aria-label={t('music')}
+          aria-pressed={musicOn}
           onClick={() => {
-            setMuted(!muted)
-            if (muted) snap() // unmuting: confirm with a sound (and wake the audio on iOS)
+            setMusicOn(!musicOn)
+            if (!musicOn) primeMusic() // switching on: start it inside this tap (iOS)
           }}
         >
-          {muted ? '🔇' : '🔊'}
+          {/* There is no "music off" emoji: the note fades (and the button loses its yellow "on" fill). */}
+          <span style={musicOn ? undefined : { opacity: 0.35 }}>🎵</span>
+        </button>
+        <button
+          className="bt-btn"
+          data-testid="sfx-toggle"
+          aria-label={t('soundEffects')}
+          aria-pressed={sfxOn}
+          onClick={() => {
+            setSfxOn(!sfxOn)
+            if (!sfxOn) snap() // switching on: confirm with a sound
+          }}
+        >
+          {sfxOn ? '🔊' : '🔇'}
         </button>
         {saveWarning && (
           <span

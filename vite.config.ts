@@ -31,6 +31,15 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webp,wasm,json}'], // webp: the main menu's poster
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+        // Background music is optional: not part of the install, cached the first time it plays (one
+        // whole-file fetch, see src/audio/music.ts) and served offline from then on.
+        runtimeCaching: [
+          {
+            urlPattern: /\/audio\/[^/]+\.m4a$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'bt-audio', expiration: { maxEntries: 2 } },
+          },
+        ],
         // The first install controls the open page right away (offline after one visit); later versions
         // only take over through the update flow, which reloads.
         clientsClaim: true,

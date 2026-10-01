@@ -50,14 +50,24 @@ test.describe('first launch', () => {
   })
 })
 
-test('mute toggle persists across a reload', async ({ page }) => {
+test('music and sound-effect toggles switch independently and persist across a reload', async ({ page }) => {
   await page.goto('/')
-  const toggle = page.getByTestId('mute-toggle')
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true') // sound on
-  await toggle.click()
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  const music = page.getByTestId('music-toggle')
+  const sfx = page.getByTestId('sfx-toggle')
+  // The e2e storage state starts with both off.
+  await expect(music).toHaveAttribute('aria-pressed', 'false')
+  await expect(sfx).toHaveAttribute('aria-pressed', 'false')
+  await sfx.click()
+  await expect(sfx).toHaveAttribute('aria-pressed', 'true')
+  await expect(music).toHaveAttribute('aria-pressed', 'false')
   await page.reload()
-  await expect(page.getByTestId('mute-toggle')).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByTestId('sfx-toggle')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('music-toggle')).toHaveAttribute('aria-pressed', 'false')
+  // Switching music on (a gesture) loads the track.
+  const track = page.waitForResponse((r) => r.url().includes('audio/music.m4a'))
+  await page.getByTestId('music-toggle').click()
+  await expect(page.getByTestId('music-toggle')).toHaveAttribute('aria-pressed', 'true')
+  expect((await track).ok()).toBe(true)
 })
 
 test.describe('install tip', () => {

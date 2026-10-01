@@ -6,6 +6,10 @@ vi.mock('../audio/sfx', () => ({
   paint: vi.fn(),
   error: vi.fn(),
   success: vi.fn(),
+  fanfare: vi.fn(),
+  whoosh: vi.fn(),
+  thunk: vi.fn(),
+  coin: vi.fn(),
   horn: vi.fn(),
 }))
 
@@ -77,15 +81,21 @@ describe('workshop sounds', () => {
 describe('guided sounds', () => {
   beforeEach(() => g().start('tree'))
 
-  it('plays success when a step (or the template) completes and snap for other correct placements', () => {
+  it('plays success when a step completes, a fanfare when the template does, and snap otherwise', () => {
     let steps = 0
     let snaps = 0
     while (useGame.getState().data.guided) {
       const before = useGame.getState().data.guided!.step
       vi.clearAllMocks()
       g().placeGhost(pendingBrick().id)
+      const finished = useGame.getState().data.guided === null
       const after = useGame.getState().data.guided?.step ?? Infinity
-      if (after > before) {
+      if (finished) {
+        expect(sfx.fanfare).toHaveBeenCalledTimes(1)
+        expect(sfx.success).not.toHaveBeenCalled()
+        expect(sfx.snap).not.toHaveBeenCalled()
+        steps++
+      } else if (after > before) {
         expect(sfx.success).toHaveBeenCalledTimes(1)
         expect(sfx.snap).not.toHaveBeenCalled()
         steps++

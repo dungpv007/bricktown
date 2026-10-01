@@ -84,7 +84,7 @@ export const useMazeRun = create<MazeRunState>()((set, get) => {
     const best = s.recordKey === null ? undefined : useGame.getState().data.mazeRecords[s.recordKey]
     const newRecord = s.recordKey !== null && isBetterRecord(best, run)
     if (newRecord && s.recordKey !== null) useGame.getState().setMazeRecord(s.recordKey, run)
-    sfx.success()
+    sfx.fanfare()
     set({ phase: 'won', clock, hintArrows: [], result: { ...run, totalCoins: s.maze.coins.length, best, newRecord } })
   }
 

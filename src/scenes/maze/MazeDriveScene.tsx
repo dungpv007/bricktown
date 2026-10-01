@@ -204,6 +204,7 @@ export default function MazeDriveScene({ maze, source, runId, onChangeVehicle, o
   useEffect(() => {
     if (!drivable) onChangeVehicle()
   }, [drivable, onChangeVehicle])
+  const won = useMazeRun((s) => s.phase === 'won')
   if (!setup?.ok) return null
 
   return (
@@ -214,7 +215,7 @@ export default function MazeDriveScene({ maze, source, runId, onChangeVehicle, o
         <MazeDriveWorld key={runId} maze={maze} setup={setup} />
         <DevStats />
       </Canvas>
-      <DriveUI onChangeVehicle={onChangeVehicle} />
+      <DriveUI source={source} onChangeVehicle={onChangeVehicle} quietEngine={won} />
       <MazeDriveUI onRetry={onRetry} onEdit={onEdit} onMenu={onMenu} />
     </>
   )

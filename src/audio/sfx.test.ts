@@ -1,18 +1,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useApp } from '../state/useApp'
-import { error, horn, installAudioUnlock, paint, pop, resetAudioForTests, snap, SOUNDS, success } from './sfx'
+import {
+  coin,
+  engineParams,
+  error,
+  fanfare,
+  horn,
+  installAudioUnlock,
+  MAX_VOICES,
+  paint,
+  pop,
+  resetAudioForTests,
+  snap,
+  soundLength,
+  SOUNDS,
+  startEngine,
+  success,
+  thunk,
+  whoosh,
+} from './sfx'
 
-/** Minimal AudioContext double that records how many oscillators were started. */
+/** Minimal AudioContext double that records how many sources (oscillators, noise) were started. */
 class FakeParam {
   value = 0
   setValueAtTime = vi.fn()
   linearRampToValueAtTime = vi.fn()
   exponentialRampToValueAtTime = vi.fn()
+  setTargetAtTime = vi.fn()
+  cancelScheduledValues = vi.fn()
 }
 class FakeNode {
   gain = new FakeParam()
   frequency = new FakeParam()
+  Q = new FakeParam()
   type = ''
+  buffer: unknown = null
   connect = vi.fn()
   start = vi.fn(() => {
     FakeAudioContext.started++
@@ -22,8 +44,10 @@ class FakeNode {
 class FakeAudioContext {
   static created = 0
   static started = 0
+  static last: FakeAudioContext | null = null
   state = 'suspended'
   currentTime = 0
+  sampleRate = 8000
   destination = new FakeNode()
   resume = vi.fn(() => {
     this.state = 'running'
@@ -31,48 +55,69 @@ class FakeAudioContext {
   })
   constructor() {
     FakeAudioContext.created++
+    FakeAudioContext.last = this
   }
   createGain = () => new FakeNode()
   createOscillator = () => new FakeNode()
   createBiquadFilter = () => new FakeNode()
+  createBufferSource = () => new FakeNode()
+  createBuffer = (_ch: number, length: number) => {
+    const data = new Float32Array(length)
+    return { getChannelData: () => data }
+  }
 }
 
 const g = globalThis as unknown as { AudioContext?: unknown }
+/** Moves the clock of the context the module created. */
+const ctxTime = (t: number) => {
+  if (FakeAudioContext.last) FakeAudioContext.last.currentTime = t
+}
+
+/** Sources (oscillators, noise bursts, vibrato LFOs) a sound starts. */
+const sources = (name: keyof typeof SOUNDS) => SOUNDS[name].tones.reduce((n, t) => n + (t.vibrato ? 2 : 1), 0)
 
 beforeEach(() => {
   FakeAudioContext.created = 0
   FakeAudioContext.started = 0
+  FakeAudioContext.last = null
   g.AudioContext = FakeAudioContext
   resetAudioForTests()
-  useApp.setState({ muted: false })
+  useApp.setState({ sfxOn: true, musicOn: true })
 })
 afterEach(() => {
   delete g.AudioContext
   resetAudioForTests()
-  useApp.setState({ muted: false })
+  useApp.setState({ sfxOn: true, musicOn: true })
 })
 
 describe('sfx', () => {
-  it('plays every tone of a sound when not muted', () => {
+  it('plays every voice of a sound while sound effects are on', () => {
     snap()
-    expect(FakeAudioContext.started).toBe(SOUNDS.snap.length)
+    expect(FakeAudioContext.started).toBe(sources('snap'))
     success()
-    expect(FakeAudioContext.started).toBe(SOUNDS.snap.length + SOUNDS.success.length)
+    expect(FakeAudioContext.started).toBe(sources('snap') + sources('success'))
   })
 
-  it('does nothing, and never creates the context, while muted', () => {
-    useApp.getState().setMuted(true)
-    for (const fn of [snap, pop, paint, error, success, horn]) fn()
+  it('does nothing, and never creates the context, while sound effects are off', () => {
+    useApp.getState().setSfxOn(false)
+    for (const fn of [snap, pop, paint, error, success, fanfare, whoosh, thunk, coin, () => horn('fire')]) fn()
+    expect(startEngine()).toBeNull()
     expect(FakeAudioContext.started).toBe(0)
     expect(FakeAudioContext.created).toBe(0)
   })
 
-  it('plays again after unmuting', () => {
-    useApp.getState().setMuted(true)
+  it('ignores the music toggle', () => {
+    useApp.getState().setMusicOn(false)
     pop()
-    useApp.getState().setMuted(false)
+    expect(FakeAudioContext.started).toBe(sources('pop'))
+  })
+
+  it('plays again after switching back on', () => {
+    useApp.getState().setSfxOn(false)
     pop()
-    expect(FakeAudioContext.started).toBe(SOUNDS.pop.length)
+    useApp.getState().setSfxOn(true)
+    pop()
+    expect(FakeAudioContext.started).toBe(sources('pop'))
   })
 
   it('shares one context and is a safe no-op without WebAudio', () => {
@@ -82,19 +127,71 @@ describe('sfx', () => {
     delete g.AudioContext
     resetAudioForTests()
     expect(() => horn()).not.toThrow()
+    expect(() => fanfare()).not.toThrow()
+    expect(startEngine()).toBeNull()
   })
 
-  it('has well-formed tone definitions', () => {
-    for (const tones of Object.values(SOUNDS)) {
-      expect(tones.length).toBeGreaterThan(0)
-      for (const t of tones) {
+  it('caps how many sounds play at once, keeps a slot for horns and fanfares, and frees voices as they end', () => {
+    for (let i = 0; i < MAX_VOICES + 3; i++) pop()
+    const clicks = (MAX_VOICES - 1) * sources('pop')
+    expect(FakeAudioContext.started).toBe(clicks)
+    fanfare() // the reserved slot
+    expect(FakeAudioContext.started).toBe(clicks + sources('fanfare'))
+    ctxTime(soundLength(SOUNDS.pop) + 0.01)
+    pop()
+    expect(FakeAudioContext.started).toBe(clicks + sources('fanfare') + sources('pop'))
+  })
+
+  it('plays the horn of each vehicle kind, ignoring rapid repeats', () => {
+    horn('police')
+    expect(FakeAudioContext.started).toBe(sources('sirenPolice'))
+    horn('police') // same instant: ignored
+    expect(FakeAudioContext.started).toBe(sources('sirenPolice'))
+    ctxTime(5)
+    horn('truck')
+    expect(FakeAudioContext.started).toBe(sources('sirenPolice') + sources('hornTruck'))
+  })
+
+  it('has well-formed sound definitions', () => {
+    for (const sound of Object.values(SOUNDS)) {
+      expect(sound.tones.length).toBeGreaterThan(0)
+      expect(soundLength(sound)).toBeLessThan(2) // effects stay short
+      if (sound.jitter !== undefined) expect(sound.jitter).toBeLessThan(0.2)
+      for (const t of sound.tones) {
         expect(t.dur).toBeGreaterThan(0)
         expect(t.freq).toBeGreaterThan(0)
+        if (t.freqEnd !== undefined) expect(t.freqEnd).toBeGreaterThan(0) // exponential ramps need > 0
         expect(t.at).toBeGreaterThanOrEqual(0)
         expect(t.gain).toBeGreaterThan(0)
         expect(t.gain).toBeLessThanOrEqual(1)
+        expect(t.attack ?? 0).toBeLessThan(t.dur)
       }
     }
+  })
+})
+
+describe('engine hum', () => {
+  it('rises in pitch and level with speed, clamped to 0..1', () => {
+    const idle = engineParams(0)
+    const top = engineParams(1)
+    expect(top.freq).toBeGreaterThan(idle.freq)
+    expect(top.gain).toBeGreaterThan(idle.gain)
+    expect(engineParams(-3)).toEqual(idle)
+    expect(engineParams(7)).toEqual(top)
+    expect(top.gain).toBeLessThanOrEqual(0.2) // subtle
+    expect(idle.gain).toBeLessThanOrEqual(0.01) // nearly silent standing still
+  })
+
+  it('starts two oscillators and stops them once', () => {
+    const hum = startEngine()
+    expect(hum).not.toBeNull()
+    expect(FakeAudioContext.started).toBe(2)
+    expect(() => {
+      hum!.setSpeed(0.5)
+      hum!.stop()
+      hum!.stop()
+      hum!.setSpeed(1)
+    }).not.toThrow()
   })
 })
 
@@ -105,11 +202,12 @@ describe('installAudioUnlock', () => {
       addEventListener: vi.fn((name: string, fn: () => void) => handlers.set(name, fn)),
       removeEventListener: vi.fn((name: string) => handlers.delete(name)),
     }
-    installAudioUnlock(target)
+    const stop = installAudioUnlock(target)
     expect(FakeAudioContext.created).toBe(0)
     handlers.get('pointerdown')?.()
     expect(FakeAudioContext.created).toBe(1)
     expect(handlers.size).toBe(0) // running now: all listeners removed
+    stop()
   })
 
   it('returns a function that removes the listeners', () => {

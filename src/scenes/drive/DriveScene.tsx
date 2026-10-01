@@ -107,7 +107,7 @@ export default function DriveScene({ source, onChangeVehicle }: { source: string
         <fog attach="fog" args={[SKY, 250, 700]} />
         <DriveWorld setup={setup} spawn={spawn} />
       </Canvas>
-      <DriveUI onChangeVehicle={onChangeVehicle} />
+      <DriveUI source={source} onChangeVehicle={onChangeVehicle} />
     </>
   )
 }

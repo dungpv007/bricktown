@@ -1,7 +1,10 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { hornKindForSource } from '../../audio/horns'
+import { useEngineHum } from '../../audio/useEngineHum'
 import VirtualJoystick from '../../input/VirtualJoystick'
 import { DRIVE_KEYS, releaseOnInterruption, useDriveInput, type Pedal } from '../../state/useDriveInput'
 import { useDriveStatus } from '../../state/useDriveStatus'
+import { useGame } from '../../state/useGame'
 import { useT, type TKey } from '../../ui/i18n'
 
 interface ButtonProps {
@@ -121,12 +124,33 @@ function DriveStatusProbe() {
   )
 }
 
-/** On-screen driving controls: steering stick on the left, pedals, flip and horn on the right. */
-export default function DriveUI({ onChangeVehicle }: { onChangeVehicle: () => void }) {
+/** The horn matches the vehicle (police / fire siren, truck air horn, car beep). */
+function useHornKind(source: string) {
+  const blueprints = useGame((s) => s.data.blueprints)
+  useEffect(() => {
+    useDriveInput.getState().setHornKind(hornKindForSource(source, { blueprints }))
+  }, [source, blueprints])
+}
+
+/**
+ * On-screen driving controls: steering stick on the left, pedals, flip and horn on the right.
+ * Also runs the engine hum (silenced by `quietEngine`) and picks the horn for `source` (the vehicle being driven).
+ */
+export default function DriveUI({
+  source,
+  onChangeVehicle,
+  quietEngine = false,
+}: {
+  source: string
+  onChangeVehicle: () => void
+  quietEngine?: boolean
+}) {
   const t = useT()
   const input = useDriveInput.getState()
   useKeyboard()
   useReleaseControls()
+  useHornKind(source)
+  useEngineHum(!quietEngine)
   return (
     <div className="bt-drive-ui" data-testid="drive-ui">
       <DriveStatusProbe />
