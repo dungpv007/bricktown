@@ -200,14 +200,21 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   const onBaseplatePointer = useCallback((e: ThreeEvent<PointerEvent>) => handlePointer(e, null, null), [handlePointer])
   const onBrickPointer = useCallback((e: ThreeEvent<PointerEvent>, b: Brick) => handlePointer(e, b, null), [handlePointer])
   const normalTaps = interactive && !easy
-  // The camera frames what is on the plate so far (and backs off as a tall build rises); the sun
-  // is placed for the finished model.
-  const shown = useMemo(() => bounds([...solid, ...ghosts]), [solid, ghosts])
+  // The camera starts on what is on the plate so far, then checks each new step (or the finished
+  // model) is in view; the sun is placed for the finished model.
+  const startBox = useMemo(() => bounds([...solid, ...ghosts]), [solid, ghosts])
+  // Depends on the step only (not on each placement), so placing bricks never re-frames.
+  const shownStep = viewingPast ? viewStep : step
+  const finished = celebrating || guided === null
+  const stepBox = useMemo(
+    () => bounds(finished ? template.bricks : stepBricks(template, shownStep, shownStep + 1)),
+    [template, finished, shownStep],
+  )
   const height = useMemo(() => modelTop(bounds(template.bricks)), [template])
 
   return (
     <>
-      <GuidedCamera key={template.id} size={template.baseplate} box={shown} />
+      <GuidedCamera key={template.id} size={template.baseplate} startBox={startBox} stepBox={stepBox} height={height} />
       <Lights size={template.baseplate} height={height} />
       <Ground size={template.baseplate} />
       <Baseplate size={template.baseplate} kind={template.kind} onPointer={normalTaps ? onBaseplatePointer : undefined} />

@@ -62,6 +62,22 @@ export function hudFreeRect(canvas: HTMLElement, hud: HudEdges): PxRect {
   return measure(canvas, hud).rect
 }
 
+/**
+ * Resolves once the finite CSS animations running on `hud`'s panels (e.g. the celebration card's
+ * pop-in, which scales it) are over, so a measurement sees their final layout.
+ */
+export function hudSettled(hud: HudEdges): Promise<void> {
+  if (typeof document === 'undefined') return Promise.resolve()
+  const running: Array<Promise<unknown>> = []
+  for (const sel of Object.values(hud).flat()) {
+    const el = document.querySelector(sel)
+    for (const a of el?.getAnimations?.() ?? []) {
+      if (a.effect?.getComputedTiming().iterations !== Infinity) running.push(a.finished.catch(() => undefined))
+    }
+  }
+  return Promise.all(running).then(() => undefined)
+}
+
 function measure(canvas: HTMLElement, hud: HudEdges): { rect: PxRect; box: Element; found: Element[] } {
   // The canvas' wrapper, laid out by CSS: right after a window resize the canvas element itself
   // still has its old size until three resizes it, which happens after scene effects run.

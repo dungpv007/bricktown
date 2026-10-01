@@ -205,7 +205,7 @@ function backOff(size: Baseplate, box: Bounds | null, dir: Vec3, minDistance: nu
 }
 
 /**
- * Guided's first framing for what is on the plate so far (`box`: placed bricks and the step's ghosts):
+ * Guided's first framing (when a build starts or is resumed) for what is on the plate so far (`box`: placed bricks and the step's ghosts):
  * the usual view when it shows them, else backed off (same angles) around the lifted target.
  */
 export function guidedFrame(size: Baseplate, box: Bounds | null, aspect: number, safe: NdcRect): View {
@@ -214,14 +214,30 @@ export function guidedFrame(size: Baseplate, box: Bounds | null, aspect: number,
   return backOff(size, box, viewDir(usual), viewDistance(usual), aspect, safe)
 }
 
+/** True when every corner of `box` is on screen inside `safe` (give or take SHOW_TOLERANCE). */
+export function boxVisible(box: Bounds, view: View, aspect: number, safe: NdcRect): boolean {
+  const b = projectBounds(boxCorners(box), view.position, view.target, VIEW_FOV, aspect)
+  return b !== null && rectInside(b, safe, SHOW_TOLERANCE)
+}
+
 /**
- * Guided, after a step or a screen change: null while `view` (the player's current camera) still
- * shows `box`, else a view that backs off along the same angles to show it. Never closer than `view`,
- * so a player's zoom is only ever undone outwards.
+ * Guided, when a new step starts: null while the step's bricks (`stepBox`) are all visible in the
+ * HUD-free `safe` rect from the player's `view` (however far they zoomed in), else the smallest move
+ * that brings them into view. The angles are kept, the orbit point keeps its place over the plate
+ * (clamped onto it) but is lifted to the middle of the step, and the camera only ever moves away:
+ * no closer than now, no further than the step needs.
  */
-export function guidedRefit(size: Baseplate, box: Bounds | null, view: View, aspect: number, safe: NdcRect): View | null {
-  if (showsModel(size, box, view, aspect, safe)) return null
-  return backOff(size, box, viewDir(view), viewDistance(view), aspect, safe)
+export function stepRefit(size: Baseplate, stepBox: Bounds | null, view: View, aspect: number, safe: NdcRect): View | null {
+  if (!stepBox || boxVisible(stepBox, view, aspect, safe)) return null
+  const clamp = (v: number, hi: number) => Math.min(hi, Math.max(0, v))
+  const target: Vec3 = [
+    clamp(view.target[0], size.w),
+    platesToWorld(stepBox.minY + stepBox.maxY) / 2,
+    clamp(view.target[2], size.d),
+  ]
+  const dir = viewDir(view)
+  const dist = Math.max(viewDistance(view), fitDistance(boxCorners(stepBox), target, dir, aspect, safe))
+  return { target, position: add(target, dir, dist) }
 }
 
 /** How much further than the plate-only fit the Workshop may back off to show a tall model. */

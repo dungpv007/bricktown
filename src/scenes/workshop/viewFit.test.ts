@@ -5,7 +5,7 @@ import type { Template } from '../../core/types'
 import { platesToWorld } from '../../core/units'
 import {
   MAX_MODEL_ZOOM_OUT, VIEW_FOV, allowedRect, boxCorners, defaultView, fitDistance, fitView, framePoints, guidedFrame,
-  guidedRefit, plateCorners, projectBounds, rectInside, showsModel, workshopFit, type NdcRect, type Vec3, type View,
+  plateCorners, projectBounds, rectInside, stepRefit, boxVisible, workshopFit, type NdcRect, type Vec3, type View,
 } from './viewFit'
 
 const FOV = 45
@@ -162,39 +162,85 @@ describe('guidedFrame', () => {
   })
 })
 
-describe('guidedRefit', () => {
-  const t = getTemplate('skyscraper')!
+describe('stepRefit', () => {
   const { aspect, safe } = IPAD.landscapeNormal
-  it('leaves the camera alone while the build still shows, then backs off (same angles) as it rises', () => {
-    let view = guidedFrame(t.baseplate, stepsBox(t, 1), aspect, safe)
-    let refits = 0
-    for (let n = 2; n <= t.steps.length; n++) {
-      const box = stepsBox(t, n)
-      const next = guidedRefit(t.baseplate, box, view, aspect, safe)
+  const stepBox = (t: Template, s: number) => bounds(t.steps[s].map((i) => t.bricks[i]))
+  const scaled = (v: View, k: number): View => ({ target: v.target, position: v.position.map((p, i) => v.target[i] + (p - v.target[i]) * k) as Vec3 })
+
+  it('leaves a player who zoomed in alone while the next step is visible', () => {
+    const t = getTemplate('house_small')!
+    const zoomed = scaled(defaultView(t.baseplate), 0.6)
+    // Steps 1-10 (furniture and the first wall courses) all stay on screen at 0.6x: no move at all.
+    for (let s = 1; s <= 10; s++) expect(stepRefit(t.baseplate, stepBox(t, s), zoomed, aspect, safe), `step ${s}`).toBeNull()
+  })
+
+  it('brings the roof into a zoomed-in view with the smallest move, never past the usual view', () => {
+    const t = getTemplate('house_small')!
+    const usual = defaultView(t.baseplate)
+    const zoomed = scaled(usual, 0.6)
+    const roof = stepBox(t, t.steps.length - 1)
+    const next = stepRefit(t.baseplate, roof, zoomed, aspect, safe)!
+    expect(next).not.toBeNull()
+    expect(dist(next)).toBeGreaterThanOrEqual(dist(zoomed) - 1e-9) // here lifting the orbit point is enough
+    expect(dist(next)).toBeLessThan(dist(usual))
+    expect(boxVisible(roof!, next, aspect, safe)).toBe(true)
+  })
+
+  it('backs off just enough (same angles, never closer) when the next step is off screen', () => {
+    const size = { w: 32, d: 32 }
+    const close: View = { target: [8, 0, 8], position: [8 + 10 * 0.45, 10 * 0.7, 8 + 10 * 0.75] }
+    const box = { minX: 26, minY: 0, minZ: 26, maxX: 30, maxY: 3, maxZ: 30 } // far corner from where the player looks
+    expect(boxVisible(box, close, aspect, safe)).toBe(false)
+    const next = stepRefit(size, box, close, aspect, safe)!
+    for (let i = 0; i < 3; i++) expect(dirOf(next)[i]).toBeCloseTo(dirOf(close)[i], 6)
+    expect(next.target).toEqual([8, platesToWorld(3) / 2, 8]) // stays where the player was looking, lifted to the step
+    expect(dist(next)).toBeGreaterThan(dist(close))
+    expect(boxVisible(box, next, aspect, safe)).toBe(true)
+    // Minimal: a little closer and the step would not fit.
+    const nearer = scaled(next, 0.97)
+    expect(rectInside(projectBounds(boxCorners(box), nearer.position, nearer.target, VIEW_FOV, aspect)!, safe)).toBe(false)
+  })
+
+  it('only pans (lifts the orbit point) when that alone brings the step into view', () => {
+    const t = getTemplate('skyscraper')!
+    const v = defaultView(t.baseplate)
+    const box = { minX: 3, minY: 39, minZ: 3, maxX: 13, maxY: 49, maxZ: 13 } // the third office floor
+    const next = stepRefit(t.baseplate, box, v, aspect, safe)!
+    expect(next).not.toBeNull()
+    expect(dist(next)).toBeGreaterThanOrEqual(dist(v) - 1e-9)
+    expect(boxVisible(box, next, aspect, safe)).toBe(true)
+  })
+
+  it('does nothing without a step box', () => {
+    expect(stepRefit({ w: 16, d: 16 }, null, defaultView({ w: 16, d: 16 }), aspect, safe)).toBeNull()
+  })
+
+  it('walking the skyscraper from the usual view: early steps stay put, then it only moves away, each step shown', () => {
+    const t = getTemplate('skyscraper')!
+    let view = defaultView(t.baseplate)
+    const moves: number[] = []
+    for (let s = 0; s < t.steps.length; s++) {
+      const next = stepRefit(t.baseplate, stepBox(t, s), view, aspect, safe)
       if (!next) continue
-      refits++
-      expect(dist(next)).toBeGreaterThanOrEqual(dist(view) - 1e-9) // never zooms in
+      moves.push(s)
+      expect(dist(next)).toBeGreaterThanOrEqual(dist(view) - 1e-9)
       for (let i = 0; i < 3; i++) expect(dirOf(next)[i]).toBeCloseTo(dirOf(view)[i], 6)
-      expect(next.target[0]).toBe(8) // the orbit point stays over the plate centre...
-      expect(next.target[2]).toBe(8)
-      expect(next.target[1]).toBeCloseTo(platesToWorld(box!.maxY) / 2) // ...half way up the build
-      expect(showsModel(t.baseplate, box, next, aspect, safe)).toBe(true)
+      expect(boxVisible(stepBox(t, s)!, next, aspect, safe)).toBe(true)
       view = next
     }
-    expect(refits).toBeGreaterThan(0)
-    // Early steps keep the usual (big) view: the lobby is not shown at tower scale.
-    expect(guidedRefit(t.baseplate, stepsBox(t, 10), defaultView(t.baseplate), aspect, safe)).toBeNull()
+    expect(moves.length).toBeGreaterThan(0)
+    expect(moves[0]).toBeGreaterThan(10) // the lobby is built at the usual (big) size
   })
-  it('never pulls a player who zoomed out back in', () => {
-    const far: View = { target: [8, 0, 8], position: [8 + 200 * 0.45, 200 * 0.7, 8 + 200 * 0.75] }
-    expect(guidedRefit(t.baseplate, bounds(t.bricks), far, aspect, safe)).toBeNull()
-  })
-  it('brings ghosts back into view after the player zoomed in close', () => {
-    const close: View = { target: [8, 0, 8], position: [10, 4, 12] }
-    const next = guidedRefit(t.baseplate, stepsBox(t, 30), close, aspect, safe)!
-    expect(next).not.toBeNull()
-    expect(dist(next)).toBeGreaterThan(dist(close))
-  })
+
+  for (const [screen, { aspect: a, safe: sf }] of Object.entries(IPAD).filter(([k]) => k.startsWith('landscape'))) {
+    it(`${screen}: never moves the usual view for flat builds`, () => {
+      for (const id of ['house_small', 'house_blue', 'restaurant', 'garage', 'police_station', 'police_hq', 'car', 'tree', 'bench']) {
+        const t = getTemplate(id)!
+        const v = defaultView(t.baseplate)
+        for (let s = 0; s < t.steps.length; s++) expect(stepRefit(t.baseplate, stepBox(t, s), v, a, sf), `${id} step ${s}`).toBeNull()
+      }
+    })
+  }
 })
 
 describe('fitDistance', () => {
