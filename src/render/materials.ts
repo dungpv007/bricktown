@@ -96,6 +96,39 @@ export function createGhostMaterial(): THREE.MeshStandardMaterial {
 }
 
 /**
+ * The selected Workshop brick glows: its own shared geometry drawn again over it, additively, in
+ * yellow. Polygon offset + LessEqual let it pass the depth test on the brick's own surface (and
+ * nowhere a neighbour is in front). SelectionHighlight pulses its opacity. Never dispose.
+ */
+export const selectionGlowMaterial = new THREE.MeshBasicMaterial({
+  color: '#ffd500',
+  transparent: true,
+  opacity: 0.5,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  depthFunc: THREE.LessEqualDepth,
+  polygonOffset: true,
+  polygonOffsetFactor: -1,
+  polygonOffsetUnits: -4,
+  fog: false,
+})
+
+/**
+ * The rim around the selected brick: back faces of a slightly bigger copy of its geometry,
+ * drawn last without a depth test at partial opacity, so the brick's outline shows even inside
+ * a wall of other bricks. SelectionHighlight pulses its opacity. Never dispose.
+ */
+export const selectionRimMaterial = new THREE.MeshBasicMaterial({
+  color: '#ffd500',
+  side: THREE.BackSide,
+  transparent: true,
+  opacity: 0.45,
+  depthTest: false,
+  depthWrite: false,
+  fog: false,
+})
+
+/**
  * For baked models (`bakeBricks`), per baked kind: body colours live in the geometry's `color`
  * attribute; prints use `printMaterial`. Same look as `brickMaterials`. Never dispose.
  */

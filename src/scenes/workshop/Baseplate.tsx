@@ -55,6 +55,8 @@ function Studs({ w, d, color, onPointer }: { w: number; d: number; color: string
   )
 }
 
+const noRaycast = () => null
+
 /** Flat yellow arrow on the ground in front of a vehicle plate, pointing at -Z (the car's front). */
 function FrontArrow({ w }: { w: number }) {
   const shape = useMemo(() => {
@@ -69,9 +71,10 @@ function FrontArrow({ w }: { w: number }) {
     s.closePath()
     return s
   }, [])
-  // Shape +Y -> world -Z after the -90deg X rotation; the face then points up.
+  // Shape +Y -> world -Z after the -90deg X rotation; the face then points up. A marking only:
+  // never hit by pointer picks (bricks cannot go there).
   return (
-    <mesh position={[w / 2, -THICKNESS + 0.03, -0.6]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+    <mesh position={[w / 2, -THICKNESS + 0.03, -0.6]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow raycast={noRaycast}>
       <shapeGeometry args={[shape]} />
       <meshStandardMaterial color={COLORS[4].hex} roughness={0.6} />
     </mesh>
