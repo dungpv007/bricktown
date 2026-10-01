@@ -1,5 +1,6 @@
 import type { SaveData } from '../core/types'
 import { useApp } from '../state/useApp'
+import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
 import { saveSlot } from './saves'
 import { usePersistStatus } from './status'
@@ -67,10 +68,16 @@ export function startAutosave(): () => void {
     }, AUTOSAVE_DELAY_MS)
   })
 
-  const onVisibility = () => {
-    if (document.visibilityState === 'hidden') void flushAutosave()
+  // Leaving the app (app switch, tab kill): put a carried brick back first, so the saved
+  // workshop never misses the brick that was in hand mid-move.
+  const flushOnLeave = () => {
+    useEditor.getState().cancelCarry()
+    void flushAutosave()
   }
-  const onPageHide = () => void flushAutosave()
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') flushOnLeave()
+  }
+  const onPageHide = () => flushOnLeave()
   const hasDom = typeof document !== 'undefined' && typeof window !== 'undefined'
   if (hasDom) {
     document.addEventListener('visibilitychange', onVisibility)

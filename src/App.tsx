@@ -7,6 +7,8 @@ import GuidedScene from './scenes/guided/GuidedScene'
 import GuidedUI from './scenes/guided/GuidedUI'
 import WorkshopScene from './scenes/workshop/WorkshopScene'
 import WorkshopUI from './scenes/workshop/WorkshopUI'
+import CityScene from './scenes/city/CityScene'
+import CityUI from './scenes/city/CityUI'
 import MainMenu from './ui/MainMenu'
 import TopBar from './ui/TopBar'
 import { useT, type TKey } from './ui/i18n'
@@ -63,9 +65,19 @@ function Guided() {
   )
 }
 
+function City() {
+  return (
+    <div className="bt-screen" data-testid="mode-city">
+      <CityScene />
+      <CityUI />
+    </div>
+  )
+}
+
 function Play({ mode }: { mode: PlayMode }) {
   if (mode === 'workshop') return <Workshop />
   if (mode === 'guided') return <Guided />
+  if (mode === 'city') return <City />
   return <ModePlaceholder mode={mode} />
 }
 

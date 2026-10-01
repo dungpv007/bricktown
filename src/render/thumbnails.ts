@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { bakeBricksUncached } from '../core/bake'
+import { bakeBricksUncached, type BakedModel } from '../core/bake'
 import type { Brick } from '../core/types'
 import { bakedGlassMaterial, bakedMaterial } from './materials'
 
@@ -81,10 +81,12 @@ function fitCamera(box: THREE.Box3): THREE.OrthographicCamera {
 function render(bricks: Brick[], size: number): string {
   const gl = getRenderer()
   if (!gl || bricks.length === 0) return ''
-  // Baked here (uncached) and disposed below, so thumbnails do not pin geometry in the shared cache.
-  const baked = bakeBricksUncached(bricks)
   const scene = createScene()
+  // Baked here (uncached) and disposed below, so thumbnails do not pin geometry in the shared cache.
+  // Inside the try: an unknown part id throws, which must resolve '' rather than reject forever.
+  let baked: BakedModel | null = null
   try {
+    baked = bakeBricksUncached(bricks)
     const box = new THREE.Box3()
     const meshes: THREE.Mesh[] = [new THREE.Mesh(baked.opaque, bakedMaterial)]
     if (baked.glass) meshes.push(new THREE.Mesh(baked.glass, bakedGlassMaterial))
@@ -99,8 +101,8 @@ function render(bricks: Brick[], size: number): string {
   } catch {
     return ''
   } finally {
-    baked.opaque.dispose()
-    baked.glass?.dispose()
+    baked?.opaque.dispose()
+    baked?.glass?.dispose()
   }
 }
 

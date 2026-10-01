@@ -73,7 +73,7 @@ export const en: Record<keyof typeof vi, string> = {
   defaultNameVehicle: 'My car',
   defaultNameProp: 'My thing',
   libraryEmpty: 'No models yet',
-  confirmDeleteBlueprint: 'Delete this model?',
+  confirmDeleteBlueprint: 'Delete this model? It will also disappear from your city.',
   confirmReplaceModel: 'Open this model and drop the one you are building?',
   sound: 'Sound',
   onboardTap: 'Tap to place a brick',
@@ -86,4 +86,8 @@ export const en: Record<keyof typeof vi, string> = {
   installHintBackup: 'Remember to export a backup',
   confirmReplaceBuild: 'Drop the model you are building and start this one?',
   deleteFailed: 'Could not delete',
+  cityToolRoad: 'Roads',
+  cityToolPlace: 'Place',
+  cityDrawer: 'Library',
+  cityEdit: 'Edit in workshop',
 }

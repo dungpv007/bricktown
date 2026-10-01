@@ -71,7 +71,7 @@ export const vi = {
   defaultNameVehicle: 'Xe của bé',
   defaultNameProp: 'Đồ của bé',
   libraryEmpty: 'Chưa có mô hình nào',
-  confirmDeleteBlueprint: 'Xóa mô hình này?',
+  confirmDeleteBlueprint: 'Xóa mô hình này? Nó cũng sẽ biến mất khỏi thành phố.',
   confirmReplaceModel: 'Mở mô hình này và bỏ cái đang làm?',
   sound: 'Âm thanh',
   onboardTap: 'Chạm để đặt gạch',
@@ -84,4 +84,8 @@ export const vi = {
   installHintBackup: 'Nhớ xuất file để sao lưu',
   confirmReplaceBuild: 'Bỏ mô hình đang lắp để lắp mẫu này?',
   deleteFailed: 'Không xóa được',
+  cityToolRoad: 'Vẽ đường',
+  cityToolPlace: 'Đặt nhà',
+  cityDrawer: 'Kho',
+  cityEdit: 'Sửa trong xưởng',
 } as const

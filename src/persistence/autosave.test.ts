@@ -62,6 +62,58 @@ describe('autosave', () => {
     await flushAutosave()
     expect((await loadSlot(1))?.workshop.bricks).toHaveLength(1)
   })
+  describe('leaving the app with a brick in hand', () => {
+    const fakeDom = () => {
+      const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' as DocumentVisibilityState })
+      const win = new EventTarget()
+      vi.stubGlobal('document', doc)
+      vi.stubGlobal('window', win)
+      return { doc, win }
+    }
+    const pickUp = () => {
+      const ed = useEditor.getState()
+      ed.newModel('building', { w: 16, d: 16 })
+      ed.setTool('place')
+      ed.setPart('brick_2x4')
+      ed.place(0, 0, 0)
+      const id = useGame.getState().data.workshop.bricks[0].id
+      ed.setTool('move')
+      ed.tapBrick(id)
+      expect(useEditor.getState().carried?.id).toBe(id)
+      expect(useGame.getState().data.workshop.bricks).toHaveLength(0)
+      return id
+    }
+    const waitForSave = async () => {
+      for (let i = 0; i < 50 && !(await loadSlot(1)); i++) await tick()
+      return loadSlot(1)
+    }
+
+    afterEach(() => {
+      stop?.() // detach from the fake document/window before they are removed
+      stop = undefined
+      useEditor.getState().cancelCarry()
+      vi.unstubAllGlobals()
+    })
+
+    it('visibilitychange to hidden puts the carried brick back before saving', async () => {
+      const { doc } = fakeDom()
+      stop = startAutosave()
+      const id = pickUp()
+      doc.visibilityState = 'hidden'
+      doc.dispatchEvent(new Event('visibilitychange'))
+      expect(useEditor.getState().carried).toBeNull()
+      expect((await waitForSave())?.workshop.bricks.map((b) => b.id)).toEqual([id])
+    })
+
+    it('pagehide puts the carried brick back before saving', async () => {
+      const { win } = fakeDom()
+      stop = startAutosave()
+      const id = pickUp()
+      win.dispatchEvent(new Event('pagehide'))
+      expect(useEditor.getState().carried).toBeNull()
+      expect((await waitForSave())?.workshop.bricks.map((b) => b.id)).toEqual([id])
+    })
+  })
 })
 
 describe('slot switching', () => {
