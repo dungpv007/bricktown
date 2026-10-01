@@ -181,6 +181,15 @@ function MazeWorld({ maze }: { maze: Maze }) {
     const gestures = createGestureTracker()
     let painting: number | null = null
     let mouseGesture = false
+    // The low hedges of the maze last shown, recomputed only when its walls or size change (cellAt
+    // runs on every pointer move).
+    let hedges: { walls: string[]; w: number; h: number; keys: Set<string> } | null = null
+    const hedgesOf = (m: Maze): Set<string> => {
+      if (!hedges || hedges.walls !== m.walls || hedges.w !== m.w || hedges.h !== m.h) {
+        hedges = { walls: m.walls, w: m.w, h: m.h, keys: voidWalls(m) }
+      }
+      return hedges.keys
+    }
 
     /** The cell under the pointer: a (full-height) wall top when the ray hits one, else the floor (null off the maze). */
     const cellAt = (e: PointerEvent): Cell | null => {
@@ -194,7 +203,7 @@ function MazeWorld({ maze }: { maze: Maze }) {
         const cell = pointToCell(top.x, top.z)
         const key = cellKey(cell)
         // Void walls are low hedges: picked on the floor like the open cells.
-        if (shown.walls.includes(key) && !voidWalls(shown).has(key)) return cell
+        if (shown.walls.includes(key) && !hedgesOf(shown).has(key)) return cell
       }
       const floor = raycaster.ray.intersectPlane(GROUND_PLANE, hit)
       return floor ? pointToCell(floor.x, floor.z) : null

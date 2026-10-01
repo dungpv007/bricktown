@@ -34,8 +34,6 @@ const TOP_LOOK_AHEAD = 12
 const FOLLOW_RATE = 4
 /** Heading smoothing for the chase view (1 / s). */
 const HEADING_RATE = 3
-/** The car counts as moving once it is this far from where it started (studs). */
-const MOVED = 1
 
 const tmpPos = new THREE.Vector3()
 const tmpQuat = new THREE.Quaternion()
@@ -86,11 +84,11 @@ function MazeDriveCamera({ target, length, mode }: { target: RefObject<THREE.Gro
 }
 
 /**
- * Feeds the run with what the car does: the clock starts on the first gas / movement, the cell
- * under the car (from the production-safe drive status) picks up coins and finds the exit, and the
- * clock pauses while the app is hidden.
+ * Feeds the run with what the car does: the clock starts on the first gas or on leaving the entry
+ * cell (`carAt`), the cell under the car (from the production-safe drive status) picks up coins and
+ * finds the exit, and the clock pauses while the app is hidden.
  */
-function RunTracker({ spawn }: { spawn: { x: number; z: number } }) {
+function RunTracker() {
   useEffect(() => {
     let last: Cell | null = null
     // Only pose updates count: the status also changes when a controller is added, while the pose
@@ -100,11 +98,9 @@ function RunTracker({ spawn }: { spawn: { x: number; z: number } }) {
       const cell = pointToCell(s.x, s.z)
       if (last && last.cx === cell.cx && last.cz === cell.cz) return
       last = cell
-      const run = useMazeRun.getState()
-      if (Math.hypot(s.x - spawn.x, s.z - spawn.z) > MOVED) run.startIfReady(performance.now())
-      run.carAt(cell, performance.now())
+      useMazeRun.getState().carAt(cell, performance.now())
     })
-  }, [spawn])
+  }, [])
 
   useEffect(() => {
     const onVisibility = () => useMazeRun.getState().setHidden(document.visibilityState === 'hidden', performance.now())
@@ -169,7 +165,7 @@ function MazeDriveWorld({ maze, setup }: { maze: Maze; setup: DrivableSetup }) {
       <MazeDriveCamera target={chassis} length={length} mode={camera} />
       <MazeModel maze={shown} />
       <HintArrows />
-      <RunTracker spawn={pose} />
+      <RunTracker />
       {/* Physics steps before the camera reads the car (lower priority runs first); it stops at the finish. */}
       <Physics timeStep={1 / 60} gravity={[0, -GRAVITY, 0]} updatePriority={-50} paused={won}>
         <MazeColliders maze={maze} />

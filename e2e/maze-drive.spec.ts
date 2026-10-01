@@ -96,7 +96,7 @@ test('maze drive: gas starts the clock, hint arrows, camera toggle, coins, finis
   expect(saved).toMatchObject({ stars, coins })
   expect(saved.timeMs).toBeGreaterThan(0)
 
-  // Drive again: a fresh run at the entry; a slower finish keeps the record.
+  // Drive again: a fresh run at the entry.
   await page.getByTestId('maze-retry').click()
   await expect(win).toBeHidden()
   await expect(run(page)).toHaveAttribute('data-phase', 'ready')
@@ -104,10 +104,21 @@ test('maze drive: gas starts the clock, hint arrows, camera toggle, coins, finis
   await expect(page.getByTestId('drive-status')).toHaveAttribute('data-controllers', '1')
   await expect(run(page)).toHaveAttribute('data-cell', '0,5')
 
-  // Back to the editor from the finish card.
-  await page.waitForTimeout(300)
+  // Finish again (no hint this time): the saved record is this run only if it beats the first.
+  await page.waitForTimeout(300) // let the respawned car land before setting it down elsewhere
   await teleportToExit(page)
   await expect(win).toBeVisible()
+  const again = Number(await page.getByTestId('maze-win-stars').getAttribute('data-stars'))
+  const best = (await records(page))['tpl:easy']
+  if ((await page.getByTestId('maze-win-record').getAttribute('data-new')) === 'true') {
+    expect(best.stars).toBe(again)
+    expect(best).not.toEqual(saved)
+  } else {
+    expect(best).toEqual(saved)
+  }
+  expect(best.stars).toBeGreaterThanOrEqual(stars)
+
+  // Back to the editor from the finish card.
   await page.getByTestId('maze-win-edit').click()
   await expect(page.getByTestId('maze-editor')).toBeVisible()
   expect(errors).toEqual([])
