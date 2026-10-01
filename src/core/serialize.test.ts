@@ -142,6 +142,14 @@ describe('serialize', () => {
     expect(out.workshop.bricks).toEqual([fig({}), fig({ fig: chef }), fig({})])
     expect(out.blueprints[0].bricks).toEqual([fig({})])
   })
+  it('keeps a figure style only on minifigure bricks', () => {
+    const brick = { id: 'b', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0, c: 0 }
+    const out = migrate({
+      schemaVersion: SCHEMA_VERSION, blueprints: [], city: {},
+      workshop: { bricks: [{ ...brick, fig: figPreset('chef') }] },
+    })
+    expect(out.workshop.bricks).toEqual([brick])
+  })
 
   describe('sharing fields (optional, additive: folded into the next schema bump)', () => {
     const base = { schemaVersion: SCHEMA_VERSION, blueprints: [], city: {}, workshop: {} }

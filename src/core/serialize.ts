@@ -1,5 +1,5 @@
 import { COLORS } from './colors'
-import { parseFig } from './figures'
+import { MINIFIG_PART, parseFig } from './figures'
 import { validateTemplate } from './template'
 import type { Maze } from './maze'
 import type { Baseplate, Blueprint, Brick, MazeChallenge, SaveData, Template } from './types'
@@ -33,6 +33,9 @@ export const MIGRATIONS: Record<number, Migration> = {
 }
 // `Brick.fig` (minifigure styles) was added later without a version bump: it is optional and purely
 // additive, older saves simply have no figures, and `normalize` drops any style it cannot read.
+// Adding a value to a FigStyle option list (FIG_FACES, FIG_HATS, FIG_PRINTS, FIG_ACCESSORIES) or a
+// colour needs a schema bump: older clients drop styles they cannot read (`parseFig`), so a save
+// using the new value would lose its figure's look there.
 // Likewise `sharedTemplates`, `mazes` and `mazeChallenges` (sharing): optional and additive, filled in
 // by `normalize` when missing. The next schema bump should make them required.
 
@@ -135,12 +138,15 @@ function normalizeChallenges(v: unknown): Record<string, MazeChallenge> {
   return out
 }
 
-/** Bricks as stored, except that a figure style that is not valid is dropped (see `parseFig`). */
+/**
+ * Bricks as stored, except that a figure style is kept only on a minifigure brick and only when it
+ * is valid (see `parseFig`); otherwise it is dropped.
+ */
 function normalizeBricks(bricks: unknown[]): Brick[] {
   return bricks.map((b) => {
     if (!isRecord(b) || !('fig' in b)) return b as unknown as Brick
     const { fig, ...rest } = b
-    const style = parseFig(fig)
+    const style = rest.p === MINIFIG_PART ? parseFig(fig) : null
     return (style ? { ...rest, fig: style } : rest) as unknown as Brick
   })
 }
