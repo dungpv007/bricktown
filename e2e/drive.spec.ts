@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type Route } from '@playwright/test'
 
 interface Body {
   setRotation(q: { x: number; y: number; z: number; w: number }, wake: boolean): void
@@ -241,14 +241,28 @@ test('drive: switching away from the app lets go of the gas and the stick', asyn
   await touch('touchEnd', [])
 })
 
-test('drive: a scene that fails to load shows a friendly screen with a way back', async ({ page }) => {
-  await page.route('**/src/scenes/drive/DriveScene.tsx*', (route) => route.abort())
+test('drive: a scene that fails to load reloads once, then shows a friendly screen; home retries', async ({ page }) => {
+  const block = (route: Route) => route.abort()
+  await page.route('**/src/scenes/drive/DriveScene.tsx*', block)
+  await page.getByTestId('menu-drive').click()
+  await page.getByTestId('veh-tpl:car').click()
+  // Retried, then the app reloads itself once (a chunk that vanished after an update): back at the menu.
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem('bricktown-chunk-reload'))).toBe('1')
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+
+  // Still failing after the reload: no reload loop, the friendly error screen instead.
   await page.getByTestId('menu-drive').click()
   await page.getByTestId('veh-tpl:car').click()
   await expect(page.getByTestId('scene-error')).toBeVisible()
   await expect(page.getByTestId('scene-error-reload')).toBeVisible()
   await page.getByTestId('scene-error-menu').click()
   await expect(page.getByTestId('main-menu')).toBeVisible()
+
+  // The network is back: home forgot the failed load, so entering again works.
+  await page.unroute('**/src/scenes/drive/DriveScene.tsx*', block)
+  await page.getByTestId('menu-drive').click()
+  await page.getByTestId('veh-tpl:car').click()
+  await expect(page.getByTestId('drive-gas')).toBeVisible()
 })
 
 test('drive: a vehicle blueprint without wheels cannot be picked', async ({ page }) => {

@@ -1,18 +1,23 @@
 import { Component, Suspense, type ErrorInfo, type ReactNode } from 'react'
 import { useApp } from '../state/useApp'
 import { useT } from './i18n'
+import { resetFailedScenes } from './lazyScene'
 import SceneLoading from './SceneLoading'
 
 /** Friendly screen when a scene fails: back to the menu, or reload the app. */
 function SceneError() {
   const t = useT()
   const setMode = useApp((s) => s.setMode)
+  const goHome = () => {
+    resetFailedScenes() // entering the scene again retries the download
+    setMode('menu')
+  }
   return (
     <div className="bt-screen bt-placeholder" data-testid="scene-error" role="alert">
       <span className="bt-scene-error-icon" aria-hidden="true">🧱💥</span>
       <span>{t('sceneError')}</span>
       <div className="bt-scene-error-actions">
-        <button className="bt-btn bt-icon-btn" data-testid="scene-error-menu" aria-label={t('back')} onClick={() => setMode('menu')}>
+        <button className="bt-btn bt-icon-btn" data-testid="scene-error-menu" aria-label={t('back')} onClick={goHome}>
           🏠
         </button>
         <button className="bt-btn bt-icon-btn" data-testid="scene-error-reload" aria-label={t('reload')} onClick={() => window.location.reload()}>

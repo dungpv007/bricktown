@@ -1,24 +1,26 @@
-import { lazy, useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
 import MainMenu from './ui/MainMenu'
 import SceneBoundary from './ui/SceneBoundary'
+import { lazyScene } from './ui/lazyScene'
 import TopBar from './ui/TopBar'
 import type { TKey } from './ui/i18n'
 
 // Each mode's 3D scene (and its UI) is its own chunk, so the menu loads fast and the heavy
 // parts download on first use; the service worker precaches them all for offline play.
-// Drive additionally carries the physics engine (Rapier WASM).
-const WorkshopScene = lazy(() => import('./scenes/workshop/WorkshopScene'))
-const WorkshopUI = lazy(() => import('./scenes/workshop/WorkshopUI'))
-const GuidedPicker = lazy(() => import('./scenes/guided/GuidedPicker'))
-const GuidedScene = lazy(() => import('./scenes/guided/GuidedScene'))
-const GuidedUI = lazy(() => import('./scenes/guided/GuidedUI'))
-const CityScene = lazy(() => import('./scenes/city/CityScene'))
-const CityUI = lazy(() => import('./scenes/city/CityUI'))
-const VehiclePicker = lazy(() => import('./scenes/drive/VehiclePicker'))
-const DriveScene = lazy(() => import('./scenes/drive/DriveScene'))
+// Drive additionally carries the physics engine (Rapier WASM). `lazyScene` retries a failed download
+// and reloads once when a chunk is gone after an app update.
+const WorkshopScene = lazyScene(() => import('./scenes/workshop/WorkshopScene'))
+const WorkshopUI = lazyScene(() => import('./scenes/workshop/WorkshopUI'))
+const GuidedPicker = lazyScene(() => import('./scenes/guided/GuidedPicker'))
+const GuidedScene = lazyScene(() => import('./scenes/guided/GuidedScene'))
+const GuidedUI = lazyScene(() => import('./scenes/guided/GuidedUI'))
+const CityScene = lazyScene(() => import('./scenes/city/CityScene'))
+const CityUI = lazyScene(() => import('./scenes/city/CityUI'))
+const VehiclePicker = lazyScene(() => import('./scenes/drive/VehiclePicker'))
+const DriveScene = lazyScene(() => import('./scenes/drive/DriveScene'))
 
 type PlayMode = Exclude<Mode, 'menu'>
 

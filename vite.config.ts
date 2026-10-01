@@ -7,7 +7,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // A new version waits until the app applies it from the main menu (src/pwa/registerUpdates.ts): taking
+      // over mid-game would delete the chunk files the running version still needs for its next scene.
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'BrickTown',
@@ -28,6 +31,9 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,wasm,json}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
+        // The first install controls the open page right away (offline after one visit); later versions
+        // only take over through the update flow, which reloads.
+        clientsClaim: true,
       },
     }),
   ],
