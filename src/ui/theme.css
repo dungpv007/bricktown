@@ -213,6 +213,39 @@
   scrollbar-width: none;
 }
 
+/* Actions for the selected brick, under undo / redo in the left column. */
+.bt-actionbar {
+  position: absolute;
+  left: var(--bt-edge);
+  /* Below the undo / redo panel: two buttons, their gap and the panel padding, then a gap. */
+  top: calc(var(--bt-top) + 2 * var(--bt-touch) + 8px + 12px + 12px);
+  max-height: calc(100% - var(--bt-top) - 2 * var(--bt-touch) - 32px - var(--bt-palette-h) - 2 * var(--bt-edge));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  background: rgba(255, 213, 0, 0.8);
+  animation: bt-actionbar-in 0.15s ease-out both;
+}
+
+.bt-actionbar .bt-act-delete {
+  background: #ffd7d9;
+}
+
+@keyframes bt-actionbar-in {
+  from { transform: translateX(-24px); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-actionbar { animation: none; }
+}
+
+/* Workshop palette parts drag up onto the view; sideways still scrolls the row. */
+.bt-part-drag {
+  touch-action: pan-x;
+}
+
 .bt-toolbar-sep {
   flex: none;
   height: 4px;
@@ -1085,8 +1118,16 @@ form.bt-dialog,
   background: var(--bt-red);
 }
 
-.bt-ob-drop {
-  animation: bt-ob-drop 2s ease-in infinite;
+.bt-ob-glow {
+  animation: bt-ob-glow 1s ease-in-out infinite alternate;
+}
+
+.bt-ob-slide {
+  animation: bt-ob-slide 2.4s ease-in-out infinite;
+}
+
+.bt-ob-rise {
+  animation: bt-ob-rise 2.4s ease-in-out infinite;
 }
 
 .bt-ob-tap {
@@ -1115,10 +1156,21 @@ form.bt-dialog,
   animation: bt-ob-pinch-b 2.4s ease-in-out infinite;
 }
 
-@keyframes bt-ob-drop {
-  0%, 15% { transform: translateY(-34px); opacity: 0; }
-  35% { opacity: 1; }
-  55%, 100% { transform: translateY(0); opacity: 1; }
+@keyframes bt-ob-glow {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+@keyframes bt-ob-slide {
+  0%, 15% { transform: translate(0, 0); }
+  60%, 85% { transform: translate(80px, 0); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes bt-ob-rise {
+  0%, 10% { transform: translateY(110px); opacity: 0.6; }
+  60%, 90% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(110px); opacity: 0.6; }
 }
 
 @keyframes bt-ob-tap {
@@ -1153,7 +1205,9 @@ form.bt-dialog,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bt-ob-drop,
+  .bt-ob-glow,
+  .bt-ob-slide,
+  .bt-ob-rise,
   .bt-ob-tap,
   .bt-ob-turn,
   .bt-ob-swipe,

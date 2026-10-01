@@ -1,46 +1,65 @@
-import { useEditor, type Tool } from '../state/useEditor'
+import { useEditor } from '../state/useEditor'
 import { useT, type TKey } from './i18n'
 
-const TOOLS: Array<{ tool: Tool; icon: string; labelKey: TKey }> = [
-  { tool: 'place', icon: '🧱', labelKey: 'toolPlace' },
-  { tool: 'paint', icon: '🖌️', labelKey: 'toolPaint' },
-  { tool: 'delete', icon: '🗑️', labelKey: 'toolDelete' },
-  { tool: 'rotate', icon: '🔄', labelKey: 'toolRotate' },
-  { tool: 'move', icon: '✋', labelKey: 'toolMove' },
+type Action = 'rotate' | 'duplicate' | 'delete' | 'deselect'
+
+const ACTIONS: Array<{ action: Action; icon: string; labelKey: TKey }> = [
+  { action: 'rotate', icon: '↻', labelKey: 'toolRotate' },
+  { action: 'duplicate', icon: '📋', labelKey: 'actDuplicate' },
+  { action: 'delete', icon: '🗑️', labelKey: 'toolDelete' },
+  { action: 'deselect', icon: '✕', labelKey: 'actDeselect' },
 ]
 
-/** Left vertical tool column: editing tools, then undo / redo. */
-export default function Toolbar() {
-  const t = useT()
-  const current = useEditor((s) => s.tool)
-  const setTool = useEditor((s) => s.setTool)
-  const undo = useEditor((s) => s.undo)
-  const redo = useEditor((s) => s.redo)
-  // Undo also cancels a brick picked up by the move tool.
-  const canUndo = useEditor((s) => s.canUndo || s.carried !== null)
-  const canRedo = useEditor((s) => s.canRedo && s.carried === null)
+const run = (action: Action) => {
+  const ed = useEditor.getState()
+  switch (action) {
+    case 'rotate': return ed.rotateSelected()
+    case 'duplicate': return ed.duplicateSelected()
+    case 'delete': return ed.deleteSelected()
+    case 'deselect': return ed.deselect()
+  }
+}
 
+/** What can be done to the selected brick; shown only while a brick is selected. Recolour = a colour swatch. */
+function ActionBar() {
+  const t = useT()
   return (
-    <div className="bt-toolbar bt-hud-panel" role="toolbar" aria-orientation="vertical">
-      {TOOLS.map(({ tool, icon, labelKey }) => (
+    <div className="bt-actionbar bt-hud-panel" role="toolbar" aria-orientation="vertical" data-testid="action-bar">
+      {ACTIONS.map(({ action, icon, labelKey }) => (
         <button
-          key={tool}
-          className="bt-btn bt-icon-btn"
-          data-testid={`tool-${tool}`}
+          key={action}
+          className={`bt-btn bt-icon-btn bt-act-${action}`}
+          data-testid={`act-${action}`}
           aria-label={t(labelKey)}
-          aria-pressed={current === tool}
-          onClick={() => setTool(tool)}
+          onClick={() => run(action)}
         >
           {icon}
         </button>
       ))}
-      <div className="bt-toolbar-sep" aria-hidden="true" />
-      <button className="bt-btn bt-icon-btn" data-testid="undo" aria-label={t('toolUndo')} disabled={!canUndo} onClick={undo}>
-        ↶
-      </button>
-      <button className="bt-btn bt-icon-btn" data-testid="redo" aria-label={t('toolRedo')} disabled={!canRedo} onClick={redo}>
-        ↷
-      </button>
     </div>
+  )
+}
+
+/** Left column: undo / redo, then the actions for the selected brick (when there is one). */
+export default function Toolbar() {
+  const t = useT()
+  const undo = useEditor((s) => s.undo)
+  const redo = useEditor((s) => s.redo)
+  const canUndo = useEditor((s) => s.canUndo)
+  const canRedo = useEditor((s) => s.canRedo)
+  const hasSelection = useEditor((s) => s.selectedId !== null)
+
+  return (
+    <>
+      <div className="bt-toolbar bt-hud-panel" role="toolbar" aria-orientation="vertical">
+        <button className="bt-btn bt-icon-btn" data-testid="undo" aria-label={t('toolUndo')} disabled={!canUndo} onClick={undo}>
+          ↶
+        </button>
+        <button className="bt-btn bt-icon-btn" data-testid="redo" aria-label={t('toolRedo')} disabled={!canRedo} onClick={redo}>
+          ↷
+        </button>
+      </div>
+      {hasSelection && <ActionBar />}
+    </>
   )
 }

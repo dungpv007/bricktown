@@ -61,7 +61,6 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     const next = nextPending(t, step, placed)
     if (!next) return
     const ed = useEditor.getState()
-    ed.setTool('place')
     ed.setCategory(getPart(next.p).category)
     ed.setPart(next.p)
     ed.setColor(next.c)

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 
 import { COLORS, colorMaterialKind, type MaterialKind } from '../core/colors'
 import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
+import { useGame } from '../state/useGame'
 
 const KIND_ORDER: MaterialKind[] = ['opaque', 'trans', 'metal']
 
@@ -36,11 +37,27 @@ function useMoreBelow(ref: RefObject<HTMLElement | null>): boolean {
   return more
 }
 
-/** Right column of big colour swatches (two wide, scrolls when they do not all fit, with a cue). */
-export default function ColorPicker() {
+/** The colour of the selected Workshop brick (a figure's torso), or null without a selection. */
+function useSelectedColor(enabled: boolean): number | null {
+  const id = useEditor((s) => (enabled ? s.selectedId : null))
+  return useGame((s) => (id === null ? null : (s.data.workshop.bricks.find((b) => b.id === id)?.c ?? null)))
+}
+
+/**
+ * Right column of big colour swatches (two wide, scrolls when they do not all fit, with a cue).
+ * With `recolorsSelection` (Workshop), a swatch recolours the selected brick while one is
+ * selected; otherwise it sets the colour of new bricks.
+ */
+export default function ColorPicker({ recolorsSelection = false }: { recolorsSelection?: boolean }) {
   const lang = useApp((s) => s.lang)
-  const current = useEditor((s) => s.color)
-  const setColor = useEditor((s) => s.setColor)
+  const color = useEditor((s) => s.color)
+  const selectedColor = useSelectedColor(recolorsSelection)
+  const current = selectedColor ?? color
+  const pick = (c: number) => {
+    const ed = useEditor.getState()
+    if (selectedColor !== null) ed.paintSelected(c)
+    else ed.setColor(c)
+  }
   const panel = useRef<HTMLDivElement>(null)
   const more = useMoreBelow(panel)
   return (
@@ -53,7 +70,7 @@ export default function ColorPicker() {
           data-testid={`color-${c.id}`}
           aria-label={c.name[lang]}
           aria-pressed={current === c.id}
-          onClick={() => setColor(c.id)}
+          onClick={() => pick(c.id)}
         />
       ))}
       {more && (

@@ -96,6 +96,13 @@ export function createGhostMaterial(): THREE.MeshStandardMaterial {
 }
 
 /**
+ * The outline around the selected Workshop brick: the back faces of a slightly bigger copy of the
+ * brick's shared geometry, unlit, so a solid rim shows around its silhouette. Shared like the
+ * others (one selection at a time; SelectionHighlight pulses its colour). Never dispose.
+ */
+export const selectionMaterial = new THREE.MeshBasicMaterial({ color: '#ffd500', side: THREE.BackSide })
+
+/**
  * For baked models (`bakeBricks`), per baked kind: body colours live in the geometry's `color`
  * attribute; prints use `printMaterial`. Same look as `brickMaterials`. Never dispose.
  */

@@ -62,23 +62,64 @@ const Arrow = ({ d }: { d: string }) => (
   <path d={d} fill="none" stroke="var(--bt-yellow)" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" />
 )
 
-function TapArt() {
+/** Yellow rim around a 2x2 IsoBrick at (cx, cy), like the selection outline in the workshop. */
+const Outline = ({ cx, cy }: { cx: number; cy: number }) => (
+  <polygon
+    className="bt-ob-glow"
+    points={`${cx},${cy - 26} ${cx + 47},${cy - 2} ${cx + 47},${cy + 37} ${cx},${cy + 61} ${cx - 47},${cy + 37} ${cx - 47},${cy - 2}`}
+    fill="none"
+    stroke="var(--bt-yellow)"
+    strokeWidth={7}
+    strokeLinejoin="round"
+  />
+)
+
+function SelectArt() {
   return (
     <svg viewBox="0 0 240 200" role="img" aria-hidden="true">
       <g transform="translate(0 -30)">
         <Plate />
-        <g className="bt-ob-drop">
-          <IsoBrick cx={120} cy={104} shades={RED} />
-        </g>
+        <IsoBrick cx={120} cy={104} shades={RED} />
+        <Outline cx={120} cy={104} />
         <g className="bt-ob-tap">
-          <Finger x={178} y={70} />
+          <Finger x={136} y={150} />
         </g>
       </g>
     </svg>
   )
 }
 
-function DragArt() {
+function MoveArt() {
+  return (
+    <svg viewBox="0 0 240 200" role="img" aria-hidden="true">
+      <g transform="translate(0 -30)">
+        <Plate />
+        <g className="bt-ob-slide">
+          <IsoBrick cx={80} cy={124} shades={BLUE} />
+          <Outline cx={80} cy={124} />
+          <Finger x={96} y={170} />
+        </g>
+      </g>
+    </svg>
+  )
+}
+
+function AddArt() {
+  return (
+    <svg viewBox="0 0 240 200" role="img" aria-hidden="true">
+      <g transform="translate(0 -40)">
+        <Plate />
+      </g>
+      <rect x={20} y={178} width={200} height={22} rx={8} fill="#ffffff" stroke="#d5dde6" strokeWidth={3} />
+      <g className="bt-ob-rise">
+        <IsoBrick cx={120} cy={70} shades={GREEN} />
+        <Finger x={136} y={118} />
+      </g>
+    </svg>
+  )
+}
+
+function LookArt() {
   return (
     <svg viewBox="0 0 240 200" role="img" aria-hidden="true">
       <g className="bt-ob-turn">
@@ -113,15 +154,20 @@ function PinchArt() {
 }
 
 const CARDS: Array<{ labelKey: TKey; art: ReactNode }> = [
-  { labelKey: 'onboardTap', art: <TapArt /> },
-  { labelKey: 'onboardDrag', art: <DragArt /> },
+  { labelKey: 'onboardSelect', art: <SelectArt /> },
+  { labelKey: 'onboardMove', art: <MoveArt /> },
+  { labelKey: 'onboardAdd', art: <AddArt /> },
+  { labelKey: 'onboardLook', art: <LookArt /> },
   { labelKey: 'onboardPinch', art: <PinchArt /> },
 ]
 
 /** Set once the tour is closed, so blocked storage does not bring it back on every menu visit. */
 let closedThisSession = false
 
-/** First-launch picture tour: tap to place, drag to look around, pinch to zoom. Skippable. */
+/**
+ * First-launch picture tour: tap a brick to choose it, drag it to move it, drag one up from the
+ * palette to add it, drag empty space to look around, pinch to zoom. Skippable.
+ */
 export default function Onboarding() {
   const t = useT()
   const [open, setOpen] = useState(() => !closedThisSession && !readFlag(ONBOARDED_KEY))
