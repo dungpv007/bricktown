@@ -1,5 +1,5 @@
-import { getTemplate } from '../content/templates'
-import { bakeBricks, type BakedModel } from '../core/bake'
+import { getTemplate, TEMPLATES } from '../content/templates'
+import { bakeBricks, bakeKey, type BakedModel } from '../core/bake'
 import type { Baseplate, BlueprintKind, Brick, SaveData } from '../core/types'
 import type { Lang } from '../state/useApp'
 
@@ -65,4 +65,12 @@ export function makeSizeOf(data: Pick<SaveData, 'blueprints'>): (source: string)
   const byId = new Map(data.blueprints.map((b) => [b.id, b.baseplate]))
   return (source) =>
     (isTemplateSource(source) ? templateOf(source)?.baseplate : byId.get(source)) ?? UNKNOWN_SIZE
+}
+
+/**
+ * Bake-cache keys of every model a city placement can show right now: all templates and the current
+ * version of every saved blueprint. Anything else in the cache is stale (see `evictBakes`).
+ */
+export function liveBakeKeys(data: Pick<SaveData, 'blueprints'>): Set<string> {
+  return new Set([...TEMPLATES.map((t) => bakeKey(t.bricks)), ...data.blueprints.map((b) => bakeKey(b.bricks))])
 }

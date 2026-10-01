@@ -10,6 +10,7 @@ import type { Blueprint, CityState } from '../../core/types'
 import { TAP_MAX_MS, TAP_MAX_PX } from '../../input/tapGesture'
 import { createGhostMaterial } from '../../render/materials'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
+import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
 import { useCityEditor, type CityTool } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
 import DevStats from '../../ui/DevStats'
@@ -428,6 +429,7 @@ function CityWorld() {
 }
 
 export default function CityScene() {
+  useEvictStaleBakesOnUnmount()
   return (
     <Canvas shadows dpr={[1, 1.5]} data-testid="city-canvas">
       <color attach="background" args={[SKY]} />

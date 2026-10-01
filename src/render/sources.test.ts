@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { getTemplate } from '../content/templates'
+import { bakeKey } from '../core/bake'
 import type { Blueprint } from '../core/types'
-import { isTemplateSource, makeSizeOf, resolveRenderable, resolveSource, templateSource } from './sources'
+import { isTemplateSource, liveBakeKeys, makeSizeOf, resolveRenderable, resolveSource, templateSource } from './sources'
 
 const bp: Blueprint = {
   id: 'bp1',
@@ -66,5 +67,15 @@ describe('resolveRenderable', () => {
     const broken: Blueprint = { ...bp, id: 'bp2', bricks: [{ id: 'x', p: 'no_such_part', x: 0, y: 0, z: 0, r: 0, c: 1 }] }
     expect(resolveSource('bp2', { blueprints: [broken] })).not.toBeNull()
     expect(resolveRenderable('bp2', { blueprints: [broken] })).toBeNull()
+  })
+})
+
+describe('liveBakeKeys', () => {
+  it('holds the bake key of every template and every saved blueprint (current version only)', () => {
+    const keys = liveBakeKeys(data)
+    expect(keys.has(bakeKey(bp.bricks))).toBe(true)
+    expect(keys.has(bakeKey(getTemplate('house_small')!.bricks))).toBe(true)
+    const older = [{ id: 'a', p: 'brick_2x4', x: 4, y: 0, z: 0, r: 0 as const, c: 1 }]
+    expect(keys.has(bakeKey(older))).toBe(false)
   })
 })

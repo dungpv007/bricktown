@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { bakeBricks, bakeKey } from './bake'
+import { bakeBricks, bakeCacheSize, bakeKey, evictBakes } from './bake'
 import { COLORS } from './colors'
 import { bounds } from './model'
 import { getPartGeometry } from './parts/geometry'
@@ -108,6 +108,41 @@ describe('bakeBricks', () => {
     expect(two).toBe(one)
     const other = bakeBricks([b('a', 'brick_2x4', 0, 0, 0), b('b', 'brick_1x1', 4, 0, 1)])
     expect(other).not.toBe(one)
+  })
+})
+
+describe('evictBakes', () => {
+  const disposed = (g: THREE.BufferGeometry) => {
+    const seen = { value: false }
+    g.addEventListener('dispose', () => (seen.value = true))
+    return seen
+  }
+
+  it('drops and disposes the bakes whose key is not kept; kept ones stay shared', () => {
+    evictBakes(new Set()) // start from an empty cache
+    const live = [b('a', 'brick_2x4', 0, 0, 0)]
+    const stale = [b('a', 'brick_2x4', 0, 0, 0), b('w', 'window_1x2x2', 0, 3, 0, 0, GLASS)]
+    const keep = bakeBricks(live)
+    const old = bakeBricks(stale)
+    const opaqueGone = disposed(old.opaque)
+    const glassGone = disposed(old.glass!)
+    const keptGone = disposed(keep.opaque)
+    expect(bakeCacheSize()).toBe(2)
+
+    expect(evictBakes(new Set([bakeKey(live)]))).toBe(1)
+    expect(bakeCacheSize()).toBe(1)
+    expect(opaqueGone.value).toBe(true)
+    expect(glassGone.value).toBe(true)
+    expect(keptGone.value).toBe(false)
+    expect(bakeBricks(live)).toBe(keep)
+    // The evicted model is baked afresh next time it is needed.
+    expect(bakeBricks(stale)).not.toBe(old)
+  })
+
+  it('empties the cache when nothing is kept', () => {
+    bakeBricks([b('a', 'brick_1x1', 0, 0, 0)])
+    evictBakes(new Set())
+    expect(bakeCacheSize()).toBe(0)
   })
 })
 

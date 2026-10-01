@@ -4,6 +4,7 @@ import { Physics } from '@react-three/rapier'
 import * as THREE from 'three'
 import { analyzeDrive, spawnPoint } from '../../core/drive'
 import { makeSizeOf, resolveSource } from '../../render/sources'
+import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
 import { useGame } from '../../state/useGame'
 import CityGround from '../city/CityGround'
 import Placements from '../city/Placements'
@@ -128,6 +129,7 @@ function DriveWorld({ setup, spawn }: { setup: DrivableSetup; spawn: [number, nu
  * Lazy-loaded (this module pulls in Rapier's WASM).
  */
 export default function DriveScene({ source, onChangeVehicle }: { source: string; onChangeVehicle: () => void }) {
+  useEvictStaleBakesOnUnmount()
   const blueprints = useGame((s) => s.data.blueprints)
   const resolved = useMemo(() => resolveSource(source, { blueprints }), [source, blueprints])
   const bricks = resolved?.bricks

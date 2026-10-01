@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import {
   CuboidCollider,
@@ -9,7 +9,7 @@ import {
   type RapierRigidBody,
 } from '@react-three/rapier'
 import * as THREE from 'three'
-import { bakeBricks } from '../../core/bake'
+import { bakeBricksUncached, type BakedModel } from '../../core/bake'
 import {
   approach,
   clampHorizontalSpeed,
@@ -158,11 +158,27 @@ function chassisMass(config: VehicleConfig) {
   }
 }
 
+/**
+ * The vehicle's own bake (not the shared cache, which only holds what the city shows): built for
+ * this component and disposed when it unmounts.
+ */
+function useOwnBake(bricks: Brick[]): BakedModel {
+  const baked = useMemo(() => bakeBricksUncached(bricks), [bricks])
+  useEffect(
+    () => () => {
+      baked.opaque.dispose()
+      baked.glass?.dispose()
+    },
+    [baked],
+  )
+  return baked
+}
+
 /** A wheel brick moved to the origin; the mesh is shifted so the wheel spins around its centre. */
 function WheelVisual({ brick }: { brick: Brick }) {
-  const local = useMemo(() => ({ ...brick, x: 0, y: 0, z: 0 }), [brick])
-  const baked = useMemo(() => bakeBricks([local]), [local]) // shared cache: never dispose
-  const [x, y, z] = useMemo(() => brickCenter(local), [local])
+  const local = useMemo(() => [{ ...brick, x: 0, y: 0, z: 0 }], [brick])
+  const baked = useOwnBake(local)
+  const [x, y, z] = useMemo(() => brickCenter(local[0]), [local])
   const offset: [number, number, number] = [-x, -y, -z]
   return (
     <>
@@ -199,7 +215,7 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
   const steerGroups = useRef<Array<THREE.Group | null>>([])
   const spinGroups = useRef<Array<THREE.Group | null>>([])
 
-  const bakedBody = useMemo(() => bakeBricks(bodyBricks), [bodyBricks]) // shared cache: never dispose
+  const bakedBody = useOwnBake(bodyBricks)
   const colliderMass = useMemo(() => chassisMass(config), [config])
 
   // The springs settle by `sag` under the car's weight; mounting the wheels that much lower than

@@ -89,7 +89,8 @@ const cache = new Map<string, BakedModel>()
 
 /**
  * Cached by content (see `bakeKey`): equal models share one result. The geometries are shared
- * app-wide, so callers must never dispose or mutate them.
+ * app-wide, so callers must never dispose or mutate them. Only bake what a template or saved
+ * blueprint shows: `evictBakes` drops everything else (bake one-off models with `bakeBricksUncached`).
  */
 export function bakeBricks(bricks: Brick[]): BakedModel {
   const key = bakeKey(bricks)
@@ -99,4 +100,27 @@ export function bakeBricks(bricks: Brick[]): BakedModel {
     cache.set(key, baked)
   }
   return baked
+}
+
+/** Number of models in the bake cache. */
+export function bakeCacheSize(): number {
+  return cache.size
+}
+
+/**
+ * Drops and disposes every cached bake whose key is not in `keep` (e.g. older versions of a
+ * blueprint, deleted blueprints); returns how many were dropped. Call it only when no mounted
+ * scene can still draw a dropped bake: when a scene that used the cache unmounts, keeping the keys
+ * any scene may still show.
+ */
+export function evictBakes(keep: ReadonlySet<string>): number {
+  let dropped = 0
+  for (const [key, baked] of cache) {
+    if (keep.has(key)) continue
+    cache.delete(key)
+    baked.opaque.dispose()
+    baked.glass?.dispose()
+    dropped++
+  }
+  return dropped
 }
