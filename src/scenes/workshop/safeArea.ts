@@ -15,15 +15,14 @@ const HUD_EDGES: HudEdges = {
 }
 
 /**
- * The Guided HUD: step card on the left; colours and palette only in normal mode; the celebration
- * card at the end. The top row's buttons all end at the same height (the `.bt-topbar` strip itself
- * is taller than its buttons).
+ * The Guided HUD: the piece tray at the bottom; the celebration card at the end. The top row's
+ * buttons all end at the same height (the `.bt-topbar` strip itself is taller than its buttons).
  */
 export const GUIDED_HUD: HudEdges = {
-  left: ['.bt-needed'],
-  right: ['.bt-colors'],
+  left: [],
+  right: [],
   top: ['.bt-topbar-title', '.bt-stepnav', '.bt-topright'],
-  bottom: ['.bt-palette', '.bt-celebrate-card'],
+  bottom: ['.bt-tray', '.bt-celebrate-card'],
 }
 
 /** Kept between the HUD and anything placed in the safe rect. */

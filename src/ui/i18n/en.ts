@@ -65,6 +65,7 @@ export const en: Record<keyof typeof vi, string> = {
   stepNext: 'Next step',
   stepCounter: 'Step',
   needed: 'To place',
+  dragPiece: 'Drag onto the model',
   difficulty: 'Difficulty',
   celebrateTitle: 'Great job!',
   addToCity: 'Add to city',

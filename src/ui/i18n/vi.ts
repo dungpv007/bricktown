@@ -63,6 +63,7 @@ export const vi = {
   stepNext: 'Bước sau',
   stepCounter: 'Bước',
   needed: 'Cần đặt',
+  dragPiece: 'Kéo vào mô hình',
   difficulty: 'Độ khó',
   celebrateTitle: 'Giỏi quá!',
   addToCity: 'Thêm vào thành phố',

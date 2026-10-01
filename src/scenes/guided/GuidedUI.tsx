@@ -1,35 +1,14 @@
 import { useState } from 'react'
 import { findGuidedTemplate, useGuidedTemplate } from '../../state/guidedTemplates'
-import { COLORS } from '../../core/colors'
-import { PART_BY_ID } from '../../core/parts/catalog'
-import type { Brick, GuidedState, Template } from '../../core/types'
 import { useApp } from '../../state/useApp'
 import { useEditor, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { useGuided } from '../../state/useGuided'
-import ColorPicker from '../../ui/ColorPicker'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import Confetti from '../../ui/Confetti'
 import { useT } from '../../ui/i18n'
-import PartPalette, { PartIcon } from '../../ui/PartPalette'
+import GuidedTray from './GuidedTray'
 
-/** Bricks the viewed step asks for: what is still missing now, or everything of an earlier step. */
-function viewedBricks(t: Template, g: GuidedState, viewStep: number): Brick[] {
-  const bricks = (t.steps[viewStep] ?? []).map((i) => t.bricks[i])
-  return viewStep < g.step ? bricks : bricks.filter((b) => !g.placed.includes(b.id))
-}
-
-/** Groups bricks by part and colour: "2 × red 2×4". */
-function groupNeeded(bricks: Brick[]): Array<{ p: string; c: number; count: number }> {
-  const groups = new Map<string, { p: string; c: number; count: number }>()
-  for (const b of bricks) {
-    const key = `${b.p}|${b.c}`
-    const g = groups.get(key)
-    if (g) g.count++
-    else groups.set(key, { p: b.p, c: b.c, count: 1 })
-  }
-  return [...groups.values()]
-}
 
 function StepNav({ total }: { total: number }) {
   const t = useT()
@@ -60,27 +39,6 @@ function StepNav({ total }: { total: number }) {
       >
         ▶
       </button>
-    </div>
-  )
-}
-
-function NeededPanel({ template, guided }: { template: Template; guided: GuidedState }) {
-  const t = useT()
-  const lang = useApp((s) => s.lang)
-  const viewStep = useGuided((s) => s.viewStep)
-  const needed = groupNeeded(viewedBricks(template, guided, viewStep))
-  return (
-    <div className="bt-needed" data-testid="needed" role="list" aria-label={t('needed')}>
-      <div className="bt-needed-title">{template.name[lang]}</div>
-      {needed.map(({ p, c, count }) => {
-        const part = PART_BY_ID[p]
-        return (
-          <div key={`${p}|${c}`} className="bt-needed-item" role="listitem" data-testid={`needed-${p}-${c}`}>
-            <span className="bt-needed-count">{`${count}×`}</span>
-            {part && <PartIcon part={part} color={COLORS[c]?.hex ?? '#ffffff'} />}
-          </div>
-        )
-      })}
     </div>
   )
 }
@@ -163,19 +121,17 @@ function CelebrationOverlay({ onBrowse }: { onBrowse: () => void }) {
   )
 }
 
-/** HTML overlay of a Guided Build: step counter, needed bricks, difficulty, and (normal mode) palette. */
+/** HTML overlay of a Guided Build: step counter, difficulty, and the piece tray to drag from. */
 export default function GuidedUI({ onBrowse }: { onBrowse: () => void }) {
   const t = useT()
   const guided = useGame((s) => s.data.guided)
   const celebrating = useGuided((s) => s.celebration !== null)
-  const viewStep = useGuided((s) => s.viewStep)
   const easy = useApp((s) => s.difficulty === 'easy')
   const template = useGuidedTemplate(guided?.templateId)
 
   if (celebrating) return <CelebrationOverlay onBrowse={onBrowse} />
   if (!guided || !template) return null
 
-  const stepParts = [...new Set((template.steps[viewStep] ?? []).map((i) => template.bricks[i].p))]
   return (
     <div className="bt-workshop-ui bt-guided-ui" data-easy={easy}>
       <StepNav total={template.steps.length} />
@@ -185,13 +141,7 @@ export default function GuidedUI({ onBrowse }: { onBrowse: () => void }) {
           📋
         </button>
       </div>
-      <NeededPanel template={template} guided={guided} />
-      {!easy && (
-        <>
-          <ColorPicker />
-          <PartPalette allowedParts={stepParts} />
-        </>
-      )}
+      <GuidedTray template={template} guided={guided} />
     </div>
   )
 }

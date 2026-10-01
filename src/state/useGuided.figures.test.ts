@@ -36,10 +36,12 @@ beforeEach(() => {
 })
 
 describe('guided figures', () => {
-  it("selects the next figure's part, facing and style", () => {
+  it("shows the next figure on a tray card with its style, leaving the workshop editor's figure alone", () => {
     useGuided.getState().start('figs')
-    expect([ed().partId, ed().rot, ed().category]).toEqual(['minifig', 0, 'figure'])
-    expect(ed().fig).toEqual(figPreset('police'))
+    const cards = useGuided.getState().cards()
+    expect(cards).toHaveLength(1)
+    expect(cards[0]).toMatchObject({ p: 'minifig', fig: figPreset('police') })
+    expect(ed().fig).toEqual(figPreset('chef'))
   })
 
   it('accepts a figure at the right spot and facing whatever its style; it shows the template style', () => {
@@ -47,9 +49,8 @@ describe('guided figures', () => {
     // A different style and colour still counts: the template decides how the figure looks.
     expect(useGuided.getState().tryPlace({ p: 'minifig', x: 1, y: 0, z: 1, r: 0, c: 5 })).toBe(true)
     expect(guided()!.placed).toEqual(['figs-0'])
-    // The next figure is selected with its own style and facing.
-    expect(ed().fig).toEqual(figPreset('robber'))
-    expect(ed().rot).toBe(3)
+    // The next figure's card shows its own style.
+    expect(useGuided.getState().cards()[0].fig).toEqual(figPreset('robber'))
     // Facing matters for figures.
     expect(useGuided.getState().tryPlace({ p: 'minifig', x: 4, y: 0, z: 4, r: 1, c: 0 })).toBe(false)
   })

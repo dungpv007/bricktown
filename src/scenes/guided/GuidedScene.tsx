@@ -3,21 +3,24 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGuidedTemplate } from '../../state/guidedTemplates'
 import { COLORS, GLASS_COLOR } from '../../core/colors'
+import { SNAP_PX, dropAnchor, snapTargetOnScreen, type ScreenProjection } from '../../core/guidedTray'
 import { bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
 import { brickBodyGeometry } from '../../core/parts/brickGeometry'
-import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
+import { rotateNormalY, type PickHit, type Vec3 } from '../../core/pick'
 import { brickCenter } from '../../core/rotation'
-import { findMatch, placedBricks, type PlacedCandidate } from '../../core/template'
-import type { Brick, GuidedState, Rot, Template } from '../../core/types'
+import { findMatch, placedBricks } from '../../core/template'
+import type { Brick, FigStyle, GuidedState, Rot, Template } from '../../core/types'
+import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import { useTap } from '../../input/useTap'
 import GhostBrick from '../../render/GhostBrick'
-import InstancedBricks from '../../render/InstancedBricks'
+import InstancedBricks, { brickOfInstance } from '../../render/InstancedBricks'
 import { useApp } from '../../state/useApp'
-import { useEditor } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { useGuided } from '../../state/useGuided'
+import { useGuidedDrag, type DraggedCard, type DropOutcome } from '../../state/useGuidedDrag'
 import Baseplate from '../workshop/Baseplate'
+import { plateScreen } from '../workshop/plateScreen'
 import { Ground, Lights, SKY } from '../workshop/WorkshopScene'
 import { modelTop } from '../workshop/viewFit'
 import GuidedCamera from './GuidedCamera'
@@ -25,28 +28,46 @@ import GuidedCamera from './GuidedCamera'
 const GLASS_GHOST = '#3fa9f5'
 const STATIC_GHOST_OPACITY = 0.28
 const STATIC_GHOST_EMISSIVE = 0.05
+const POP_SECONDS = 0.35
+const noRaycast = () => null
 
 type Anchor = { x: number; y: number; z: number }
 type GhostPointer = (e: ThreeEvent<PointerEvent>, brick: Brick) => void
 
-const sameAnchor = (a: Anchor | null, b: Anchor | null) =>
-  a === b || (a !== null && b !== null && a.x === b.x && a.y === b.y && a.z === b.z)
+/** What the finger points at in the view: the surface hit and, when it is a target ghost, that brick. */
+type Aim = { hit: PickHit; ghost: Brick | null }
+
+/** The dragged piece as shown in the view: where it would go, and whether it fits there. */
+interface Preview {
+  partId: string
+  fig?: FigStyle
+  rot: Rot
+  anchor: Anchor
+  valid: boolean
+  /** Easy mode: the target ghost the piece snapped onto. */
+  snapId?: string
+}
+
+const samePreview = (a: Preview | null, b: Preview | null) =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.partId === b.partId &&
+    a.fig === b.fig &&
+    a.rot === b.rot &&
+    a.valid === b.valid &&
+    a.snapId === b.snapId &&
+    a.anchor.x === b.anchor.x &&
+    a.anchor.y === b.anchor.y &&
+    a.anchor.z === b.anchor.z)
 
 const stepBricks = (t: Template, from: number, to: number): Brick[] =>
   t.steps.slice(from, to).flat().map((i) => t.bricks[i])
 
-/** What the pointer is aiming at: a target ghost (fixed spot) or a surface hit (spot depends on the part). */
-type Aim = { ghost: Anchor } | { hit: PickHit }
-
-const aimAnchor = (aim: Aim | null, partId: string, rot: Rot): Anchor | null => {
-  if (!aim) return null
-  return 'ghost' in aim ? aim.ghost : targetAnchor(aim.hit, getPart(partId), rot)
-}
-
 /**
- * A brick of the viewed step, in its own colour. Bricks still to place pulse and can be tapped;
- * with `pulse` off (an earlier step being looked at) it is a steady, faint outline-like ghost that
- * must not read as something to tap.
+ * A brick of the viewed step, in its own colour. Bricks still to place pulse; with `pulse` off (an
+ * earlier step being looked at) it is a steady, faint outline-like ghost that must not read as
+ * something to place. Ghosts are picked by the tray drag (`userData.ghost`).
  */
 function TargetGhost({ brick, pulse = true, onPointer }: { brick: Brick; pulse?: boolean; onPointer?: GhostPointer }) {
   // One material per ghost: each pulses in its own colour (only a handful per step).
@@ -78,6 +99,7 @@ function TargetGhost({ brick, pulse = true, onPointer }: { brick: Brick; pulse?:
     mat.emissiveIntensity = 0.15 + 0.45 * wave
   })
   const handle = onPointer ? (e: ThreeEvent<PointerEvent>) => onPointer(e, brick) : undefined
+  const userData = useMemo(() => ({ ghost: brick }), [brick])
   return (
     <mesh
       ref={meshRef}
@@ -85,13 +107,67 @@ function TargetGhost({ brick, pulse = true, onPointer }: { brick: Brick; pulse?:
       material={material}
       position={brickCenter(brick)}
       rotation={[0, (brick.r * Math.PI) / 2, 0]}
+      userData={userData}
       onPointerDown={handle}
-      onPointerMove={handle}
       onPointerUp={handle}
       dispose={null}
       renderOrder={1}
     />
   )
+}
+
+/** A short white puff around a brick that was just dropped in place. */
+function PlacePop({ brick }: { brick: Brick }) {
+  const [material] = useState(
+    () => new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7, depthWrite: false }),
+  )
+  useEffect(() => () => material.dispose(), [material])
+  const meshRef = useRef<THREE.Mesh>(null)
+  const start = useRef<number | null>(null)
+  useFrame(({ clock }) => {
+    const mesh = meshRef.current
+    if (!mesh || !mesh.visible) return
+    if (start.current === null) start.current = clock.elapsedTime
+    const k = (clock.elapsedTime - start.current) / POP_SECONDS
+    if (k >= 1) {
+      mesh.visible = false
+      return
+    }
+    mesh.scale.setScalar(1 + 0.3 * k)
+    ;(mesh.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - k)
+  })
+  return (
+    <mesh
+      ref={meshRef}
+      geometry={brickBodyGeometry(brick)}
+      material={material}
+      position={brickCenter(brick)}
+      rotation={[0, (brick.r * Math.PI) / 2, 0]}
+      raycast={noRaycast}
+      dispose={null}
+      renderOrder={2}
+    />
+  )
+}
+
+/** Keeps `useGuidedDrag.hintTo` on the screen spot of `brick` (the "drag me" hand's goal) while mounted. */
+function HintTracker({ brick }: { brick: Brick }) {
+  const el = useThree((s) => s.gl.domElement)
+  const point = useMemo(() => {
+    const [x, y, z] = brickCenter(brick)
+    return new THREE.Vector3(x, y, z)
+  }, [brick])
+  const v = useMemo(() => new THREE.Vector3(), [])
+  useFrame(({ camera }) => {
+    v.copy(point).project(camera)
+    const r = el.getBoundingClientRect()
+    const x = r.left + ((v.x + 1) / 2) * r.width
+    const y = r.top + ((1 - v.y) / 2) * r.height
+    const prev = useGuidedDrag.getState().hintTo
+    if (!prev || Math.abs(prev.x - x) > 2 || Math.abs(prev.y - y) > 2) useGuidedDrag.setState({ hintTo: { x, y } })
+  })
+  useEffect(() => () => useGuidedDrag.setState({ hintTo: null }), [])
+  return null
 }
 
 interface WorldProps {
@@ -103,11 +179,8 @@ interface WorldProps {
 function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   const viewStep = useGuided((s) => s.viewStep)
   const errorSeq = useGuided((s) => s.errorSeq)
+  const placedOnce = useGuided((s) => s.placedOnce)
   const easy = useApp((s) => s.difficulty === 'easy')
-  const partId = useEditor((s) => s.partId)
-  const fig = useEditor((s) => s.fig)
-  const rot = useEditor((s) => s.rot)
-  const color = useEditor((s) => s.color)
   const consumeTap = useTap()
 
   const step = guided?.step ?? 0
@@ -122,84 +195,139 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
     return { solid: placed, ghosts: stepBricks(template, step, step + 1).filter((b) => !guided.placed.includes(b.id)) }
   }, [template, guided, celebrating, viewingPast, viewStep, step])
 
-  // Normal mode: preview of the selected part where the kid points (green on a target, red elsewhere).
-  // The aim is kept (not just the anchor) so the preview re-centres right away when only the part
-  // or rotation changes; it is stored only when it moves the anchor.
-  const [aim, setAimState] = useState<Aim | null>(null)
-  const aimRef = useRef<Aim | null>(null)
-  const setAim = useCallback((next: Aim | null) => {
-    const prev = aimRef.current
-    if (prev === next) return
-    if (prev && next) {
-      const { partId: p, rot: r } = useEditor.getState()
-      if (sameAnchor(aimAnchor(prev, p, r), aimAnchor(next, p, r))) return
-    }
-    aimRef.current = next
-    setAimState(next)
-  }, [])
-  const anchor = useMemo(() => aimAnchor(aim, partId, rot), [aim, partId, rot])
-
   const el = useThree((s) => s.gl.domElement)
-  useEffect(() => {
-    const onLeave = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') setAim(null)
-    }
-    el.addEventListener('pointerleave', onLeave)
-    return () => el.removeEventListener('pointerleave', onLeave)
-  }, [el, setAim])
+  const get = useThree((s) => s.get)
 
-  const candidateAt = (a: Anchor): PlacedCandidate => ({ p: partId, x: a.x, y: a.y, z: a.z, r: rot, c: color })
-  const previewValid =
-    anchor !== null && guided !== null && findMatch(template, step, guided.placed, candidateAt(anchor)) !== null
-
-  /** Normal mode: pointer on the baseplate, a placed brick (`brick`) or a target ghost (`ghost`). */
-  const handlePointer = useCallback(
-    (e: ThreeEvent<PointerEvent>, brick: Brick | null, ghost: Brick | null) => {
-      e.stopPropagation() // only the nearest hit counts
-      const type = e.nativeEvent.type
-      const ed = useEditor.getState()
-      const computeAim = (): Aim | null => {
-        // Pointing at a target spot means "put the selected part there".
-        if (ghost) return { ghost: { x: ghost.x, y: ghost.y, z: ghost.z } }
-        if (!e.face) return null
-        const local: Vec3 = [e.face.normal.x, e.face.normal.y, e.face.normal.z]
-        const normal = brick ? rotateNormalY(local, brick.r) : local
-        return { hit: { point: [e.point.x, e.point.y, e.point.z], normal, brick } }
+  // The plate, the placed bricks and the target ghosts: what a dragged piece can point at.
+  const pickRoot = useRef<THREE.Group>(null)
+  const raycaster = useMemo(() => new THREE.Raycaster(), [])
+  const pick = useCallback(
+    (p: ClientPoint): Aim | null => {
+      const root = pickRoot.current
+      if (!root) return null
+      const rect = el.getBoundingClientRect()
+      const ndc = new THREE.Vector2(((p.x - rect.left) / rect.width) * 2 - 1, -((p.y - rect.top) / rect.height) * 2 + 1)
+      raycaster.setFromCamera(ndc, get().camera)
+      for (const h of raycaster.intersectObject(root, true)) {
+        if (!h.face) continue
+        const ghost = (h.object.userData.ghost as Brick | undefined) ?? null
+        const brick = ghost ? null : (brickOfInstance(h.object, h.instanceId) ?? null)
+        const local: Vec3 = [h.face.normal.x, h.face.normal.y, h.face.normal.z]
+        return { hit: { point: [h.point.x, h.point.y, h.point.z], normal: brick ? rotateNormalY(local, brick.r) : local, brick }, ghost }
       }
-      if (type === 'pointermove') {
-        if (e.pointerType === 'mouse' && e.buttons === 0) setAim(computeAim())
-        return
-      }
-      if (type === 'pointerdown') {
-        setAim(computeAim())
-        return
-      }
-      if (type !== 'pointerup' || !consumeTap(e.pointerId)) return
-      const next = computeAim()
-      const a = aimAnchor(next, ed.partId, ed.rot)
-      if (!next || !a) return
-      setAim(next)
-      const ok = useGuided.getState().tryPlace({ p: ed.partId, x: a.x, y: a.y, z: a.z, r: ed.rot, c: ed.color })
-      // A wrong spot keeps the (red, shaking) preview visible.
-      if (ok) setAim(null)
+      return null
     },
-    [consumeTap, setAim],
+    [el, get, raycaster],
   )
 
+  /** Where a world point is on screen (client pixels). */
+  const toScreen = useCallback<ScreenProjection>(
+    ([x, y, z]) => {
+      const v = new THREE.Vector3(x, y, z).project(get().camera)
+      const r = el.getBoundingClientRect()
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }
+    },
+    [el, get],
+  )
+
+  // Lets e2e specs (dev handle) aim at bricks, as in the workshop.
+  useEffect(() => {
+    plateScreen.project = toScreen
+    return () => {
+      plateScreen.project = null
+    }
+  }, [toScreen])
+
+  // Set only when what is shown changes: the finger moves far more often than the piece's spot.
+  const [preview, setPreviewState] = useState<Preview | null>(null)
+  const previewRef = useRef<Preview | null>(null)
+  const setPreview = useCallback((next: Preview | null) => {
+    if (samePreview(previewRef.current, next)) return
+    previewRef.current = next
+    setPreviewState(next)
+  }, [])
+  const [pop, setPop] = useState<{ brick: Brick; seq: number } | null>(null)
+  const easyRef = useRef(easy)
+  const guidedRef = useRef(guided)
+  useEffect(() => {
+    easyRef.current = easy
+    guidedRef.current = guided
+  })
+
+  // Pieces dragged out of the tray: a ghost in the view, placed on release (see GuidedUI's tray).
+  useEffect(() => {
+    if (!interactive) return
+    const overView = (p: ClientPoint) => document.elementFromPoint(p.x, p.y) === el
+    /**
+     * Where the dragged `card` would go with the finger at `p` (over the view): snapped onto a target
+     * near the finger on screen (easy), or at what the finger points at (normal).
+     */
+    const previewOf = (card: DraggedCard, p: ClientPoint): Preview | null => {
+      if (easyRef.current) {
+        const target = snapTargetOnScreen(card.bricks, p, toScreen, SNAP_PX)
+        return target && { partId: card.p, fig: card.fig, rot: target.r, anchor: target, valid: true, snapId: target.id }
+      }
+      const aim = pick(p)
+      if (!aim) return null
+      const anchor = dropAnchor(aim.hit, aim.ghost, getPart(card.p), card.r)
+      const g = guidedRef.current
+      const valid = g !== null && findMatch(template, g.step, g.placed, { p: card.p, c: card.c, r: card.r, ...anchor }) !== null
+      return { partId: card.p, fig: card.fig, rot: card.r, anchor, valid }
+    }
+    const unregister = registerPaletteDropTarget({
+      hover: (p) => {
+        const drag = useGuidedDrag.getState()
+        if (!drag.card) return
+        if (!p) {
+          setPreview(null)
+          drag.end('cancelled', null)
+          return
+        }
+        const next = overView(p) ? previewOf(drag.card, p) : null
+        setPreview(next)
+        drag.move(p, next !== null)
+      },
+      drop: (p) => {
+        const drag = useGuidedDrag.getState()
+        const card = drag.card
+        if (!card) return
+        setPreview(null)
+        if (!overView(p)) {
+          drag.end('cancelled', p)
+          return
+        }
+        const next = previewOf(card, p)
+        const guidedStore = useGuided.getState()
+        let placed: Brick | null = null
+        let outcome: DropOutcome = 'missed' // released on nothing: back to the tray, no penalty
+        if (next?.snapId !== undefined) {
+          placed = guidedStore.dropOn(next.snapId)
+          if (placed) outcome = 'placed'
+        } else if (next && !easyRef.current) {
+          placed = guidedStore.dropAt({ p: card.p, c: card.c, r: card.r, ...next.anchor })
+          outcome = placed ? 'placed' : 'rejected'
+        }
+        if (placed) setPop((prev) => ({ brick: placed, seq: (prev?.seq ?? 0) + 1 }))
+        drag.end(outcome, p)
+      },
+    })
+    return () => {
+      unregister()
+      setPreview(null)
+      useGuidedDrag.getState().end('cancelled', null)
+    }
+  }, [interactive, el, pick, toScreen, setPreview, template])
+
+  // Easy mode: tapping a pulsing ghost still places it (for the youngest builders).
   const onGhostPointer = useCallback<GhostPointer>(
     (e, ghost) => {
-      if (!easy) {
-        handlePointer(e, null, ghost)
-        return
-      }
       e.stopPropagation()
       if (e.nativeEvent.type === 'pointerup' && consumeTap(e.pointerId)) useGuided.getState().placeGhost(ghost.id)
     },
-    [easy, handlePointer, consumeTap],
+    [consumeTap],
   )
-  const onBaseplatePointer = useCallback((e: ThreeEvent<PointerEvent>) => handlePointer(e, null, null), [handlePointer])
-  const onBrickPointer = useCallback((e: ThreeEvent<PointerEvent>, b: Brick) => handlePointer(e, b, null), [handlePointer])
-  const normalTaps = interactive && !easy
+  const tapToPlace = interactive && easy
+
   // The camera starts on what is on the plate so far, then checks each new step (or the finished
   // model) is in view; the sun is placed for the finished model.
   const startBox = useMemo(() => bounds([...solid, ...ghosts]), [solid, ghosts])
@@ -211,20 +339,36 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
     [template, finished, shownStep],
   )
   const height = useMemo(() => modelTop(bounds(template.bricks)), [template])
+  const hintBrick = interactive && step === 0 && !placedOnce ? (ghosts[0] ?? null) : null
 
   return (
     <>
       <GuidedCamera key={template.id} size={template.baseplate} startBox={startBox} stepBox={stepBox} height={height} />
       <Lights size={template.baseplate} height={height} />
       <Ground size={template.baseplate} />
-      <Baseplate size={template.baseplate} kind={template.kind} onPointer={normalTaps ? onBaseplatePointer : undefined} />
-      <InstancedBricks bricks={solid} onBrickPointer={normalTaps ? onBrickPointer : undefined} />
-      {ghosts.map((b) => (
-        <TargetGhost key={b.id} brick={b} pulse={!viewingPast} onPointer={interactive ? onGhostPointer : undefined} />
-      ))}
-      {normalTaps && anchor && (
-        <GhostBrick partId={partId} fig={fig} rot={rot} anchor={anchor} valid={previewValid} shakeKey={errorSeq} />
+      <group ref={pickRoot}>
+        <Baseplate size={template.baseplate} kind={template.kind} />
+        <InstancedBricks bricks={solid} />
+        {ghosts.map((b) =>
+          // The ghost a dragged piece snapped onto gives way to the green piece itself.
+          b.id === preview?.snapId ? null : (
+            <TargetGhost key={b.id} brick={b} pulse={!viewingPast} onPointer={tapToPlace ? onGhostPointer : undefined} />
+          ),
+        )}
+      </group>
+      {interactive && (
+        <GhostBrick
+          partId={preview?.partId ?? 'brick_1x1'}
+          fig={preview?.fig}
+          rot={preview?.rot ?? 0}
+          anchor={preview?.anchor ?? null}
+          valid={preview?.valid ?? false}
+          visible={preview !== null}
+          shakeKey={errorSeq}
+        />
       )}
+      {pop && <PlacePop key={pop.seq} brick={pop.brick} />}
+      {hintBrick && <HintTracker key={hintBrick.id} brick={hintBrick} />}
     </>
   )
 }
