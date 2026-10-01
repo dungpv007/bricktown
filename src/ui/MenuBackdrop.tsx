@@ -1,11 +1,12 @@
-import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
 import { browserCanAnimateMenuBg } from './menuBgPolicy'
 
 /**
  * Behind the main menu: the poster of the LEGO town right away (a plain image, so the menu's first
  * paint loads no 3D code), then, once the menu is up and the browser is idle, the live town
  * (scenes/menuBg, its own lazy chunk with three.js) fading in over it. Reduced motion, low-power
- * devices or any failure to load or draw it keep the poster. A soft shade keeps the menu readable.
+ * devices or any failure to load or draw it (including a lost WebGL context) keep the poster. A soft
+ * shade keeps the menu readable.
  */
 
 const POSTER = `${import.meta.env.BASE_URL}menu-bg.webp`
@@ -47,11 +48,20 @@ function useIdleAfterDelay(enabled: boolean): boolean {
   return due
 }
 
-export default function MenuBackdrop() {
+/** `paused`: something covers the whole menu (first-launch tour, save slots), so the town need not move. */
+export default function MenuBackdrop({ paused = false }: { paused?: boolean }) {
   const [animate] = useState(browserCanAnimateMenuBg)
   const [still] = useState(stillRequested)
-  const live = useIdleAfterDelay(animate)
+  const due = useIdleAfterDelay(animate)
   const [ready, setReady] = useState(false)
+  const [lost, setLost] = useState(false)
+  // A lost WebGL context (GPU reset, memory pressure) drops the town for this visit: back to the poster.
+  const live = due && !lost
+  const onReady = useCallback(() => setReady(true), [])
+  const onContextLost = useCallback(() => {
+    setReady(false)
+    setLost(true)
+  }, [])
 
   return (
     <div className="bt-menu-bg" aria-hidden="true">
@@ -61,7 +71,7 @@ export default function MenuBackdrop() {
           {/* A chunk that fails to download (offline, gone after an update) or a scene that cannot draw keeps the poster. */}
           <Quiet>
             <Suspense fallback={null}>
-              <MenuBackground still={still} onReady={() => setReady(true)} />
+              <MenuBackground still={still} paused={paused} onReady={onReady} onContextLost={onContextLost} />
             </Suspense>
           </Quiet>
         </div>

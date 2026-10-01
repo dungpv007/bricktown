@@ -5,7 +5,7 @@
 //   node scripts/capture-menu-bg.mjs [baseURL]    (default http://localhost:5173)
 //
 // Rerun it whenever the town (diorama.ts, the templates it shows, materials) changes.
-/* global process, localStorage, window -- Node script; the init script below runs in the page */
+/* global process, localStorage, window, navigator -- Node script; the init script below runs in the page */
 import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from '@playwright/test'
@@ -31,6 +31,9 @@ try {
     localStorage.setItem('bricktown-onboarded-v2', '1')
     localStorage.setItem('bricktown-install-hint-dismissed', '1')
     window.__btMenuBgStill = true
+    // The town only plays on capable devices: look like one whatever machine runs the capture.
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 })
+    Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 })
   })
   const page = await context.newPage()
   await page.goto(BASE_URL)

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { bakeBricksUncached, disposeBaked } from '../../core/bake'
 import { CELL } from '../../core/city'
@@ -15,7 +15,8 @@ import { laneLength, lanePose } from './loopLane'
  * The main menu's living backdrop: a little LEGO town (see diorama.ts) drawn with the city's own
  * roads, baked templates and minifigures, cars driving round the loop, clouds drifting and the
  * camera slowly circling it like a poster. Decoration only: no physics, no input, a low pixel ratio
- * and small shadows; it stops drawing while the page is hidden and goes away with the menu.
+ * and small shadows, about 30 fps; it stops drawing while the page is hidden or a dialog covers the menu,
+ * and goes away with the menu.
  */
 
 /** One full turn of the camera (seconds). */
@@ -36,6 +37,10 @@ const GRASS = '#7cc46a'
 const PLATE_SIDE = '#5aa24c'
 const PLATE_THICKNESS = 2.4
 const SHADOW_MAP_SIZE = 1024
+/** About 30 frames a second: plenty for slow drifting, half the work of the display rate. */
+const FRAME_MS = 33
+/** The shadow map is redrawn every this many frames (only the cars' shadows move). */
+const SHADOW_EVERY = 3
 
 const SPAN_X = PATCH.w * CELL
 const SPAN_Z = PATCH.d * CELL
@@ -43,8 +48,12 @@ const SPAN_Z = PATCH.d * CELL
 export interface MenuBackgroundProps {
   /** Freeze time at the start (the poster capture uses this). */
   still?: boolean
+  /** Stop drawing (e.g. a full-screen dialog covers the menu). */
+  paused?: boolean
   /** Called once the town has drawn its first frames, for the cross-fade from the poster. */
   onReady?: () => void
+  /** Called when the browser takes the WebGL context away (the poster should come back). */
+  onContextLost?: () => void
 }
 
 /** Seconds since the scene started, frozen when `still`; long pauses (a hidden tab) are skipped, not jumped. */
@@ -221,7 +230,41 @@ function ReadySignal({ onReady }: { onReady?: () => void }) {
   return null
 }
 
-function Town({ still, onReady }: MenuBackgroundProps) {
+/** Drives the on-demand frame loop at about 30 fps while `running`. */
+function Ticker({ running }: { running: boolean }) {
+  const invalidate = useThree((s) => s.invalidate)
+  useEffect(() => {
+    if (!running) return
+    invalidate()
+    const timer = window.setInterval(() => invalidate(), FRAME_MS)
+    return () => window.clearInterval(timer)
+  }, [running, invalidate])
+  return null
+}
+
+/** Redraws the shadow map only every few frames: buildings stand still, cars move slowly. */
+function ShadowThrottle() {
+  const frame = useRef(0)
+  useFrame(({ gl }) => {
+    gl.shadowMap.autoUpdate = false
+    if (frame.current % SHADOW_EVERY === 0) gl.shadowMap.needsUpdate = true
+    frame.current += 1
+  }, -2)
+  return null
+}
+
+/** Reports a lost WebGL context (GPU reset, too many contexts...). */
+function ContextLossWatch({ onLost }: { onLost?: () => void }) {
+  const canvas = useThree((s) => s.gl.domElement)
+  useEffect(() => {
+    if (!onLost) return
+    canvas.addEventListener('webglcontextlost', onLost)
+    return () => canvas.removeEventListener('webglcontextlost', onLost)
+  }, [canvas, onLost])
+  return null
+}
+
+function Town({ still, onReady }: Pick<MenuBackgroundProps, 'still' | 'onReady'>) {
   const time = useSceneTime(still === true)
   return (
     <>
@@ -235,6 +278,7 @@ function Town({ still, onReady }: MenuBackgroundProps) {
         <Car key={c.template} template={c.template} start={c.start} time={time} />
       ))}
       <Clouds time={time} />
+      <ShadowThrottle />
       <ReadySignal onReady={onReady} />
     </>
   )
@@ -251,21 +295,23 @@ function usePageVisible(): boolean {
   return visible
 }
 
-export default function MenuBackground({ still, onReady }: MenuBackgroundProps) {
-  const visible = usePageVisible()
+export default function MenuBackground({ still, paused, onReady, onContextLost }: MenuBackgroundProps) {
+  const running = usePageVisible() && paused !== true
   return (
     <Canvas
       className="bt-menu-bg-canvas"
       data-testid="menu-bg-canvas"
       shadows="percentage"
       dpr={[1, 1.25]}
-      frameloop={visible ? 'always' : 'never'}
+      frameloop={running ? 'demand' : 'never'}
       camera={{ fov: FOV, near: 1, far: 800 }}
       gl={{ alpha: true, powerPreference: 'low-power' }}
       // Purely decorative: taps go to the menu.
       style={{ pointerEvents: 'none' }}
       aria-hidden="true"
     >
+      <Ticker running={running} />
+      <ContextLossWatch onLost={onContextLost} />
       <Town still={still} onReady={onReady} />
     </Canvas>
   )

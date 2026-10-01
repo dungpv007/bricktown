@@ -164,13 +164,16 @@ const CARDS: Array<{ labelKey: TKey; art: ReactNode }> = [
 /** Set once the tour is closed, so blocked storage does not bring it back on every menu visit. */
 let closedThisSession = false
 
+/** Whether the tour will show on the menu now (first launch, not yet closed this session). */
+export const onboardingPending = (): boolean => !closedThisSession && !readFlag(ONBOARDED_KEY)
+
 /**
  * First-launch picture tour: tap a brick to choose it, drag it to move it, drag one up from the
  * palette to add it, drag empty space to look around, pinch to zoom. Skippable.
  */
-export default function Onboarding() {
+export default function Onboarding({ onDone }: { onDone?: () => void }) {
   const t = useT()
-  const [open, setOpen] = useState(() => !closedThisSession && !readFlag(ONBOARDED_KEY))
+  const [open, setOpen] = useState(onboardingPending)
   const [index, setIndex] = useState(0)
   if (!open) return null
 
@@ -178,6 +181,7 @@ export default function Onboarding() {
     closedThisSession = true
     writeFlag(ONBOARDED_KEY)
     setOpen(false)
+    onDone?.()
   }
   const last = index === CARDS.length - 1
   const card = CARDS[index]

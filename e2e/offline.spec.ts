@@ -16,6 +16,12 @@ test('offline: after one visit, menu, workshop and drive (Rapier WASM) work with
   const loaded: string[] = []
   page.on('request', (r) => loaded.push(new URL(r.url()).pathname))
 
+  // The menu's live town only plays on capable devices: look like one whatever machine runs the tests.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 })
+    Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 })
+  })
+
   // First visit online: the service worker installs, precaches everything, then takes control.
   // Reduced motion keeps the menu's live 3D backdrop (which loads three.js after the menu is up) out of the
   // way, so the check below sees exactly what the menu itself needs.

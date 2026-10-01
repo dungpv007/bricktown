@@ -6,7 +6,7 @@ import { useApp } from '../state/useApp'
 import { useT, type TKey } from './i18n'
 import InstallHint from './InstallHint'
 import MenuBackdrop from './MenuBackdrop'
-import Onboarding from './Onboarding'
+import Onboarding, { onboardingPending } from './Onboarding'
 import SlotMenu from './SlotMenu'
 
 type PlayMode = Exclude<Mode, 'menu'>
@@ -27,10 +27,11 @@ export default function MainMenu() {
   const setMuted = useApp((s) => s.setMuted)
   const saveWarning = usePersistStatus(persistWarning)
   const [slotsOpen, setSlotsOpen] = useState(false)
+  const [touring, setTouring] = useState(onboardingPending)
 
   return (
     <div className="bt-screen bt-menu" data-testid="main-menu">
-      <MenuBackdrop />
+      <MenuBackdrop paused={slotsOpen || touring} />
       <h1 className="bt-title">{t('appTitle')}</h1>
       <div className="bt-cards">
         {CARDS.map((c) => (
@@ -88,7 +89,7 @@ export default function MainMenu() {
       </div>
       <InstallHint />
       {slotsOpen && <SlotMenu onClose={() => setSlotsOpen(false)} />}
-      <Onboarding />
+      <Onboarding onDone={() => setTouring(false)} />
     </div>
   )
 }
