@@ -44,6 +44,9 @@ export interface EditorState {
   viewShift: ViewShift
   /** Changes whenever a different model is loaded, so the camera re-frames it. */
   frameSeq: number
+  /** The baseplate ➕/➖ edge buttons are shown (📐 toggles them; touching the model hides them). */
+  plateResize: boolean
+  setPlateResize: (on: boolean) => void
   setPart: (partId: string) => void
   setColor: (color: number) => void
   setFig: (fig: FigStyle) => void
@@ -167,7 +170,11 @@ export const useEditor = create<EditorState>()((set, get) => {
     canRedo: false,
     viewShift: { seq: 0, dx: 0, dz: 0 },
     frameSeq: 0,
+    plateResize: false,
 
+    setPlateResize: (on) => {
+      if (get().plateResize !== on) set({ plateResize: on })
+    },
     setPart: (partId) => set({ partId }),
     setColor: (color) => set({ color }),
     setFig: (fig) => set({ fig: { ...fig } }),

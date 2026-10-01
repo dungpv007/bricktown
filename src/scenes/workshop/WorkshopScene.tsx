@@ -347,9 +347,14 @@ function WorkshopWorld() {
       const controls = get().controls as ComponentRef<typeof OrbitControls> | null
       if (controls) controls.enableRotate = on
     },
-    tapBrick: (brick) => useEditor.getState().select(brick.id),
+    // Touching the model (selecting, placing, dragging) or the sky leaves resize mode.
+    tapBrick: (brick) => {
+      useEditor.getState().setPlateResize(false)
+      useEditor.getState().select(brick.id)
+    },
     tapPlate: (hit) => {
       const ed = useEditor.getState()
+      ed.setPlateResize(false)
       const a = targetAnchor(hit, getPart(ed.partId), ed.rot)
       ed.place(a.x, a.y, a.z)
       if (useEditor.getState().lastError === null) {
@@ -359,8 +364,12 @@ function WorkshopWorld() {
       setPreview({ kind: 'part', hit })
       flashPreview()
     },
-    tapSky: () => useEditor.getState().deselect(),
+    tapSky: () => {
+      useEditor.getState().setPlateResize(false)
+      useEditor.getState().deselect()
+    },
     dragStart: (brick) => {
+      useEditor.getState().setPlateResize(false)
       useEditor.getState().select(brick.id)
       setDraggingId(brick.id)
       setPreview({ kind: 'move', brick, hit: null })
@@ -395,6 +404,7 @@ function WorkshopWorld() {
     const overView = (p: ClientPoint) => document.elementFromPoint(p.x, p.y) === el
     return registerPaletteDropTarget({
       hover: (p) => {
+        if (p) useEditor.getState().setPlateResize(false) // a part is being dragged out
         const hit = p && overView(p) ? pick(p.x, p.y) : null
         setPreview(hit ? { kind: 'part', hit } : null)
       },

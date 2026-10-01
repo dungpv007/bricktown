@@ -452,16 +452,44 @@
   top: 0;
   left: 0;
   display: flex;
-  gap: 10px;
+  gap: 6px;
   visibility: hidden;
   pointer-events: none; /* the gap between the buttons lets taps through to the plate */
   user-select: none;
   -webkit-user-select: none;
 }
 
+/* Resize mode (📐) only: a 56px hit area around a smaller, see-through 44px face. */
 .bt-plate-btn {
-  background: rgba(255, 255, 255, 0.85);
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bt-ink);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
   pointer-events: auto;
+}
+
+.bt-plate-btn-face {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.bt-plate-btn:active .bt-plate-btn-face {
+  transform: translateY(2px);
+  box-shadow: none;
 }
 
 .bt-topright {

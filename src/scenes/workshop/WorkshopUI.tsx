@@ -122,6 +122,23 @@ function useSelectionKeys() {
   }, [])
 }
 
+/** 📐: shows or hides the baseplate's ➕/➖ edge buttons (hidden by default: they would cover bricks). */
+function PlateResizeToggle() {
+  const t = useT()
+  const on = useEditor((s) => s.plateResize)
+  return (
+    <button
+      className="bt-btn bt-icon-btn"
+      data-testid="plate-resize-toggle"
+      aria-label={t('plateResize')}
+      aria-pressed={on}
+      onClick={() => useEditor.getState().setPlateResize(!on)}
+    >
+      📐
+    </button>
+  )
+}
+
 /** HTML overlay on top of the workshop canvas. */
 export default function WorkshopUI() {
   const t = useT()
@@ -152,6 +169,7 @@ export default function WorkshopUI() {
   return (
     <div className="bt-workshop-ui">
       <div className="bt-topright">
+        <PlateResizeToggle />
         <PlateColorButton />
         <button
           className="bt-btn bt-icon-btn"

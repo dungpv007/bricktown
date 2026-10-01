@@ -31,6 +31,7 @@ export const vi = {
   cantPlace: 'Không đặt được',
   plateGrow: 'Mở rộng đế',
   plateShrink: 'Thu nhỏ đế',
+  plateResize: 'Đổi cỡ đế',
   cantResize: 'Không đổi được cỡ đế',
   plateColor: 'Màu đế',
   close: 'Đóng',

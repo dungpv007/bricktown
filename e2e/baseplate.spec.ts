@@ -16,23 +16,31 @@ interface BtWindow {
       }
     }
     useGame: { getState(): { data: { workshop: Workshop } } }
-    plateScreen: { bounds: { left: number; top: number; right: number; bottom: number } | null }
+    plateScreen: {
+      bounds: { left: number; top: number; right: number; bottom: number } | null
+      project: ((p: [number, number, number]) => { x: number; y: number }) | null
+    }
   }
 }
 
 const workshop = (page: Page) =>
   page.evaluate(() => (window as unknown as BtWindow).__bt.useGame.getState().data.workshop)
 
-const openWorkshop = async (page: Page) => {
+/** Opens the Workshop and, unless `resize` is false, turns on resize mode (📐) so the ➕/➖ show. */
+const openWorkshop = async (page: Page, resize = true) => {
   await page.goto('/')
   await page.getByTestId('menu-workshop').click()
   await expect(page.getByTestId('mode-workshop').locator('canvas')).toBeVisible()
+  if (resize) {
+    await page.getByTestId('plate-resize-toggle').click()
+    await expect(page.getByTestId('plate-resize-toggle')).toHaveAttribute('aria-pressed', 'true')
+  }
 }
 
 const HUD = '.bt-toolbar, .bt-palette, .bt-colors, .bt-topright, .bt-topbar-title'
 
 /**
- * Every ➕ / ➖ is at least 64px, fully on screen and clear of the HUD panels, and the plate itself
+ * Every ➕ / ➖ hit area is at least 56px, fully on screen and clear of the HUD panels, and the plate itself
  * (its screen bounding box) is on screen and clear of the HUD too.
  */
 async function expectClearOfHud(page: Page) {
@@ -54,8 +62,8 @@ async function expectClearOfHud(page: Page) {
   if (!plate) throw new Error('plate not drawn yet')
   for (const b of [...buttons, plate]) {
     if (b.id !== 'plate') {
-      expect(b.width, b.id).toBeGreaterThanOrEqual(64)
-      expect(b.height, b.id).toBeGreaterThanOrEqual(64)
+      expect(b.width, b.id).toBeGreaterThanOrEqual(56)
+      expect(b.height, b.id).toBeGreaterThanOrEqual(56)
     }
     expect(b.x >= 0 && b.y >= 0 && b.x + b.width <= view.width && b.y + b.height <= view.height, `${b.id} off screen`).toBe(true)
     for (const h of hud) {
@@ -67,6 +75,54 @@ async function expectClearOfHud(page: Page) {
 
 /** Positions follow the camera frame by frame (and glide after a resize): retry until they settle. */
 const expectSettledClearOfHud = (page: Page) => expect(() => expectClearOfHud(page)).toPass({ timeout: 10_000 })
+
+test('baseplate: ➕/➖ show only in resize mode (📐), outside the plate', async ({ page }) => {
+  await openWorkshop(page, false)
+  await waitForCameraStill(page)
+  await expect(page.locator('.bt-plate-btn')).toHaveCount(0)
+
+  await page.getByTestId('plate-resize-toggle').click()
+  await expect(page.getByTestId('plate-grow-W')).toBeVisible()
+  await waitForCameraStill(page)
+  // No hit area overlaps the plate as drawn on screen (a convex quadrilateral; separating axes).
+  await expect(async () => {
+    const { quad, buttons } = await page.evaluate(() => {
+      const { project, bounds } = (window as unknown as BtWindow).__bt.plateScreen
+      const { w, d } = (window as unknown as BtWindow).__bt.useGame.getState().data.workshop.baseplate
+      if (!project || !bounds) throw new Error('plate not drawn yet')
+      return {
+        quad: ([[0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d]] as Array<[number, number, number]>).map(project),
+        buttons: [...document.querySelectorAll('.bt-plate-btn')].map((el) => {
+          const r = el.getBoundingClientRect()
+          return { id: el.getAttribute('data-testid') ?? '', x0: r.left, y0: r.top, x1: r.right, y1: r.bottom }
+        }),
+      }
+    })
+    expect(buttons).toHaveLength(8) // ➕ and ➖ on each edge of the empty 16×16
+    const axes = [{ x: 1, y: 0 }, { x: 0, y: 1 }, ...quad.map((p, i) => {
+      const q = quad[(i + 1) % 4]
+      return { x: q.y - p.y, y: p.x - q.x }
+    })]
+    for (const b of buttons) {
+      const rect = [{ x: b.x0, y: b.y0 }, { x: b.x1, y: b.y0 }, { x: b.x1, y: b.y1 }, { x: b.x0, y: b.y1 }]
+      const separated = axes.some((a) => {
+        const along = (pts: Array<{ x: number; y: number }>) => pts.map((p) => p.x * a.x + p.y * a.y)
+        const r = along(rect), q = along(quad)
+        return Math.max(...r) <= Math.min(...q) || Math.max(...q) <= Math.min(...r)
+      })
+      expect(separated, `${b.id} overlaps the plate`).toBe(true)
+    }
+  }).toPass({ timeout: 10_000 })
+
+  // 📐 again, or a tap on the sky, leaves resize mode.
+  await page.getByTestId('plate-resize-toggle').click()
+  await expect(page.locator('.bt-plate-btn')).toHaveCount(0)
+  await page.getByTestId('plate-resize-toggle').click()
+  await expect(page.getByTestId('plate-grow-W')).toBeVisible()
+  await page.touchscreen.tap(540, 130)
+  await expect(page.locator('.bt-plate-btn')).toHaveCount(0)
+  await expect(page.getByTestId('plate-resize-toggle')).toHaveAttribute('aria-pressed', 'false')
+})
 
 test('baseplate: ➕ on the W edge grows the plate and keeps the brick on its studs; undo restores', async ({ page }) => {
   const errors: string[] = []

@@ -33,6 +33,7 @@ export const en: Record<keyof typeof vi, string> = {
   cantPlace: "Can't place here",
   plateGrow: 'Make the baseplate bigger',
   plateShrink: 'Make the baseplate smaller',
+  plateResize: 'Resize baseplate',
   cantResize: "Can't resize the baseplate",
   plateColor: 'Baseplate colour',
   close: 'Close',
