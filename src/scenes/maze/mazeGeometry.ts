@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import type { MaterialKind } from '../../core/colors'
 import { MAZE_CELL } from '../../core/maze'
 import { platesToWorld } from '../../core/units'
+import { brickMaterials } from '../../render/materials'
 import { HEDGE_HEIGHT, WALL_HEIGHT } from './mazeView'
 
 /**
@@ -9,10 +11,8 @@ import { HEDGE_HEIGHT, WALL_HEIGHT } from './mazeView'
  * the drive scene both draw mazes). Not unit-tested: needs a DOM canvas / GPU, checked visually.
  */
 
-/** Same proportions as the part studs in core/parts/geometry.ts, fewer segments (thousands of them). */
+/** Same proportions as the part studs in core/parts/geometry.ts (drawn in textures, not as meshes). */
 const STUD_RADIUS = 0.3
-const STUD_HEIGHT = 0.17
-const STUD_SEGMENTS = 7
 /** Gap left around each brick so the seams between bricks show. */
 const SEAM = 0.04
 const BRICK_HEIGHT = platesToWorld(3)
@@ -48,26 +48,22 @@ function buildWallBlock(): THREE.BufferGeometry {
   )
 }
 
+/** The wall block's top face (the upper bricks are `SEAM` lower than WALL_HEIGHT); the cap sits just above it. */
+const WALL_TOP_Y = WALL_HEIGHT - SEAM + 0.01
+
 /**
- * The studs on top of a wall cell (one per stud of the cell), a separate mesh so they can skip the shadow pass (thousands
- * of them; their shadows are invisible from above). Open at the bottom, which is never seen.
+ * The top of a wall cell: one flat square drawn with the stud texture (one stud per stud of the
+ * cell, its UVs run 0..MAZE_CELL so the repeating texture lines up with the floor's studs). Two
+ * triangles instead of thousands of stud meshes.
  */
-function buildWallStuds(): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = []
-  for (let i = 0; i < MAZE_CELL; i++) {
-    for (let j = 0; j < MAZE_CELL; j++) {
-      const x = i + 0.5 - MAZE_CELL / 2
-      const z = j + 0.5 - MAZE_CELL / 2
-      parts.push(
-        new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT, STUD_SEGMENTS, 1, true).translate(x, WALL_HEIGHT + STUD_HEIGHT / 2, z),
-        new THREE.CircleGeometry(STUD_RADIUS, STUD_SEGMENTS).rotateX(-Math.PI / 2).translate(x, WALL_HEIGHT + STUD_HEIGHT, z),
-      )
-    }
-  }
-  return merge(parts, 'wall studs')
+function buildWallTop(): THREE.BufferGeometry {
+  const g = new THREE.PlaneGeometry(MAZE_CELL, MAZE_CELL).rotateX(-Math.PI / 2).translate(0, WALL_TOP_Y, 0)
+  const uv = g.getAttribute('uv')
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * MAZE_CELL, uv.getY(i) * MAZE_CELL)
+  return g
 }
 
-/** A void cell's hedge: one green plate filling the cell (studs: the wall studs, moved down). Bottom at y = 0. */
+/** A void cell's hedge: one green plate filling the cell (its top: the wall top, moved down). Bottom at y = 0. */
 function buildHedge(): THREE.BufferGeometry {
   return new THREE.BoxGeometry(MAZE_CELL - 2 * SEAM, HEDGE_HEIGHT - SEAM, MAZE_CELL - 2 * SEAM).translate(0, (HEDGE_HEIGHT - SEAM) / 2, 0)
 }
@@ -100,7 +96,7 @@ function buildArrow(): THREE.BufferGeometry {
 }
 
 let wallBlock: THREE.BufferGeometry | null = null
-let wallStuds: THREE.BufferGeometry | null = null
+let wallTop: THREE.BufferGeometry | null = null
 let coin: THREE.BufferGeometry | null = null
 let hedge: THREE.BufferGeometry | null = null
 let arrow: THREE.BufferGeometry | null = null
@@ -109,8 +105,8 @@ export function wallBlockGeometry(): THREE.BufferGeometry {
   return (wallBlock ??= buildWallBlock())
 }
 
-export function wallStudsGeometry(): THREE.BufferGeometry {
-  return (wallStuds ??= buildWallStuds())
+export function wallTopGeometry(): THREE.BufferGeometry {
+  return (wallTop ??= buildWallTop())
 }
 
 export function hedgeGeometry(): THREE.BufferGeometry {
@@ -200,4 +196,50 @@ export function checkerTexture4(): THREE.Texture {
   })
   checkerTexture.magFilter = THREE.NearestFilter
   return checkerTexture
+}
+
+let studBump: THREE.Texture | null = null
+const wallTopMaterials: Partial<Record<MaterialKind, THREE.MeshStandardMaterial>> = {}
+
+/** Height map of one stud (a raised disc with a soft rim), for the wall tops' bump map. */
+function studBumpTexture(): THREE.Texture {
+  if (studBump) return studBump
+  studBump = canvasTexture(64, (ctx, s) => {
+    ctx.fillStyle = '#000000'
+    ctx.fillRect(0, 0, s, s)
+    const c = s / 2
+    const r = s * STUD_RADIUS
+    const rim = ctx.createRadialGradient(c, c, r * 0.75, c, c, r * 1.08)
+    rim.addColorStop(0, '#ffffff')
+    rim.addColorStop(1, '#000000')
+    ctx.fillStyle = rim
+    ctx.beginPath()
+    ctx.arc(c, c, r * 1.08, 0, Math.PI * 2)
+    ctx.fill()
+  })
+  studBump.colorSpace = THREE.NoColorSpace
+  studBump.wrapS = THREE.RepeatWrapping
+  studBump.wrapT = THREE.RepeatWrapping
+  return studBump
+}
+
+/**
+ * The wall tops' material for a colour kind: the shared brick material's look (instance colours
+ * tint it) with the stud texture and a stud bump map, so the studs still catch the light. Created
+ * once per kind and shared by every maze; never dispose or mutate it.
+ */
+export function wallTopMaterial(kind: MaterialKind): THREE.MeshStandardMaterial {
+  let material = wallTopMaterials[kind]
+  if (!material) {
+    const map = studTile().clone()
+    map.wrapS = THREE.RepeatWrapping
+    map.wrapT = THREE.RepeatWrapping
+    map.needsUpdate = true
+    material = brickMaterials[kind].clone()
+    material.map = map
+    material.bumpMap = studBumpTexture()
+    material.bumpScale = 1.5
+    wallTopMaterials[kind] = material
+  }
+  return material
 }

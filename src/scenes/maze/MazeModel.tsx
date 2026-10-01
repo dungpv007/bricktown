@@ -5,7 +5,7 @@ import { DEFAULT_MAZE_FLOOR_COLOR, MAZE_CELL, parseCellKey, type Cell, type Maze
 import { voidWalls } from '../../core/mazeRun'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { brickMaterials } from '../../render/materials'
-import { checkerTexture4, coinGeometry, floorStudTexture, hedgeGeometry, wallBlockGeometry, wallStudsGeometry } from './mazeGeometry'
+import { checkerTexture4, coinGeometry, floorStudTexture, hedgeGeometry, wallBlockGeometry, wallTopGeometry, wallTopMaterial } from './mazeGeometry'
 import { HEDGE_HEIGHT, WALL_HEIGHT } from './mazeView'
 
 const GRASS = '#7cc46a'
@@ -105,7 +105,7 @@ function CellInstances({ cells, geometry, material, color, castShadow, y = 0 }: 
 }
 
 /**
- * Wall cells as brick-stack blocks with studs on top, in the wall colour. Walls with no floor
+ * Wall cells as brick-stack blocks with a studded top (a textured cap, not stud meshes), in the wall colour. Walls with no floor
  * around them (the filler outside a maze's shape) are low green hedges instead, so the shape reads.
  */
 function Walls({ maze }: { maze: Pick<Maze, 'w' | 'h' | 'walls' | 'wallColor'> }) {
@@ -120,12 +120,12 @@ function Walls({ maze }: { maze: Pick<Maze, 'w' | 'h' | 'walls' | 'wallColor'> }
   return (
     <>
       <CellInstances cells={solid} geometry={wallBlockGeometry()} material={material} color={hex} castShadow={kind !== 'trans'} />
-      <CellInstances cells={solid} geometry={wallStudsGeometry()} material={material} color={hex} castShadow={false} />
+      <CellInstances cells={solid} geometry={wallTopGeometry()} material={wallTopMaterial(kind)} color={hex} castShadow={false} />
       <CellInstances cells={hedges} geometry={hedgeGeometry()} material={brickMaterials.opaque} color={HEDGE} castShadow={false} />
       <CellInstances
         cells={hedges}
-        geometry={wallStudsGeometry()}
-        material={brickMaterials.opaque}
+        geometry={wallTopGeometry()}
+        material={wallTopMaterial('opaque')}
         color={HEDGE}
         castShadow={false}
         y={HEDGE_HEIGHT - WALL_HEIGHT}
