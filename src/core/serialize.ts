@@ -37,6 +37,9 @@ export function migrate(raw: unknown): SaveData {
     data = { ...step(data), schemaVersion: version + 1 }
     version += 1
   }
+  if (!Array.isArray(data.blueprints) || !isRecord(data.city) || !isRecord(data.workshop)) {
+    throw new Error(UNSUPPORTED)
+  }
   return data as unknown as SaveData
 }
 

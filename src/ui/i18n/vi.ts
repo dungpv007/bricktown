@@ -25,4 +25,12 @@ export const vi = {
   language: 'Ngôn ngữ',
   slot: 'Ô lưu',
   comingSoon: 'Sắp có!',
+  loading: 'Đang tải...',
+  slotEmpty: 'Trống',
+  exportSave: 'Xuất file',
+  importSave: 'Nhập file',
+  confirmDelete: 'Xóa ô này?',
+  confirmImport: 'Ghi đè ô này?',
+  importFailed: 'File không đọc được',
+  close: 'Đóng',
 } as const

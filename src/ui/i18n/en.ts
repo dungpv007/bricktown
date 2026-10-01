@@ -27,4 +27,12 @@ export const en: Record<keyof typeof vi, string> = {
   language: 'Language',
   slot: 'Slot',
   comingSoon: 'Coming soon!',
+  loading: 'Loading...',
+  slotEmpty: 'Empty',
+  exportSave: 'Export file',
+  importSave: 'Import file',
+  confirmDelete: 'Delete this slot?',
+  confirmImport: 'Overwrite this slot?',
+  importFailed: 'Could not read that file',
+  close: 'Close',
 }
