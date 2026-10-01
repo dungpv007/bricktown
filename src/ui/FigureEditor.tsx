@@ -96,7 +96,7 @@ function Options<T extends string>({
  * Customise a minifigure: a live preview and one tab per part (ready-made figures, shirt colour and
  * print, trousers, hat or hair and its colour, face, held item). Edits either the figure about to
  * be placed or a placed one (each change of a placed figure is one undo step). Opened from the
- * palette's ✏️ button or by tapping a figure with the paint tool.
+ * palette's ✏️ button or by recolouring a selected figure (🎨 then a colour swatch).
  */
 export default function FigureEditor() {
   const t = useT()

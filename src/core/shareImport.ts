@@ -178,8 +178,9 @@ function checkBrick(v: unknown, i: number, plate: Baseplate): Brick {
 }
 
 /**
- * True when two bricks share a voxel. Bricks are already inside the plate (x, z < 48, y < 72), so a
- * voxel is one number: much cheaper than Occupancy's string keys for 60 blueprints of 1500 bricks.
+ * True when two bricks share a voxel. Bricks are already inside the plate (x, z < PLATE_MAX = 48,
+ * which fits in 64; y < MAX_HEIGHT_PLATES), so a voxel is one number: much cheaper than
+ * Occupancy's string keys for 60 blueprints of 1500 bricks.
  */
 function anyOverlap(bricks: Brick[]): boolean {
   const voxels = new Set<number>()
