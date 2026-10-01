@@ -1,13 +1,23 @@
-import { useEffect, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import VirtualJoystick from '../../input/VirtualJoystick'
-import { DRIVE_KEYS, useDriveInput } from '../../state/useDriveInput'
+import { DRIVE_KEYS, releaseOnInterruption, useDriveInput, type Pedal } from '../../state/useDriveInput'
+import { useDriveStatus } from '../../state/useDriveStatus'
 import { useT, type TKey } from '../../ui/i18n'
 
-/** A pedal: pressed while a finger (or the mouse) is down on it, even if it slides off. */
-function HoldButton(props: { testId: string; labelKey: TKey; className: string; onHold: (held: boolean) => void; children: ReactNode }) {
-  const { testId, labelKey, className, onHold, children } = props
+interface ButtonProps {
+  testId: string
+  labelKey: TKey
+  className: string
+  children: ReactNode
+}
+
+/**
+ * A pedal: pressed while a finger (or the mouse) is down on it, even if it slides off. Every finger
+ * on it counts, so it stays down until the last one lifts.
+ */
+function HoldButton({ pedal, testId, labelKey, className, children }: ButtonProps & { pedal: Pedal }) {
   const t = useT()
-  const release = () => onHold(false)
+  const lift = (e: ReactPointerEvent) => useDriveInput.getState().releasePedal(pedal, e.pointerId)
   return (
     <button
       className={`bt-btn bt-drive-btn ${className}`}
@@ -15,11 +25,46 @@ function HoldButton(props: { testId: string; labelKey: TKey; className: string; 
       aria-label={t(labelKey)}
       onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => {
         e.currentTarget.setPointerCapture(e.pointerId)
-        onHold(true)
+        useDriveInput.getState().pressPedal(pedal, e.pointerId)
       }}
-      onPointerUp={release}
-      onPointerCancel={release}
-      onLostPointerCapture={release}
+      onPointerUp={lift}
+      onPointerCancel={lift}
+      onLostPointerCapture={lift}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {children}
+    </button>
+  )
+}
+
+/**
+ * A one-shot button (horn, flip) that fires when the finger lifts. It does not wait for `click`:
+ * Mobile Safari may not send one for a tap while another finger holds the stick or a pedal.
+ * Keyboard activation (a click without a pointer, `detail === 0`) still works.
+ */
+function TapButton({ onTap, testId, labelKey, className, children }: ButtonProps & { onTap: () => void }) {
+  const t = useT()
+  const pressing = useRef<number | null>(null)
+  return (
+    <button
+      className={`bt-btn bt-drive-btn ${className}`}
+      data-testid={testId}
+      aria-label={t(labelKey)}
+      onPointerDown={(e: ReactPointerEvent<HTMLButtonElement>) => {
+        e.currentTarget.setPointerCapture(e.pointerId)
+        pressing.current = e.pointerId
+      }}
+      onPointerUp={(e) => {
+        if (pressing.current !== e.pointerId) return
+        pressing.current = null
+        onTap()
+      }}
+      onPointerCancel={(e) => {
+        if (pressing.current === e.pointerId) pressing.current = null
+      }}
+      onClick={(e) => {
+        if (e.detail === 0) onTap()
+      }}
       onContextMenu={(e) => e.preventDefault()}
     >
       {children}
@@ -39,17 +84,41 @@ function useKeyboard() {
       else if (!e.repeat && e.code === 'KeyF') input.requestFlip()
     }
     const onUp = (e: KeyboardEvent) => input.keyUp(e.code)
-    const onBlur = () => input.clearKeys()
     window.addEventListener('keydown', onDown)
     window.addEventListener('keyup', onUp)
-    window.addEventListener('blur', onBlur)
     return () => {
       window.removeEventListener('keydown', onDown)
       window.removeEventListener('keyup', onUp)
-      window.removeEventListener('blur', onBlur)
-      input.reset()
     }
   }, [])
+}
+
+/** Lets go of everything when the app is switched away from, and when the drive controls close. */
+function useReleaseControls() {
+  useEffect(() => {
+    const { reset } = useDriveInput.getState()
+    const stop = releaseOnInterruption(window, document, reset)
+    return () => {
+      stop()
+      reset()
+    }
+  }, [])
+}
+
+/** Hidden mirror of the car's status for e2e specs (works in production builds too). */
+function DriveStatusProbe() {
+  const { x, z, speed, controllers, builds } = useDriveStatus()
+  return (
+    <output
+      hidden
+      data-testid="drive-status"
+      data-x={x.toFixed(2)}
+      data-z={z.toFixed(2)}
+      data-speed={speed.toFixed(2)}
+      data-controllers={controllers}
+      data-builds={builds}
+    />
+  )
 }
 
 /** On-screen driving controls: steering stick on the left, pedals, flip and horn on the right. */
@@ -57,8 +126,10 @@ export default function DriveUI({ onChangeVehicle }: { onChangeVehicle: () => vo
   const t = useT()
   const input = useDriveInput.getState()
   useKeyboard()
+  useReleaseControls()
   return (
     <div className="bt-drive-ui" data-testid="drive-ui">
+      <DriveStatusProbe />
       <button className="bt-btn bt-icon-btn bt-drive-change" data-testid="drive-change" aria-label={t('driveChange')} onClick={onChangeVehicle}>
         🚙
       </button>
@@ -66,16 +137,16 @@ export default function DriveUI({ onChangeVehicle }: { onChangeVehicle: () => vo
         <VirtualJoystick label={t('driveSteer')} onChange={input.setStick} />
       </div>
       <div className="bt-drive-right">
-        <button className="bt-btn bt-drive-btn bt-drive-small bt-drive-horn" data-testid="drive-horn" aria-label={t('driveHorn')} onClick={input.honk}>
+        <TapButton testId="drive-horn" labelKey="driveHorn" className="bt-drive-small bt-drive-horn" onTap={input.honk}>
           📯
-        </button>
-        <button className="bt-btn bt-drive-btn bt-drive-small bt-drive-flip" data-testid="drive-flip" aria-label={t('driveFlip')} onClick={input.requestFlip}>
+        </TapButton>
+        <TapButton testId="drive-flip" labelKey="driveFlip" className="bt-drive-small bt-drive-flip" onTap={input.requestFlip}>
           🔃
-        </button>
-        <HoldButton testId="drive-reverse" labelKey="driveReverse" className="bt-drive-reverse" onHold={input.setReverse}>
+        </TapButton>
+        <HoldButton pedal="reverse" testId="drive-reverse" labelKey="driveReverse" className="bt-drive-reverse">
           ▼
         </HoldButton>
-        <HoldButton testId="drive-gas" labelKey="driveGas" className="bt-drive-gas" onHold={input.setGas}>
+        <HoldButton pedal="gas" testId="drive-gas" labelKey="driveGas" className="bt-drive-gas">
           ▲
         </HoldButton>
       </div>

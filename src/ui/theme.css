@@ -1346,3 +1346,15 @@ form.bt-dialog,
   background: var(--bt-green);
   color: var(--bt-white);
 }
+
+/* ---------- Scene error ---------- */
+
+.bt-scene-error-icon {
+  font-size: 96px;
+  line-height: 1;
+}
+
+.bt-scene-error-actions {
+  display: flex;
+  gap: 16px;
+}

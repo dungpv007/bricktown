@@ -2,10 +2,11 @@ import { defineConfig, devices } from '@playwright/test'
 
 const ORIGIN = 'http://localhost:4173'
 
-// Runs against the production build (service worker + precache), not the dev server.
+// Runs against the production build (service worker + precache, no StrictMode), not the dev server:
+// the offline check plus the production-only drive regression.
 export default defineConfig({
   testDir: 'e2e',
-  testMatch: 'offline.spec.ts',
+  testMatch: ['offline.spec.ts', '*.prod.spec.ts'],
   use: {
     baseURL: ORIGIN,
     serviceWorkers: 'allow',

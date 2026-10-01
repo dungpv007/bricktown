@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { combineDriveInput, keyAxes, stickAxis, useDriveInput } from './useDriveInput'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { combineDriveInput, keyAxes, releaseOnInterruption, stickAxis, useDriveInput } from './useDriveInput'
 
 describe('stickAxis', () => {
   it('maps the knob offset to -1..1 over the radius', () => {
@@ -49,15 +49,35 @@ describe('combineDriveInput', () => {
 describe('useDriveInput store', () => {
   beforeEach(() => useDriveInput.getState().reset())
 
-  it('tracks held keys and clears them all', () => {
+  it('tracks held keys', () => {
     const s = useDriveInput.getState()
     s.keyDown('ArrowUp')
     s.keyDown('ArrowLeft')
     expect(useDriveInput.getState().read()).toEqual({ steer: -1, throttle: 1, brake: false })
     s.keyUp('ArrowUp')
+    expect(useDriveInput.getState().read()).toEqual({ steer: -1, throttle: 0, brake: false })
+  })
+
+  it('a pedal held by two fingers stays down until both lift', () => {
+    const s = useDriveInput.getState()
+    s.pressPedal('gas', 1)
+    s.pressPedal('gas', 2)
+    expect(useDriveInput.getState().read().throttle).toBe(1)
+    s.releasePedal('gas', 1)
+    expect(useDriveInput.getState().read().throttle).toBe(1)
+    s.releasePedal('gas', 2)
     expect(useDriveInput.getState().read().throttle).toBe(0)
-    s.clearKeys()
-    expect(useDriveInput.getState().read()).toEqual({ steer: 0, throttle: 0, brake: false })
+  })
+
+  it('the two pedals track their fingers separately', () => {
+    const s = useDriveInput.getState()
+    s.pressPedal('gas', 1)
+    s.pressPedal('reverse', 2)
+    expect(useDriveInput.getState().read()).toEqual({ steer: 0, throttle: 0, brake: true })
+    s.releasePedal('reverse', 1) // not the finger on reverse
+    expect(useDriveInput.getState().reverse).toBe(true)
+    s.releasePedal('reverse', 2)
+    expect(useDriveInput.getState().read()).toEqual({ steer: 0, throttle: 1, brake: false })
   })
 
   it('counts flip requests', () => {
@@ -69,10 +89,69 @@ describe('useDriveInput store', () => {
   it('reset releases every control', () => {
     const s = useDriveInput.getState()
     s.setStick(1)
-    s.setGas(true)
-    s.setReverse(true)
+    s.pressPedal('gas', 1)
+    s.pressPedal('reverse', 2)
     s.keyDown('KeyA')
     s.reset()
     expect(useDriveInput.getState().read()).toEqual({ steer: 0, throttle: 0, brake: false })
+  })
+
+  it('after a reset, a finger that never lifted does not keep the next press held', () => {
+    const s = useDriveInput.getState()
+    s.pressPedal('gas', 1) // its pointerup is lost (app switched away)
+    s.reset()
+    s.pressPedal('gas', 2)
+    s.releasePedal('gas', 2)
+    expect(useDriveInput.getState().read().throttle).toBe(0)
+    s.releasePedal('gas', 1) // a late lift of the lost finger changes nothing
+    expect(useDriveInput.getState().read().throttle).toBe(0)
+  })
+})
+
+describe('releaseOnInterruption', () => {
+  function setUp(release: () => void = vi.fn()) {
+    const win = new EventTarget()
+    const doc = Object.assign(new EventTarget(), { visibilityState: 'visible' as DocumentVisibilityState })
+    const stop = releaseOnInterruption(win, doc, release)
+    return { win, doc, release, stop }
+  }
+
+  it('releases when the window loses focus', () => {
+    const { win, release } = setUp()
+    win.dispatchEvent(new Event('blur'))
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('releases when the page is hidden, not when it comes back', () => {
+    const { doc, release } = setUp()
+    doc.visibilityState = 'hidden'
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(release).toHaveBeenCalledTimes(1)
+    doc.visibilityState = 'visible'
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops listening once stopped', () => {
+    const { win, doc, release, stop } = setUp()
+    stop()
+    win.dispatchEvent(new Event('blur'))
+    doc.visibilityState = 'hidden'
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(release).not.toHaveBeenCalled()
+  })
+
+  it('wired to the store reset, hiding the app lets go of held pedals, stick and keys', () => {
+    const s = useDriveInput.getState()
+    s.reset()
+    const { doc, stop } = setUp(s.reset)
+    s.pressPedal('gas', 1)
+    s.setStick(-1)
+    s.keyDown('ArrowUp')
+    expect(useDriveInput.getState().read()).toEqual({ steer: -1, throttle: 1, brake: false })
+    doc.visibilityState = 'hidden'
+    doc.dispatchEvent(new Event('visibilitychange'))
+    expect(useDriveInput.getState().read()).toEqual({ steer: 0, throttle: 0, brake: false })
+    stop()
   })
 })

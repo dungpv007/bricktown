@@ -1,10 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
 import VehiclePicker from './scenes/drive/VehiclePicker'
 import MainMenu from './ui/MainMenu'
-import SceneLoading from './ui/SceneLoading'
+import SceneBoundary from './ui/SceneBoundary'
 import TopBar from './ui/TopBar'
 import type { TKey } from './ui/i18n'
 
@@ -32,10 +32,10 @@ const TITLE_KEYS: Record<PlayMode, TKey> = {
 function Workshop() {
   return (
     <div className="bt-screen" data-testid="mode-workshop">
-      <Suspense fallback={<SceneLoading />}>
+      <SceneBoundary>
         <WorkshopScene />
         <WorkshopUI />
-      </Suspense>
+      </SceneBoundary>
     </div>
   )
 }
@@ -53,7 +53,7 @@ function Guided() {
   const showPicker = !celebrating && (browsing || !hasBuild)
   return (
     <div className="bt-screen" data-testid="mode-guided">
-      <Suspense fallback={<SceneLoading />}>
+      <SceneBoundary>
         {showPicker ? (
           <GuidedPicker onPick={() => setBrowsing(false)} />
         ) : (
@@ -62,7 +62,7 @@ function Guided() {
             <GuidedUI onBrowse={() => setBrowsing(true)} />
           </>
         )}
-      </Suspense>
+      </SceneBoundary>
     </div>
   )
 }
@@ -70,10 +70,10 @@ function Guided() {
 function City() {
   return (
     <div className="bt-screen" data-testid="mode-city">
-      <Suspense fallback={<SceneLoading />}>
+      <SceneBoundary>
         <CityScene />
         <CityUI />
-      </Suspense>
+      </SceneBoundary>
     </div>
   )
 }
@@ -87,9 +87,9 @@ function Drive() {
       {source === null ? (
         <VehiclePicker onPick={setSource} />
       ) : (
-        <Suspense fallback={<SceneLoading />}>
+        <SceneBoundary>
           <DriveScene source={source} onChangeVehicle={pickAgain} />
-        </Suspense>
+        </SceneBoundary>
       )}
     </div>
   )

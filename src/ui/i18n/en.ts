@@ -98,4 +98,5 @@ export const en: Record<keyof typeof vi, string> = {
   driveHorn: 'Horn',
   driveChange: 'Change car',
   driveSteer: 'Steer',
+  sceneError: 'Oops, this part could not open',
 }

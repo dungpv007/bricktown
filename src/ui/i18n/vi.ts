@@ -96,4 +96,5 @@ export const vi = {
   driveHorn: 'Bóp còi',
   driveChange: 'Đổi xe',
   driveSteer: 'Lái',
+  sceneError: 'Ôi, phần này chưa mở được',
 } as const

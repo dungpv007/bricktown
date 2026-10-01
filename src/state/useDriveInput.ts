@@ -58,33 +58,76 @@ export function combineDriveInput({ stick, gas, reverse, keys }: DriveControls):
   }
 }
 
+export type Pedal = 'gas' | 'reverse'
+
 export interface DriveInputState extends DriveControls {
+  /** Pointers (fingers) holding each pedal: it stays down until the last one lifts. */
+  pedalPointers: Readonly<Record<Pedal, ReadonlySet<number>>>
   /** Incremented by the flip button; the car rights itself whenever it changes. */
   flipSeq: number
   setStick: (stick: number) => void
-  setGas: (gas: boolean) => void
-  setReverse: (reverse: boolean) => void
+  pressPedal: (pedal: Pedal, pointerId: number) => void
+  releasePedal: (pedal: Pedal, pointerId: number) => void
   keyDown: (code: string) => void
   keyUp: (code: string) => void
-  clearKeys: () => void
   requestFlip: () => void
   honk: () => void
-  /** Releases every control (leaving the scene, window blur). */
+  /** Releases every control (leaving the scene, window blur, app hidden). */
   reset: () => void
   read: () => DriveInput
 }
 
 const NO_KEYS: ReadonlySet<string> = new Set()
+const NO_POINTERS: ReadonlySet<number> = new Set()
+const NO_PEDALS: Record<Pedal, ReadonlySet<number>> = { gas: NO_POINTERS, reverse: NO_POINTERS }
+
+/** `pointers` held on `pedal`, with the pedal's flag (`gas` / `reverse`) kept in step. */
+function pedalUpdate(state: DriveInputState, pedal: Pedal, pointers: ReadonlySet<number>) {
+  return { pedalPointers: { ...state.pedalPointers, [pedal]: pointers }, [pedal]: pointers.size > 0 }
+}
+
+/**
+ * Calls `release` whenever the app loses the player's attention: the window loses focus (alt-tab,
+ * a system dialog) or the page is hidden (home button, app switcher, screen lock). Lifting a finger
+ * in that moment never reaches the page, so held controls would otherwise stay held. Returns the
+ * function that stops listening.
+ */
+export function releaseOnInterruption(
+  win: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>,
+  doc: Pick<Document, 'visibilityState' | 'addEventListener' | 'removeEventListener'>,
+  release: () => void,
+): () => void {
+  const onVisibility = () => {
+    if (doc.visibilityState === 'hidden') release()
+  }
+  win.addEventListener('blur', release)
+  doc.addEventListener('visibilitychange', onVisibility)
+  return () => {
+    win.removeEventListener('blur', release)
+    doc.removeEventListener('visibilitychange', onVisibility)
+  }
+}
 
 export const useDriveInput = create<DriveInputState>()((set, get) => ({
   stick: 0,
   gas: false,
   reverse: false,
   keys: NO_KEYS,
+  pedalPointers: NO_PEDALS,
   flipSeq: 0,
   setStick: (stick) => set({ stick: clamp1(stick) }),
-  setGas: (gas) => set({ gas }),
-  setReverse: (reverse) => set({ reverse }),
+  pressPedal: (pedal, pointerId) => {
+    const held = get().pedalPointers[pedal]
+    if (held.has(pointerId)) return
+    set(pedalUpdate(get(), pedal, new Set([...held, pointerId])))
+  },
+  releasePedal: (pedal, pointerId) => {
+    const held = get().pedalPointers[pedal]
+    if (!held.has(pointerId)) return
+    const rest = new Set(held)
+    rest.delete(pointerId)
+    set(pedalUpdate(get(), pedal, rest))
+  },
   keyDown: (code) => {
     if (get().keys.has(code)) return
     set({ keys: new Set([...get().keys, code]) })
@@ -95,9 +138,8 @@ export const useDriveInput = create<DriveInputState>()((set, get) => ({
     keys.delete(code)
     set({ keys })
   },
-  clearKeys: () => set({ keys: NO_KEYS }),
   requestFlip: () => set({ flipSeq: get().flipSeq + 1 }),
   honk: () => horn(),
-  reset: () => set({ stick: 0, gas: false, reverse: false, keys: NO_KEYS }),
+  reset: () => set({ stick: 0, gas: false, reverse: false, keys: NO_KEYS, pedalPointers: NO_PEDALS }),
   read: () => combineDriveInput(get()),
 }))

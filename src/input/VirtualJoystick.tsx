@@ -1,5 +1,5 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { stickAxis } from '../state/useDriveInput'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { releaseOnInterruption, stickAxis } from '../state/useDriveInput'
 
 interface Props {
   /** Horizontal axis, -1 (left) .. +1 (right); called on every move and with 0 on release. */
@@ -17,6 +17,18 @@ interface Props {
 export default function VirtualJoystick({ onChange, label, radius = 64 }: Props) {
   const [knob, setKnob] = useState(0) // knob x offset (px); the stick only moves sideways
   const active = useRef<{ id: number; cx: number } | null>(null)
+
+  // Switching away from the app can swallow the thumb's pointerup: let go, so the knob springs back
+  // and the next touch is taken.
+  useEffect(
+    () =>
+      releaseOnInterruption(window, document, () => {
+        active.current = null
+        setKnob(0)
+        onChange(0)
+      }),
+    [onChange],
+  )
 
   const move = (e: ReactPointerEvent) => {
     const a = active.current

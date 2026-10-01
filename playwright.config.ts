@@ -2,8 +2,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: 'e2e',
-  // Needs a production build: run by `npm run e2e:offline` (playwright.offline.config.ts).
-  testIgnore: 'offline.spec.ts',
+  // These need a production build: run by `npm run e2e:offline` (playwright.offline.config.ts).
+  testIgnore: ['offline.spec.ts', '*.prod.spec.ts'],
   use: {
     baseURL: 'http://localhost:5173',
     // First-launch onboarding is off by default so specs reach the menu; its own spec turns it on.

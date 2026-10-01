@@ -24,8 +24,21 @@ import type { Brick } from '../../core/types'
 import type { VehicleConfig } from '../../core/vehicle'
 import { bakedGlassMaterial, bakedMaterial } from '../../render/materials'
 import { useDriveInput } from '../../state/useDriveInput'
+import { useDriveStatus } from '../../state/useDriveStatus'
 
-type VehicleController = ReturnType<RapierContext['world']['createVehicleController']>
+type World = RapierContext['world']
+type VehicleController = ReturnType<World['createVehicleController']>
+interface Mount {
+  x: number
+  y: number
+  z: number
+}
+/** The controller and what it was built for: rebuilt when the rigid body or the wheels change. */
+interface ControllerBinding {
+  controller: VehicleController
+  body: RapierRigidBody
+  mounts: Mount[]
+}
 export type DrivableSetup = Extract<DriveAnalysis, { ok: true }>
 
 /** World gravity (studs / s^2): stronger than 9.81 because a stud is ~0.5 m in toy scale. */
@@ -49,6 +62,8 @@ const CHASSIS_FRICTION = 0.3
 const FALL_LIMIT = -20
 /** The flip button sets the car down upright this far above whatever it was lying on. */
 const FLIP_LIFT = 1
+/** The production-safe status (`useDriveStatus`) is refreshed every this many physics steps. */
+const STATUS_EVERY = 6
 
 const FORWARD = new THREE.Vector3(0, 0, -1)
 const UP = new THREE.Vector3(0, 1, 0)
@@ -104,6 +119,26 @@ function publishTelemetry(rb: RapierRigidBody, speed: number) {
   ;(window as unknown as { __btDrive?: unknown }).__btDrive = { x: t.x, y: t.y, z: t.z, upY, speed, body: rb }
 }
 
+/** Ray-cast vehicle controller for `rb` with one wheel per config wheel, mounted at `mounts`. */
+function createController(world: World, rb: RapierRigidBody, config: VehicleConfig, mounts: Mount[]): VehicleController {
+  const c = world.createVehicleController(rb)
+  config.wheels.forEach((w, i) => {
+    // Suspension straight down, axle along +X: Rapier then drives the wheel towards -Z.
+    c.addWheel(mounts[i], { x: 0, y: -1, z: 0 }, { x: 1, y: 0, z: 0 }, SUSPENSION_REST, w.radius)
+    c.setWheelSuspensionStiffness(i, SUSPENSION_STIFFNESS)
+    c.setWheelSuspensionCompression(i, SUSPENSION_COMPRESSION)
+    c.setWheelSuspensionRelaxation(i, SUSPENSION_RELAXATION)
+    c.setWheelFrictionSlip(i, FRICTION_SLIP)
+  })
+  useDriveStatus.getState().controllerAdded()
+  return c
+}
+
+function removeController(world: World, c: VehicleController) {
+  world.removeVehicleController(c)
+  useDriveStatus.getState().controllerRemoved()
+}
+
 /** Collider mass properties: all the mass at axle height, with padded box inertia. */
 function chassisMass(config: VehicleConfig) {
   const [hx, hy, hz] = config.chassis.halfExtents
@@ -154,7 +189,8 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
   const { config, wheelBricks, bodyBricks } = setup
   const { world } = useRapier()
   const body = useRef<RapierRigidBody>(null)
-  const controller = useRef<VehicleController | null>(null)
+  const binding = useRef<ControllerBinding | null>(null)
+  const steps = useRef(0)
   const steering = useRef(0)
   const forwardSpeed = useRef(0)
   /** Distance rolled so far, which turns the wheels (Rapier's `wheelRotation` stays 0 in this version). */
@@ -168,35 +204,38 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
 
   // The springs settle by `sag` under the car's weight; mounting the wheels that much lower than
   // their rest length makes them sit exactly where they were built once the car has settled.
-  const mounts = useMemo(() => {
+  const mounts = useMemo<Mount[]>(() => {
     const sag = GRAVITY / (config.wheels.length * SUSPENSION_STIFFNESS)
     return config.wheels.map((w) => ({ x: w.position[0], y: w.position[1] + SUSPENSION_REST - sag, z: w.position[2] }))
   }, [config.wheels])
 
-  // Layout effect: its cleanup runs before <Physics> frees the world when the scene unmounts.
-  useLayoutEffect(() => {
-    const rb = body.current
-    if (!rb) return
-    const c = world.createVehicleController(rb)
-    config.wheels.forEach((w, i) => {
-      // Suspension straight down, axle along +X: Rapier then drives the wheel towards -Z.
-      c.addWheel(mounts[i], { x: 0, y: -1, z: 0 }, { x: 1, y: 0, z: 0 }, SUSPENSION_REST, w.radius)
-      c.setWheelSuspensionStiffness(i, SUSPENSION_STIFFNESS)
-      c.setWheelSuspensionCompression(i, SUSPENSION_COMPRESSION)
-      c.setWheelSuspensionRelaxation(i, SUSPENSION_RELAXATION)
-      c.setWheelFrictionSlip(i, FRICTION_SLIP)
-    })
-    controller.current = c
-    return () => {
-      controller.current = null
-      world.removeVehicleController(c)
-    }
-  }, [world, config, mounts])
+  // The controller is created lazily by the first physics step: @react-three/rapier only creates the
+  // rigid body in a passive effect, after this component's own effects ran (production has no
+  // StrictMode re-run to paper over that). Removal stays in a layout cleanup, which runs before
+  // <Physics> frees the world (a passive cleanup) when the scene unmounts.
+  useLayoutEffect(
+    () => () => {
+      const b = binding.current
+      binding.current = null
+      if (b) removeController(world, b.controller)
+    },
+    [world],
+  )
+
+  /** The controller for the current rigid body and wheels, built (or rebuilt) on demand. */
+  const controllerFor = (w: World, rb: RapierRigidBody): VehicleController => {
+    const b = binding.current
+    if (b && b.body === rb && b.mounts === mounts) return b.controller
+    if (b) removeController(w, b.controller)
+    const controller = createController(w, rb, config, mounts)
+    binding.current = { controller, body: rb, mounts }
+    return controller
+  }
 
   useBeforePhysicsStep((w) => {
-    const c = controller.current
     const rb = body.current
-    if (!c || !rb) return
+    if (!rb) return
+    const c = controllerFor(w, rb)
     const dt = w.timestep
     const drive = useDriveInput.getState()
 
@@ -225,12 +264,16 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
     const [vx, vz] = clampHorizontalSpeed(after.x, after.z, DRIVE.MAX_SPEED)
     if (vx !== after.x || vz !== after.z) rb.setLinvel({ x: vx, y: after.y, z: vz }, true)
     forwardSpeed.current = speed
+    if (steps.current++ % STATUS_EVERY === 0) {
+      const t = rb.translation()
+      useDriveStatus.getState().setPose(t.x, t.z, speed)
+    }
     if (import.meta.env.DEV) publishTelemetry(rb, speed)
   })
 
   // Wheels: follow the suspension, steer, and roll.
   useFrame((_, dt) => {
-    const c = controller.current
+    const c = binding.current?.controller
     if (!c) return
     rolled.current += forwardSpeed.current * dt
     mounts.forEach((mount, i) => {

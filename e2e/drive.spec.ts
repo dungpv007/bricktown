@@ -62,6 +62,29 @@ async function hold(page: Page, testId: string, ms: number) {
   await page.mouse.up()
 }
 
+interface Finger {
+  x: number
+  y: number
+  id: number
+}
+
+/**
+ * Multi-touch through CDP: `touchStart` / `touchMove` list every finger on the screen, `touchEnd`
+ * lists the fingers that lift (none = all of them).
+ */
+async function touchScreen(page: Page) {
+  const cdp = await page.context().newCDPSession(page)
+  return (type: 'touchStart' | 'touchMove' | 'touchEnd', touchPoints: Finger[]) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints })
+}
+
+async function centerOf(page: Page, testId: string) {
+  const box = (await page.getByTestId(testId).boundingBox())!
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+}
+
+const speedOf = async (page: Page) => (await carState(page))!.speed
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await expect(page.getByTestId('main-menu')).toBeVisible()
@@ -83,6 +106,10 @@ test('drive: pick the car and hold gas', async ({ page }) => {
   expect(after.z).toBeLessThan(start.z - 3) // drove forward (-Z)
   expect(Math.abs(after.x - start.x)).toBeLessThan(1)
   expect(after.upY).toBeGreaterThan(0.95)
+  // StrictMode mounts effects twice in dev: still exactly one vehicle controller, built once.
+  const status = page.getByTestId('drive-status')
+  await expect(status).toHaveAttribute('data-controllers', '1')
+  await expect(status).toHaveAttribute('data-builds', '1')
   await expect(page.getByTestId('mode-drive').locator('canvas')).toBeVisible()
   expect(errors).toEqual([])
 })
@@ -135,6 +162,93 @@ test('drive: the stick steers and the flip button rights the car', async ({ page
   expect(flipped.upY).toBeGreaterThan(0.95)
   expect(flipped.y).toBeGreaterThan(-0.3)
   expect(flipped.y).toBeLessThan(0.5)
+})
+
+test('drive: lifting one of two fingers on the gas keeps driving', async ({ page }) => {
+  await setUpCity(page)
+  await startDriving(page, 'tpl:car')
+  const touch = await touchScreen(page)
+  const g = await centerOf(page, 'drive-gas')
+  const a = { ...g, id: 1 }
+  const b = { x: g.x + 12, y: g.y + 12, id: 2 }
+  await touch('touchStart', [a])
+  await touch('touchStart', [a, b])
+  await page.waitForTimeout(500)
+  await touch('touchEnd', [a]) // finger a lifts, b still holds the pedal
+  const atLift = await speedOf(page)
+  await page.waitForTimeout(700)
+  expect(await speedOf(page)).toBeGreaterThan(atLift + 1) // still accelerating
+  await touch('touchEnd', [])
+})
+
+test('drive: flip fires on finger lift while the other thumb holds gas', async ({ page }) => {
+  await setUpCity(page)
+  await startDriving(page, 'tpl:car')
+  await page.evaluate(() => {
+    const d = (window as unknown as BtWindow).__btDrive!
+    d.body.setRotation({ x: 0, y: 0, z: 1, w: 0 }, true)
+    d.body.setTranslation({ x: d.x, y: 6, z: d.z }, true)
+  })
+  await expect.poll(async () => (await carState(page))!.upY, { timeout: 5000 }).toBeLessThan(-0.9)
+
+  const touch = await touchScreen(page)
+  const gas = { ...(await centerOf(page, 'drive-gas')), id: 1 }
+  const flip = { ...(await centerOf(page, 'drive-flip')), id: 2 }
+  await touch('touchStart', [gas])
+  await touch('touchStart', [gas, flip])
+  await touch('touchEnd', [flip]) // the flip finger lifts (Chrome sends no click for it); gas stays held
+  await expect.poll(async () => (await carState(page))!.upY, { timeout: 5000 }).toBeGreaterThan(0.95)
+  await touch('touchEnd', [])
+})
+
+test('drive: switching away from the app lets go of the gas and the stick', async ({ page }) => {
+  await setUpCity(page)
+  await startDriving(page, 'tpl:car')
+  const touch = await touchScreen(page)
+  const gas = { ...(await centerOf(page, 'drive-gas')), id: 1 }
+
+  // Gas held, then the window loses focus before the finger lifts (its pointerup never arrives).
+  await touch('touchStart', [gas])
+  await page.waitForTimeout(800)
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+  const atBlur = await speedOf(page)
+  await page.waitForTimeout(1000)
+  expect(await speedOf(page)).toBeLessThan(atBlur) // coasting, no longer driven
+  await touch('touchEnd', []) // the lost finger finally lifts: changes nothing
+  // A fresh press still drives.
+  const before = await speedOf(page)
+  await hold(page, 'drive-gas', 800)
+  expect(await speedOf(page)).toBeGreaterThan(before + 3)
+
+  // Stick pushed right, then the page is hidden (home button / app switcher).
+  const joystick = page.getByTestId('drive-joystick')
+  const s = await centerOf(page, 'drive-joystick')
+  await touch('touchStart', [{ ...s, id: 3 }])
+  await touch('touchMove', [{ x: s.x + 90, y: s.y, id: 3 }])
+  await expect(joystick).toHaveAttribute('aria-valuenow', '1')
+  const setVisibility = (state: string) =>
+    page.evaluate((v) => {
+      Object.defineProperty(document, 'visibilityState', { value: v, configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }, state)
+  await setVisibility('hidden')
+  await expect(joystick).toHaveAttribute('aria-valuenow', '0')
+  await setVisibility('visible')
+  // The stick takes a new thumb even though the old one never lifted.
+  await touch('touchStart', [{ x: s.x + 90, y: s.y, id: 3 }, { ...s, id: 4 }])
+  await touch('touchMove', [{ x: s.x + 90, y: s.y, id: 3 }, { x: s.x - 90, y: s.y, id: 4 }])
+  await expect(joystick).toHaveAttribute('aria-valuenow', '-1')
+  await touch('touchEnd', [])
+})
+
+test('drive: a scene that fails to load shows a friendly screen with a way back', async ({ page }) => {
+  await page.route('**/src/scenes/drive/DriveScene.tsx*', (route) => route.abort())
+  await page.getByTestId('menu-drive').click()
+  await page.getByTestId('veh-tpl:car').click()
+  await expect(page.getByTestId('scene-error')).toBeVisible()
+  await expect(page.getByTestId('scene-error-reload')).toBeVisible()
+  await page.getByTestId('scene-error-menu').click()
+  await expect(page.getByTestId('main-menu')).toBeVisible()
 })
 
 test('drive: a vehicle blueprint without wheels cannot be picked', async ({ page }) => {
