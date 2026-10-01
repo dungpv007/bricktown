@@ -1,0 +1,299 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { MapControls, PerspectiveCamera } from '@react-three/drei'
+import * as THREE from 'three'
+import type { MapControls as MapControlsImpl } from 'three-stdlib'
+import { CELL } from '../../core/city'
+import { pointToCell } from '../../core/cityPlan'
+import { cellKey, inBounds, type Cell, type Maze } from '../../core/maze'
+import { createGestureTracker, sampleOf } from '../../input/tapGesture'
+import { currentMaze, useMazeEditor, useShownMaze, type MazeTool } from '../../state/useMazeEditor'
+import DevStats from '../../ui/DevStats'
+import MazeModel, { cellCenter } from './MazeModel'
+import { mazeScreen } from './mazeScreen'
+import { frameMaze, safeRect, WALL_HEIGHT } from './mazeView'
+
+const SKY = '#87ceeb'
+const SHADOW_MAP_SIZE = 2048
+const FOV = 45
+/** Screen margins (px) the HUD covers: tool column, side column, top bar, name chip. */
+export const MAZE_HUD_MARGINS = { left: 100, right: 100, top: 88, bottom: 84 }
+
+const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+const TOP_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), -WALL_HEIGHT)
+
+const GHOST_COLOR: Record<Exclude<MazeTool, 'move'>, string> = {
+  wall: '#3cd35a',
+  erase: '#ff3b30',
+  entry: '#bbe90b',
+  exit: '#ffffff',
+  coin: '#ffd500',
+}
+
+function Lights({ w, h }: { w: number; h: number }) {
+  const light = useRef<THREE.DirectionalLight>(null)
+  const sx = w * CELL
+  const sz = h * CELL
+  const span = Math.max(sx, sz)
+  const target = useMemo(() => new THREE.Object3D(), [])
+  useLayoutEffect(() => {
+    const cam = light.current?.shadow.camera
+    if (!cam) return
+    const extent = span * 0.8
+    cam.left = -extent
+    cam.right = extent
+    cam.top = extent
+    cam.bottom = -extent
+    cam.near = 1
+    cam.far = span * 3
+    cam.updateProjectionMatrix()
+  }, [span])
+  return (
+    <>
+      <hemisphereLight args={['#ffffff', '#7a9a6a', 1.6]} />
+      <primitive object={target} position={[sx / 2, 0, sz / 2]} />
+      <directionalLight
+        ref={light}
+        target={target}
+        position={[sx / 2 + span * 0.35, span * 0.9, sz / 2 + span * 0.25]}
+        intensity={2.2}
+        castShadow
+        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+        shadow-bias={-0.0005}
+        shadow-normalBias={0.05}
+      />
+    </>
+  )
+}
+
+// One finger pans (move tool and the tap tools), two fingers pinch-zoom and pan. With the wall
+// tools one finger / the left button paints (no mapping = the controls ignore it), as in the city.
+const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
+const PAN_MOUSE = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+const PAINT_TOUCHES = { TWO: THREE.TOUCH.DOLLY_PAN }
+const PAINT_MOUSE = { MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
+
+/** Tilted top-down camera that frames the whole maze (again whenever its size changes), kept over it. */
+function CameraRig({ w, h, tool }: { w: number; h: number; tool: MazeTool }) {
+  const controls = useRef<MapControlsImpl>(null)
+  /** What the view was last framed for ("w x h @ canvas size"); framing again only when that changes. */
+  const framedFor = useRef('')
+
+  // Framed from the render loop: the controls and the canvas size only exist after the first frames.
+  useFrame(({ camera, size }) => {
+    const c = controls.current
+    const key = `${w}x${h}@${size.width}x${size.height}`
+    if (!c || size.width === 0 || size.height === 0 || framedFor.current === key) return
+    framedFor.current = key
+    const frame = frameMaze(w, h, size.width / size.height, FOV, safeRect(size.width, size.height, MAZE_HUD_MARGINS))
+    camera.position.set(...frame.position)
+    c.target.set(...frame.target)
+    c.maxDistance = frame.distance * 1.6
+    c.minDistance = Math.min(30, frame.distance)
+    c.update()
+  })
+
+  const keepOverMaze = useCallback(() => {
+    const c = controls.current
+    if (!c) return
+    const t = c.target
+    const x = Math.max(0, Math.min(w * CELL, t.x))
+    const z = Math.max(0, Math.min(h * CELL, t.z))
+    if (x === t.x && z === t.z) return
+    c.object.position.x += x - t.x
+    c.object.position.z += z - t.z
+    t.x = x
+    t.z = z
+  }, [w, h])
+
+  const painting = tool === 'wall' || tool === 'erase'
+  return (
+    <>
+      <PerspectiveCamera makeDefault fov={FOV} near={1} far={3000} position={[0, 100, 100]} />
+      <MapControls
+        ref={controls}
+        makeDefault
+        enableDamping
+        dampingFactor={0.12}
+        enableRotate={false}
+        touches={painting ? PAINT_TOUCHES : PAN_TOUCHES}
+        mouseButtons={painting ? PAINT_MOUSE : PAN_MOUSE}
+        onChange={keepOverMaze}
+      />
+    </>
+  )
+}
+
+/** Translucent block (walls) or pad (the other tools) over the cell the finger / mouse is on. */
+function Ghost({ cell, tool }: { cell: Cell; tool: Exclude<MazeTool, 'move'> }) {
+  const [x, z] = cellCenter(cell)
+  const tall = tool === 'wall' || tool === 'erase'
+  const height = tall ? WALL_HEIGHT + 0.3 : 0.5
+  return (
+    <mesh position={[x, height / 2, z]} renderOrder={2}>
+      <boxGeometry args={[CELL + 0.2, height, CELL + 0.2]} />
+      <meshBasicMaterial color={GHOST_COLOR[tool]} transparent opacity={0.4} depthWrite={false} />
+    </mesh>
+  )
+}
+
+const sameCell = (a: Cell | null, b: Cell | null) => a === b || (a !== null && b !== null && a.cx === b.cx && a.cz === b.cz)
+
+function MazeWorld({ maze }: { maze: Maze }) {
+  const tool = useMazeEditor((s) => s.tool)
+  const stroking = useMazeEditor((s) => s.preview !== null)
+  const el = useThree((s) => s.gl.domElement)
+  const getThree = useThree((s) => s.get)
+
+  const [hover, setHoverState] = useState<Cell | null>(null)
+  const hoverRef = useRef<Cell | null>(null)
+  const setHover = useCallback((cell: Cell | null) => {
+    if (sameCell(hoverRef.current, cell)) return
+    hoverRef.current = cell
+    setHoverState(cell)
+  }, [])
+
+  useEffect(() => {
+    const raycaster = new THREE.Raycaster()
+    const ndc = new THREE.Vector2()
+    const hit = new THREE.Vector3()
+    const gestures = createGestureTracker()
+    let painting: number | null = null
+    let mouseGesture = false
+
+    /** The cell under the pointer: a wall top when the ray hits one, else the floor (null off the maze). */
+    const cellAt = (e: PointerEvent): Cell | null => {
+      const rect = el.getBoundingClientRect()
+      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1)
+      raycaster.setFromCamera(ndc, getThree().camera)
+      const shown = useMazeEditor.getState().preview ?? currentMaze()
+      if (!shown) return null
+      const top = raycaster.ray.intersectPlane(TOP_PLANE, hit)
+      if (top) {
+        const cell = pointToCell(top.x, top.z)
+        if (shown.walls.includes(cellKey(cell))) return cell
+      }
+      const floor = raycaster.ray.intersectPlane(GROUND_PLANE, hit)
+      return floor ? pointToCell(floor.x, floor.z) : null
+    }
+    const inMaze = (cell: Cell | null): Cell | null => {
+      const m = currentMaze()
+      return cell && m && inBounds(m, cell) ? cell : null
+    }
+    const editor = () => useMazeEditor.getState()
+    const paints = () => editor().tool === 'wall' || editor().tool === 'erase'
+
+    const onDown = (e: PointerEvent) => {
+      if (!gestures.down(sampleOf(e))) {
+        // A second finger: pinch / pan, never a wall stroke.
+        if (painting !== null) editor().strokeCancel()
+        painting = null
+        setHover(null)
+        return
+      }
+      mouseGesture = e.pointerType === 'mouse'
+      if (painting !== null) editor().strokeCancel() // left over from a lost release
+      painting = null
+      if (e.button !== 0 || editor().tool === 'move') return
+      const cell = inMaze(cellAt(e))
+      if (paints()) {
+        if (!cell) return // strokes start on the maze; a drag that leaves it is clamped to the edge
+        painting = e.pointerId
+        setHover(null)
+        editor().strokeStart(cell)
+      } else {
+        setHover(cell)
+      }
+    }
+
+    const onMove = (e: PointerEvent) => {
+      if (painting !== null && e.pointerId === painting) {
+        const cell = cellAt(e)
+        if (cell) editor().strokeTo(cell)
+        return
+      }
+      if (e.pointerType === 'mouse' && e.buttons === 0) {
+        setHover(e.target === el && editor().tool !== 'move' ? inMaze(cellAt(e)) : null)
+      }
+    }
+
+    const onUp = (e: PointerEvent) => {
+      const gesture = gestures.up(sampleOf(e))
+      if (!gesture.ended) return
+      if (painting !== null && painting === e.pointerId) {
+        painting = null
+        if (gesture.multi) editor().strokeCancel()
+        else editor().strokeEnd()
+        return
+      }
+      if (!mouseGesture) setHover(null)
+      if (!gesture.tap || paints()) return
+      const cell = inMaze(cellAt(e))
+      if (cell) editor().tapCell(cell)
+    }
+
+    const onCancel = (e: PointerEvent) => {
+      gestures.cancel(e.pointerId)
+      if (painting === e.pointerId) {
+        painting = null
+        editor().strokeCancel()
+      }
+      setHover(null)
+    }
+    const onLeave = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse') setHover(null)
+    }
+
+    el.addEventListener('pointerdown', onDown)
+    el.addEventListener('pointerleave', onLeave)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp, true)
+    window.addEventListener('pointercancel', onCancel, true)
+    return () => {
+      el.removeEventListener('pointerdown', onDown)
+      el.removeEventListener('pointerleave', onLeave)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp, true)
+      window.removeEventListener('pointercancel', onCancel, true)
+      if (painting !== null) useMazeEditor.getState().strokeCancel()
+    }
+  }, [el, getThree, setHover])
+
+  // A tool change makes the old ghost meaningless.
+  useEffect(() => setHover(null), [tool, setHover])
+
+  useEffect(() => {
+    const v = new THREE.Vector3()
+    mazeScreen.cellToClient = (cx, cz) => {
+      const [x, z] = cellCenter({ cx, cz })
+      v.set(x, 0, z).project(getThree().camera)
+      const rect = el.getBoundingClientRect()
+      return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + ((1 - v.y) / 2) * rect.height }
+    }
+    return () => {
+      mazeScreen.cellToClient = null
+    }
+  }, [el, getThree])
+
+  return (
+    <>
+      <CameraRig w={maze.w} h={maze.h} tool={tool} />
+      <Lights w={maze.w} h={maze.h} />
+      <MazeModel maze={maze} />
+      {hover && tool !== 'move' && !stroking && <Ghost cell={hover} tool={tool} />}
+    </>
+  )
+}
+
+export default function MazeScene() {
+  const maze = useShownMaze()
+  if (!maze) return null
+  return (
+    <Canvas shadows="percentage" dpr={[1, 1.5]} data-testid="maze-canvas">
+      <color attach="background" args={[SKY]} />
+      <fog attach="fog" args={[SKY, 500, 1100]} />
+      <MazeWorld maze={maze} />
+      <DevStats />
+    </Canvas>
+  )
+}

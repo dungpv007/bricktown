@@ -411,7 +411,7 @@ export function planImport(data: SaveData, pkg: SharePackage, now = Date.now()):
     const blueprint = freshBlueprint(pkg.model.blueprint, freshId('bp', bpIds), now)
     const plan: ModelImportPlan = { kind: 'model', name: pkg.name, blueprint, brickCount: blueprint.bricks.length }
     if (steps) {
-      const id = freshId('shared', new Set((data.sharedTemplates ?? []).map((t) => t.id)))
+      const id = freshId('shared', new Set(data.sharedTemplates.map((t) => t.id)))
       plan.template = {
         id,
         name: { vi: blueprint.name, en: blueprint.name },
@@ -427,7 +427,7 @@ export function planImport(data: SaveData, pkg: SharePackage, now = Date.now()):
   }
   if (pkg.maze) {
     const { maze, best } = pkg.maze
-    const id = freshId('maze', new Set((data.mazes ?? []).map((m) => m.id)))
+    const id = freshId('maze', new Set(data.mazes.map((m) => m.id)))
     const plan: MazeImportPlan = {
       kind: 'maze',
       name: pkg.name,
@@ -477,12 +477,12 @@ export function applyImport(data: SaveData, plan: ImportPlan): SaveData {
       return {
         ...data,
         blueprints: [...data.blueprints, plan.blueprint],
-        ...(plan.template ? { sharedTemplates: [...(data.sharedTemplates ?? []), plan.template] } : {}),
+        ...(plan.template ? { sharedTemplates: [...data.sharedTemplates, plan.template] } : {}),
       }
     case 'maze':
       return {
         ...data,
-        mazes: [...(data.mazes ?? []), plan.maze],
+        mazes: [...data.mazes, plan.maze],
         ...(plan.challenge ? { mazeChallenges: { ...data.mazeChallenges, [plan.maze.id]: plan.challenge } } : {}),
       }
     case 'city':

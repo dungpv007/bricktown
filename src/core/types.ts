@@ -130,6 +130,14 @@ export interface MazeChallenge {
   from?: string
 }
 
+/** Best run through a maze. */
+export interface MazeRecord {
+  timeMs: number
+  stars: 1 | 2 | 3
+  /** Coins collected on that run. */
+  coins: number
+}
+
 export interface SaveData {
   schemaVersion: number
   blueprints: Blueprint[]
@@ -137,12 +145,12 @@ export interface SaveData {
   workshop: WorkshopState
   guided: GuidedState | null
   completedTemplates: string[]
-  // The fields below are optional until the next schema bump makes them required; `migrate` always
-  // fills them in (see core/serialize), so a loaded save has them.
   /** Models shared "with build instructions": built step by step in Guided mode. */
-  sharedTemplates?: Template[]
-  /** The kid's own and imported mazes (owned by Maze mode; shared mazes are added here). */
-  mazes?: Maze[]
-  /** Keyed by maze id. */
-  mazeChallenges?: Record<string, MazeChallenge>
+  sharedTemplates: Template[]
+  /** The kid's own and imported mazes (shared mazes are added here). */
+  mazes: Maze[]
+  /** Best runs by maze id (`tpl:<templateId>` for an unchanged ready-made maze). */
+  mazeRecords: Record<string, MazeRecord>
+  /** A friend's time to beat, keyed by maze id. */
+  mazeChallenges: Record<string, MazeChallenge>
 }

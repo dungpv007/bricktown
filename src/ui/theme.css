@@ -5,6 +5,7 @@
   --bt-blue: #0055bf;
   --bt-green: #237841;
   --bt-orange: #fe8a18;
+  --bt-purple: #7b3fb8;
   --bt-white: #ffffff;
   --bt-ink: #1b2a41;
   --bt-radius: 24px;
@@ -1599,4 +1600,237 @@ form.bt-dialog,
     width: 100%;
     height: 180px;
   }
+}
+
+/* ---------- Maze ---------- */
+
+/* Five mode cards fit on one row on a tablet. */
+.bt-menu-cards {
+  width: min(100%, 880px);
+}
+
+.bt-maze-section {
+  margin: 8px 0 0;
+  font-size: 26px;
+  color: var(--bt-white);
+  text-shadow: 0 3px 0 var(--bt-purple);
+}
+
+.bt-maze-make .bt-card-icon {
+  font-size: 64px;
+}
+
+.bt-maze-make[data-testid='maze-new'] {
+  color: var(--bt-ink);
+}
+
+.bt-maze-best {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.bt-maze-best-stars {
+  color: var(--bt-yellow);
+  letter-spacing: 1px;
+}
+
+/* Keeps the card width of the grid above even with one or two of the kid's mazes. */
+.bt-maze-own-grid {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.bt-maze-own {
+  position: relative;
+  display: flex;
+}
+
+.bt-maze-own-card {
+  flex: 1;
+  min-width: 0;
+  background: var(--bt-blue);
+}
+
+.bt-maze-own-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bt-maze-del {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: var(--bt-touch);
+  height: var(--bt-touch);
+  padding: 0;
+  border-radius: 50%;
+  font-size: 28px;
+}
+
+.bt-maze-thumb {
+  image-rendering: pixelated;
+}
+
+.bt-maze-choose .bt-row {
+  gap: 16px;
+}
+
+.bt-maze-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 170px;
+  white-space: nowrap;
+}
+
+.bt-maze-choice-big {
+  flex-direction: column;
+  gap: 6px;
+  min-height: 112px;
+  min-width: 150px;
+  font-size: 24px;
+}
+
+.bt-maze-choice-big .bt-maze-size-icon {
+  width: 48px;
+  height: 48px;
+}
+
+/* A square grid with --bt-maze-grid cells per side: bigger mazes, more squares. */
+.bt-maze-size-icon {
+  --bt-maze-grid: 3;
+  display: inline-block;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  box-sizing: border-box;
+  border: 3px solid var(--bt-purple);
+  border-radius: 4px;
+  background:
+    linear-gradient(to right, var(--bt-purple) 2px, transparent 2px) 0 0 / calc(100% / var(--bt-maze-grid)) 100%,
+    linear-gradient(to bottom, var(--bt-purple) 2px, transparent 2px) 0 0 / 100% calc(100% / var(--bt-maze-grid)),
+    #ffffff;
+}
+
+.bt-maze-ui {
+  --bt-edge: 12px;
+  --bt-top: 84px;
+  --bt-palette-h: 0px;
+  --bt-swatch: 56px;
+  position: absolute;
+  inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
+  pointer-events: none;
+}
+
+.bt-maze-ui > * {
+  pointer-events: auto;
+}
+
+.bt-maze-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--bt-touch);
+  padding: 0 16px;
+  box-sizing: border-box;
+  border-radius: var(--bt-radius);
+  font-size: 28px;
+  font-weight: 800;
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-maze-ok {
+  background: var(--bt-white);
+}
+
+.bt-maze-warn {
+  background: var(--bt-white);
+  outline: 4px solid var(--bt-yellow);
+  outline-offset: -4px;
+  color: var(--bt-ink);
+}
+
+.bt-maze-status-text {
+  font-size: 18px;
+}
+
+.bt-maze-side {
+  position: absolute;
+  right: var(--bt-edge);
+  top: var(--bt-top);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bt-maze-color-chip {
+  --bt-swatch-color: #fe8a18;
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: auto;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.2);
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, 0.35) 0 3px, rgba(0, 0, 0, 0.18) 3px 4.5px, transparent 5px) 0 0 / 13.3px 13.3px,
+    var(--bt-swatch-color);
+}
+
+.bt-maze-pop-backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+.bt-maze-pop {
+  position: absolute;
+  top: var(--bt-top);
+  right: calc(var(--bt-edge) + var(--bt-touch) + 24px);
+  max-height: calc(100% - var(--bt-top) - var(--bt-edge));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.bt-maze-pop-colors {
+  display: grid;
+  grid-template-columns: repeat(5, var(--bt-swatch));
+  gap: 4px;
+}
+
+.bt-maze-name {
+  position: absolute;
+  left: 50%;
+  bottom: var(--bt-edge);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--bt-touch);
+  padding: 0 16px;
+  font-size: 24px;
+}
+
+.bt-maze-name input {
+  width: 260px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bt-ink);
+  font: inherit;
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+}
+
+.bt-maze-name:focus-within {
+  background: rgba(255, 255, 255, 0.92);
 }

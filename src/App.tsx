@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
+import { useHasOpenMaze, useMazeEditor } from './state/useMazeEditor'
 import MainMenu from './ui/MainMenu'
 import SceneBoundary from './ui/SceneBoundary'
 import { lazyScene } from './ui/lazyScene'
@@ -21,6 +22,10 @@ const CityScene = lazyScene(() => import('./scenes/city/CityScene'))
 const CityUI = lazyScene(() => import('./scenes/city/CityUI'))
 const VehiclePicker = lazyScene(() => import('./scenes/drive/VehiclePicker'))
 const DriveScene = lazyScene(() => import('./scenes/drive/DriveScene'))
+const MazePicker = lazyScene(() => import('./scenes/maze/MazePicker'))
+const MazeScene = lazyScene(() => import('./scenes/maze/MazeScene'))
+const MazeUI = lazyScene(() => import('./scenes/maze/MazeUI'))
+const MazeDrivePlaceholder = lazyScene(() => import('./scenes/maze/MazeDrivePlaceholder'))
 
 type PlayMode = Exclude<Mode, 'menu'>
 
@@ -29,6 +34,8 @@ const TITLE_KEYS: Record<PlayMode, TKey> = {
   guided: 'menuGuided',
   city: 'menuCity',
   drive: 'menuDrive',
+  maze: 'menuMaze',
+  mazeDrive: 'menuMaze',
 }
 
 function Workshop() {
@@ -97,20 +104,65 @@ function Drive() {
   )
 }
 
+/** Maze picker, or the open maze in the editor (the kid's maze is saved as it changes). */
+function Maze() {
+  const editing = useHasOpenMaze()
+  return (
+    <div className="bt-screen" data-testid="mode-maze">
+      <SceneBoundary>
+        {editing ? (
+          <>
+            <MazeScene />
+            <MazeUI />
+          </>
+        ) : (
+          <MazePicker />
+        )}
+      </SceneBoundary>
+    </div>
+  )
+}
+
+function MazeDrive() {
+  return (
+    <div className="bt-screen" data-testid="mode-mazeDrive">
+      <SceneBoundary>
+        <MazeDrivePlaceholder />
+      </SceneBoundary>
+    </div>
+  )
+}
+
 function Play({ mode }: { mode: PlayMode }) {
   if (mode === 'workshop') return <Workshop />
   if (mode === 'guided') return <Guided />
   if (mode === 'city') return <City />
+  if (mode === 'maze') return <Maze />
+  if (mode === 'mazeDrive') return <MazeDrive />
   return <Drive />
+}
+
+/** Back from the maze editor goes to the maze picker, from driving a maze to its editor. */
+function useBack(mode: PlayMode): (() => void) | undefined {
+  const editingMaze = useHasOpenMaze()
+  const setMode = useApp((s) => s.setMode)
+  if (mode === 'maze' && editingMaze) return () => useMazeEditor.getState().close()
+  if (mode === 'mazeDrive') return () => setMode('maze')
+  return undefined
+}
+
+function PlayScreen({ mode }: { mode: PlayMode }) {
+  const onBack = useBack(mode)
+  return (
+    <>
+      <Play mode={mode} />
+      <TopBar titleKey={TITLE_KEYS[mode]} onBack={onBack} />
+    </>
+  )
 }
 
 export default function App() {
   const mode = useApp((s) => s.mode)
   if (mode === 'menu') return <MainMenu />
-  return (
-    <>
-      <Play mode={mode} />
-      <TopBar titleKey={TITLE_KEYS[mode]} />
-    </>
-  )
+  return <PlayScreen mode={mode} />
 }

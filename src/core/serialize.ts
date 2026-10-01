@@ -1,10 +1,10 @@
 import { COLORS } from './colors'
 import { parseFig } from './figures'
+import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, type Cell, type Maze } from './maze'
 import { validateTemplate } from './template'
-import type { Maze } from './maze'
-import type { Baseplate, Blueprint, Brick, MazeChallenge, SaveData, Template } from './types'
+import type { Baseplate, Blueprint, Brick, MazeChallenge, MazeRecord, SaveData, Template } from './types'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export function createEmptySave(): SaveData {
   return {
@@ -16,6 +16,7 @@ export function createEmptySave(): SaveData {
     completedTemplates: [],
     sharedTemplates: [],
     mazes: [],
+    mazeRecords: {},
     mazeChallenges: {},
   }
 }
@@ -30,11 +31,14 @@ export const MIGRATIONS: Record<number, Migration> = {
    * so there is nothing to rewrite: a missing plate colour means the kind's default.
    */
   1: (data) => data,
+  /**
+   * v3 added the maze mode (the kid's mazes, the best runs) and sharing (shared templates, a friend's
+   * maze times). Late v2 saves may already carry the sharing fields (they were optional then): keep them.
+   */
+  2: (data) => ({ sharedTemplates: [], mazes: [], mazeRecords: {}, mazeChallenges: {}, ...data }),
 }
-// `Brick.fig` (minifigure styles) was added later without a version bump: it is optional and purely
+// `Brick.fig` (minifigure styles) was added during v2 without its own bump: it is optional and purely
 // additive, older saves simply have no figures, and `normalize` drops any style it cannot read.
-// Likewise `sharedTemplates`, `mazes` and `mazeChallenges` (sharing): optional and additive, filled in
-// by `normalize` when missing. The next schema bump should make them required.
 
 const UNSUPPORTED = 'unsupported save'
 
@@ -103,7 +107,8 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
       .filter(isTemplateLike)
       .map((t) => ({ ...t, bricks: normalizeBricks(t.bricks) }) as unknown as Template)
       .filter(isSoundTemplate),
-    mazes: arrayOr<unknown>(data.mazes, []).filter(isRecord) as unknown as Maze[],
+    mazes: normalizeMazes(arrayOr(data.mazes, [])),
+    mazeRecords: normalizeMazeRecords(data.mazeRecords),
     mazeChallenges: normalizeChallenges(data.mazeChallenges),
   }
 }
@@ -131,6 +136,63 @@ function normalizeChallenges(v: unknown): Record<string, MazeChallenge> {
   for (const [id, c] of Object.entries(v)) {
     if (id === '__proto__' || !isRecord(c) || typeof c.timeMs !== 'number' || !Number.isFinite(c.timeMs) || c.timeMs <= 0) continue
     out[id] = typeof c.from === 'string' ? { timeMs: c.timeMs, from: c.from } : { timeMs: c.timeMs }
+  }
+  return out
+}
+
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isMazeSize = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v % 2 === 1 && v >= MAZE_MIN_SIZE && v <= MAZE_MAX_SIZE
+
+/** Mazes with an id and a valid size; their cell lists keep only distinct in-grid keys. Duplicate ids keep the first. */
+function normalizeMazes(raw: unknown[]): Maze[] {
+  const seen = new Set<string>()
+  const out: Maze[] = []
+  for (const m of raw) {
+    if (!isRecord(m) || typeof m.id !== 'string' || m.id === '' || seen.has(m.id) || !isMazeSize(m.w) || !isMazeSize(m.h)) continue
+    seen.add(m.id)
+    const dims = { w: m.w, h: m.h }
+    const cellOf = (v: unknown): Cell | null =>
+      isRecord(v) && Number.isInteger(v.cx) && Number.isInteger(v.cz) && inBounds(dims, v as unknown as Cell)
+        ? { cx: v.cx as number, cz: v.cz as number }
+        : null
+    const keys = (v: unknown): string[] => {
+      const valid = arrayOr<unknown>(v, []).filter((k): k is string => {
+        if (typeof k !== 'string' || !/^\d+,\d+$/.test(k)) return false
+        const [cx, cz] = k.split(',').map(Number)
+        return inBounds(dims, { cx, cz }) && cellKey({ cx, cz }) === k
+      })
+      return [...new Set(valid)]
+    }
+    out.push({
+      id: m.id,
+      name: typeof m.name === 'string' ? m.name : '',
+      w: m.w,
+      h: m.h,
+      walls: keys(m.walls),
+      entry: cellOf(m.entry),
+      exit: cellOf(m.exit),
+      coins: keys(m.coins),
+      wallColor: isColor(m.wallColor) ? m.wallColor : DEFAULT_MAZE_WALL_COLOR,
+      ...(isColor(m.floorColor) ? { floorColor: m.floorColor } : {}),
+      createdAt: isFiniteNumber(m.createdAt) ? m.createdAt : 0,
+      updatedAt: isFiniteNumber(m.updatedAt) ? m.updatedAt : 0,
+      ...(typeof m.templateId === 'string' ? { templateId: m.templateId } : {}),
+    })
+  }
+  return out
+}
+
+function normalizeMazeRecords(raw: unknown): Record<string, MazeRecord> {
+  const out: Record<string, MazeRecord> = {}
+  if (!isRecord(raw)) return out
+  for (const [key, r] of Object.entries(raw)) {
+    if (key === '__proto__' || !isRecord(r)) continue
+    const { timeMs, stars, coins } = r
+    if (!isFiniteNumber(timeMs) || timeMs < 0) continue
+    if (stars !== 1 && stars !== 2 && stars !== 3) continue
+    if (typeof coins !== 'number' || !Number.isInteger(coins) || coins < 0) continue
+    out[key] = { timeMs, stars, coins }
   }
   return out
 }

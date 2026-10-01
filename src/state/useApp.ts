@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 
-export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive'
+export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive' | 'maze' | 'mazeDrive'
 export type Lang = 'vi' | 'en'
 export type Difficulty = 'easy' | 'normal'
 export type SlotId = 1 | 2 | 3

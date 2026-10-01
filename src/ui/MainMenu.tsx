@@ -15,6 +15,7 @@ const CARDS: Array<{ mode: PlayMode; labelKey: TKey; icon: string; color: string
   { mode: 'guided', labelKey: 'menuGuided', icon: '📋', color: 'var(--bt-blue)' },
   { mode: 'city', labelKey: 'menuCity', icon: '🏙️', color: 'var(--bt-green)' },
   { mode: 'drive', labelKey: 'menuDrive', icon: '🚗', color: 'var(--bt-orange)' },
+  { mode: 'maze', labelKey: 'menuMaze', icon: '🌀', color: 'var(--bt-purple)' },
 ]
 
 export default function MainMenu() {
@@ -30,7 +31,7 @@ export default function MainMenu() {
   return (
     <div className="bt-screen bt-menu" data-testid="main-menu">
       <h1 className="bt-title">{t('appTitle')}</h1>
-      <div className="bt-cards">
+      <div className="bt-cards bt-menu-cards">
         {CARDS.map((c) => (
           <button
             key={c.mode}
