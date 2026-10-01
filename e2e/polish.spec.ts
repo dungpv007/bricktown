@@ -110,3 +110,32 @@ test('guided picker resumes the build in progress without asking', async ({ page
   await expect(page.getByTestId('confirm-yes')).toBeHidden()
   await expect(page.getByTestId('guided-canvas')).toBeVisible()
 })
+
+test('controls stay inside the safe area (notch, rounded corners, home indicator)', async ({ page }) => {
+  const insets = { top: 20, left: 47, right: 47, bottom: 21 }
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets })
+  await page.goto('/')
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+  const view = page.viewportSize()!
+  const inside = async (testId: string) => {
+    const b = (await page.getByTestId(testId).boundingBox())!
+    expect(b.x, testId).toBeGreaterThanOrEqual(insets.left)
+    expect(b.y, testId).toBeGreaterThanOrEqual(insets.top)
+    expect(b.x + b.width, testId).toBeLessThanOrEqual(view.width - insets.right)
+    expect(b.y + b.height, testId).toBeLessThanOrEqual(view.height - insets.bottom)
+  }
+
+  await page.getByTestId('menu-workshop').click()
+  await expect(page.getByTestId('workshop-canvas')).toBeVisible()
+  for (const id of ['back', 'tool-place', 'new-model', 'undo']) await inside(id)
+  const palette = (await page.locator('.bt-palette').boundingBox())!
+  expect(palette.x).toBeGreaterThanOrEqual(insets.left)
+  expect(palette.y + palette.height).toBeLessThanOrEqual(view.height - insets.bottom)
+  await page.getByTestId('back').click()
+
+  await page.getByTestId('menu-drive').click()
+  await page.getByTestId('veh-tpl:car').click()
+  await expect(page.getByTestId('drive-gas')).toBeVisible()
+  for (const id of ['back', 'drive-joystick', 'drive-gas', 'drive-flip']) await inside(id)
+})

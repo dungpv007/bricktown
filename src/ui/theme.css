@@ -10,6 +10,13 @@
   --bt-radius: 24px;
   --bt-touch: 64px;
   --bt-shadow: 0 6px 0 rgba(0, 0, 0, 0.2);
+  /* Notch / rounded corners / home indicator (index.html sets viewport-fit=cover). 0 elsewhere. */
+  --bt-safe-top: env(safe-area-inset-top, 0px);
+  --bt-safe-right: env(safe-area-inset-right, 0px);
+  --bt-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --bt-safe-left: env(safe-area-inset-left, 0px);
+  /* Shorthand for `inset` / `padding`: the part of the screen nothing important may leave. */
+  --bt-safe-inset: var(--bt-safe-top) var(--bt-safe-right) var(--bt-safe-bottom) var(--bt-safe-left);
 }
 
 .bt-screen {
@@ -49,7 +56,8 @@
   align-items: center;
   justify-content: center;
   gap: 20px;
-  padding: 16px;
+  padding: calc(16px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(16px + var(--bt-safe-bottom))
+    calc(16px + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: auto;
 }
@@ -115,7 +123,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 12px;
+  padding: calc(8px + var(--bt-safe-top)) calc(12px + var(--bt-safe-right)) 8px calc(12px + var(--bt-safe-left));
   pointer-events: none;
 }
 
@@ -148,7 +156,7 @@
   --bt-top: 84px;
   --bt-palette-h: 156px;
   position: absolute;
-  inset: 0;
+  inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
 }
 
@@ -390,7 +398,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: calc(16px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(16px + var(--bt-safe-bottom))
+    calc(16px + var(--bt-safe-left));
   box-sizing: border-box;
   background: rgba(27, 42, 65, 0.6);
 }
@@ -507,7 +516,8 @@
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  padding: 88px 16px 24px;
+  padding: calc(88px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(24px + var(--bt-safe-bottom))
+    calc(16px + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: auto;
 }
@@ -643,7 +653,8 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 24px;
+  padding: calc(24px + var(--bt-safe-top)) calc(24px + var(--bt-safe-right)) calc(24px + var(--bt-safe-bottom))
+    calc(24px + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: hidden;
   pointer-events: none;
@@ -882,7 +893,8 @@ form.bt-dialog,
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: calc(16px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(16px + var(--bt-safe-bottom))
+    calc(16px + var(--bt-safe-left));
   box-sizing: border-box;
   background: rgba(27, 42, 65, 0.6);
 }
@@ -1026,7 +1038,7 @@ form.bt-dialog,
   --bt-top: 84px;
   --bt-palette-h: 150px;
   position: absolute;
-  inset: 0;
+  inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
 }
 
@@ -1141,7 +1153,8 @@ form.bt-dialog,
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  padding: 88px 16px 24px;
+  padding: calc(88px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(24px + var(--bt-safe-bottom))
+    calc(16px + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: auto;
 }
@@ -1210,7 +1223,7 @@ form.bt-dialog,
 .bt-drive-ui {
   --bt-edge: 20px;
   position: absolute;
-  inset: 0;
+  inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
 }
 
