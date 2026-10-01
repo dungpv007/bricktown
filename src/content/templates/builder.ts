@@ -17,7 +17,10 @@ export interface TemplateSpec {
    * bricks follow `autoSteps`. Ignored when `steps` is given.
    */
   openingCount?: number
-  /** Bricks per step after the opening steps (default 4, at most `OPENING_STEP_SIZE`); big builds use more so they need fewer steps. */
+  /**
+   * Bricks per step after the opening steps (default 4, clamped to 1..`OPENING_STEP_SIZE`); big builds
+   * use more so they need fewer steps. Ignored without `openingCount` (and when `steps` is given).
+   */
   stepSize?: number
 }
 
@@ -236,7 +239,7 @@ export function createBuilder(): Builder {
         const all = final.map((_, i) => i)
         const early = all.slice(0, spec.openingCount)
         const rest = all.slice(spec.openingCount)
-        const size = Math.min(spec.stepSize ?? 4, OPENING_STEP_SIZE)
+        const size = Math.max(1, Math.min(spec.stepSize ?? 4, OPENING_STEP_SIZE))
         steps = [...chunkSteps(final, early, OPENING_STEP_SIZE), ...chunkSteps(final, rest, size)]
       }
       return {

@@ -14,8 +14,7 @@ import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
 import PlateEdgeButtons, { PlateEdgeTracker, type EdgeElements } from './PlateEdgeButtons'
 import { safeRect, toNdc } from './safeArea'
-import { fitView, framePoints, projectBounds, rectInside, type NdcRect } from './viewFit'
-import { platesToWorld } from '../../core/units'
+import { VIEW_FOV, defaultView, modelTop, plateCorners, projectBounds, rectInside, workshopFit } from './viewFit'
 import DevStats from '../../ui/DevStats'
 
 export const SKY = '#87ceeb'
@@ -69,16 +68,9 @@ export function Lights({ size, height = 0 }: { size: BaseplateSize; height?: num
   )
 }
 
-const FOV = 45
+const FOV = VIEW_FOV
 /** How long the camera glides to re-fit the plate after a resize. */
 const REFIT_MS = 350
-
-function frameView(size: BaseplateSize): { target: Vec3; position: Vec3 } {
-  const dist = Math.max(size.w, size.d) * 1.5 + 8
-  const target: Vec3 = [size.w / 2, 0, size.d / 2]
-  // Looking from the front-right, a bit above.
-  return { target, position: [target[0] + dist * 0.45, dist * 0.7, target[2] + dist * 0.75] }
-}
 
 const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v[0], v[1], v[2])
@@ -88,28 +80,19 @@ const unit = (v: Vec3): Vec3 => {
 /** Room left around the fitted plate for the edge ➕/➖ buttons (pixels). */
 const FIT_PAD = 72
 
-/** Framing that shows all `points` (the plate and its model) in the HUD-free part of the canvas, looking along `dir`. */
-function fitPlate(points: Vec3[], dir: Vec3, canvas: HTMLElement, width: number, height: number) {
+/** Framing that shows the whole plate (and its model, within limits) in the HUD-free part of the canvas, looking along `dir`. */
+function fitPlate(size: BaseplateSize, model: Bounds | null, dir: Vec3, canvas: HTMLElement, width: number, height: number) {
   const r = safeRect(canvas)
   const pad = Math.max(0, Math.min(FIT_PAD, (r.right - r.left) / 4, (r.bottom - r.top) / 4))
   const safe = toNdc({ left: r.left + pad, top: r.top + pad, right: r.right - pad, bottom: r.bottom - pad }, width, height)
-  return { safe, ...fitView(points, dir, FOV, width / height, safe) }
+  return { safe, ...workshopFit(size, model, dir, width / height, safe) }
 }
-
-/**
- * Without `fit` (Guided), where a tall model must stay clear of the HUD: clear of the top bar and
- * the step card, and of the palette and colours in normal mode (NDC).
- */
-const FIXED_SAFE: NdcRect = { x0: -0.72, x1: 0.68, y0: -0.5, y1: 0.74 }
-
-/** Top of a model in world units (0 without bricks). */
-export const modelTop = (model: Bounds | null): number => (model ? platesToWorld(model.maxY) : 0)
 
 interface Glide { from: { p: Vec3; t: Vec3 }; to: { p: Vec3; t: Vec3 }; start: number }
 
 /**
- * Camera + orbit controls framing the baseplate (and `model`, the bounds of the bricks on it, so a
- * tall build is shown whole) as it was at mount; remount (via `key`) to re-frame.
+ * Camera + orbit controls framing the baseplate as it was at mount; remount (via `key`) to re-frame.
+ * With `fit`, `model` (the bounds of the bricks on it) is framed too, within `workshopFit`'s limits.
  * Each new `shift` moves the camera by that much, following bricks that moved after a resize.
  * With `fit`, the plate is framed inside the part of the screen the HUD leaves free, and after a
  * resize that pushes it out of there the camera glides (same angles) to fit it again.
@@ -130,16 +113,10 @@ export function CameraRig({
   const view = useThree((s) => s.size)
   // Fixed at mount: later size changes must not snap the view back to the plate centre.
   const [{ target, position, safe }] = useState(() => {
-    const frame = frameView(size)
+    const frame = defaultView(size)
+    if (!fit) return { ...frame, safe: null }
     const dir = unit([frame.position[0] - frame.target[0], frame.position[1], frame.position[2] - frame.target[2]])
-    const points = framePoints(size, model)
-    if (fit) return fitPlate(points, dir, canvas, view.width, view.height)
-    if (!model) return { ...frame, safe: null }
-    // The usual framing unless the model pokes out of it (a tower): then back off to show it whole.
-    const aspect = view.width / view.height
-    const shown = projectBounds(points, frame.position, frame.target, FOV, aspect)
-    if (shown && rectInside(shown, FIXED_SAFE)) return { ...frame, safe: null }
-    return { ...fitView(points, dir, FOV, aspect, FIXED_SAFE), safe: null }
+    return fitPlate(size, model, dir, canvas, view.width, view.height)
   })
   const camera = useRef<THREE.PerspectiveCamera>(null)
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
@@ -178,17 +155,16 @@ export function CameraRig({
     if (!cam || !ctl) return
     const p: Vec3 = [cam.position.x, cam.position.y, cam.position.z]
     const t: Vec3 = [ctl.target.x, ctl.target.y, ctl.target.z]
-    const points = framePoints(size, model)
-    const next = fitPlate(points, unit([p[0] - t[0], p[1] - t[1], p[2] - t[2]]), canvas, view.width, view.height)
+    const next = fitPlate(size, model, unit([p[0] - t[0], p[1] - t[1], p[2] - t[2]]), canvas, view.width, view.height)
     let refit: boolean
     if (plateChanged) {
       // The plate grew or shrank: glide only when it no longer fits the free area.
-      const shown = projectBounds(points, p, t, FOV, view.width / view.height)
+      const shown = projectBounds(plateCorners(size), p, t, FOV, view.width / view.height)
       refit = !(shown && rectInside(shown, next.safe, 0.01))
     } else {
       // The window resized or the device rotated: a plate that was fully shown is framed again
       // for the new screen; a close-up the player zoomed into is left alone.
-      const before = projectBounds(points, p, t, FOV, f.width / f.height)
+      const before = projectBounds(plateCorners(size), p, t, FOV, f.width / f.height)
       refit = before !== null && f.safe !== null && rectInside(before, f.safe, 0.01)
     }
     fitted.current = { w: size.w, d: size.d, width: view.width, height: view.height, safe: next.safe }

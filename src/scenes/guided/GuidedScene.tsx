@@ -18,7 +18,9 @@ import { useEditor } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { useGuided } from '../../state/useGuided'
 import Baseplate from '../workshop/Baseplate'
-import { CameraRig, Ground, Lights, SKY, modelTop } from '../workshop/WorkshopScene'
+import { Ground, Lights, SKY } from '../workshop/WorkshopScene'
+import { modelTop } from '../workshop/viewFit'
+import GuidedCamera from './GuidedCamera'
 
 const GLASS_GHOST = '#3fa9f5'
 const STATIC_GHOST_OPACITY = 0.28
@@ -198,13 +200,15 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   const onBaseplatePointer = useCallback((e: ThreeEvent<PointerEvent>) => handlePointer(e, null, null), [handlePointer])
   const onBrickPointer = useCallback((e: ThreeEvent<PointerEvent>, b: Brick) => handlePointer(e, b, null), [handlePointer])
   const normalTaps = interactive && !easy
-  // Framed for the finished model from the first step, so a tower's top is in view all along.
-  const model = useMemo(() => bounds(template.bricks), [template])
+  // The camera frames what is on the plate so far (and backs off as a tall build rises); the sun
+  // is placed for the finished model.
+  const shown = useMemo(() => bounds([...solid, ...ghosts]), [solid, ghosts])
+  const height = useMemo(() => modelTop(bounds(template.bricks)), [template])
 
   return (
     <>
-      <CameraRig key={template.id} size={template.baseplate} model={model} />
-      <Lights size={template.baseplate} height={modelTop(model)} />
+      <GuidedCamera key={template.id} size={template.baseplate} box={shown} />
+      <Lights size={template.baseplate} height={height} />
       <Ground size={template.baseplate} />
       <Baseplate size={template.baseplate} kind={template.kind} onPointer={normalTaps ? onBaseplatePointer : undefined} />
       <InstancedBricks bricks={solid} onBrickPointer={normalTaps ? onBrickPointer : undefined} />

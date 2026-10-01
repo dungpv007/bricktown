@@ -146,7 +146,7 @@ describe('templates', () => {
     }
   })
 
-  it('restaurant: a chef in the kitchen, a waiter, customers at the tables and a menu board', () => {
+  it('restaurant: a chef in the kitchen, a waiter, 2-3 customers at the tables and a menu board', () => {
     const r = getTemplate('restaurant')!
     const style = (print: string) => figures(r).filter((f) => f.fig?.print === print)
     expect(style('chef')).toHaveLength(1)
@@ -156,7 +156,7 @@ describe('templates', () => {
     const tables = r.bricks.filter((b) => b.p === 'table_2x2')
     const customers = figures(r).filter((f) => !['chef', 'apron'].includes(f.fig!.print))
     expect(customers.length).toBeGreaterThanOrEqual(2)
-    expect(customers.length).toBeLessThanOrEqual(4)
+    expect(customers.length).toBeLessThanOrEqual(3)
     // Each customer stands right beside a table.
     for (const c of customers) {
       expect(tables.some((t) => Math.abs(t.x + 1 - (c.x + 0.5)) <= 2.5 && Math.abs(t.z + 1 - (c.z + 0.5)) <= 2.5)).toBe(true)
