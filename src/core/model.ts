@@ -4,7 +4,8 @@ import { getPart } from './parts/catalog'
 import { footprint, nextRot } from './rotation'
 import type { Baseplate, Brick, FigStyle } from './types'
 
-export const MAX_HEIGHT_PLATES = 72
+/** Build height limit: 48 bricks, so towers like the skyscraper template fit. */
+export const MAX_HEIGHT_PLATES = 144
 export const MAX_BRICKS = 1500
 
 export type PlaceError = 'collision' | 'unsupported' | 'out_of_bounds' | 'limit'

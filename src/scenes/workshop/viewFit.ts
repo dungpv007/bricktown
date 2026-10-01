@@ -1,4 +1,6 @@
+import type { Bounds } from '../../core/model'
 import type { Baseplate } from '../../core/types'
+import { platesToWorld } from '../../core/units'
 
 export type Vec3 = [number, number, number]
 
@@ -16,6 +18,22 @@ const normalize = (v: Vec3): Vec3 => {
 /** Top corners of the plate (y = 0). */
 export function plateCorners({ w, d }: Baseplate): Vec3[] {
   return [[0, 0, 0], [w, 0, 0], [w, 0, d], [0, 0, d]]
+}
+
+/** The eight corners of a model's bounding box (bricks units: studs, plates) in world units. */
+export function boxCorners(b: Bounds): Vec3[] {
+  const out: Vec3[] = []
+  for (const x of [b.minX, b.maxX]) {
+    for (const y of [platesToWorld(b.minY), platesToWorld(b.maxY)]) {
+      for (const z of [b.minZ, b.maxZ]) out.push([x, y, z])
+    }
+  }
+  return out
+}
+
+/** What a view must show: the plate, plus the model on it (tall models reach far above the plate). */
+export function framePoints(size: Baseplate, model: Bounds | null): Vec3[] {
+  return model ? [...plateCorners(size), ...boxCorners(model)] : plateCorners(size)
 }
 
 /** Camera basis (right, up, forward) for a camera at `position` looking at `target`, world up = +Y. */

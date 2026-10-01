@@ -36,6 +36,9 @@ describe('canPlace', () => {
     expect(canPlace([], b('a', 0, 0, 6, 'brick_2x4', 1), bp)).toBeNull()
     expect(canPlace([], b('a', 0, 0, 7, 'brick_2x4', 1), bp)).toBe('out_of_bounds')
   })
+  it('allows towers 48 bricks tall', () => {
+    expect(MAX_HEIGHT_PLATES).toBe(144)
+  })
   it('rejects above max height', () => {
     expect(canPlace([], b('a', 0, MAX_HEIGHT_PLATES - 3, 0), bp)).not.toBe('out_of_bounds')
     expect(canPlace([], b('a', 0, MAX_HEIGHT_PLATES - 2, 0), bp)).toBe('out_of_bounds')

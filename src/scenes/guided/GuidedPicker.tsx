@@ -28,6 +28,9 @@ const TAG_ICON: Record<string, string> = {
   'building:police': '👮',
   'building:fire_station': '🧯',
   'building:restaurant': '🍜',
+  'building:tower': '🏙️',
+  'prop:space': '🚀',
+  'prop:robot': '🤖',
 }
 const CARD_COLORS = ['var(--bt-green)', 'var(--bt-orange)', 'var(--bt-blue)', 'var(--bt-red)']
 

@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getTemplate } from '../../content/templates'
 import { COLORS, GLASS_COLOR } from '../../core/colors'
+import { bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
 import { brickBodyGeometry } from '../../core/parts/brickGeometry'
 import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
@@ -17,7 +18,7 @@ import { useEditor } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { useGuided } from '../../state/useGuided'
 import Baseplate from '../workshop/Baseplate'
-import { CameraRig, Ground, Lights, SKY } from '../workshop/WorkshopScene'
+import { CameraRig, Ground, Lights, SKY, modelTop } from '../workshop/WorkshopScene'
 
 const GLASS_GHOST = '#3fa9f5'
 const STATIC_GHOST_OPACITY = 0.28
@@ -197,11 +198,13 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   const onBaseplatePointer = useCallback((e: ThreeEvent<PointerEvent>) => handlePointer(e, null, null), [handlePointer])
   const onBrickPointer = useCallback((e: ThreeEvent<PointerEvent>, b: Brick) => handlePointer(e, b, null), [handlePointer])
   const normalTaps = interactive && !easy
+  // Framed for the finished model from the first step, so a tower's top is in view all along.
+  const model = useMemo(() => bounds(template.bricks), [template])
 
   return (
     <>
-      <CameraRig key={`${template.baseplate.w}x${template.baseplate.d}`} size={template.baseplate} />
-      <Lights size={template.baseplate} />
+      <CameraRig key={template.id} size={template.baseplate} model={model} />
+      <Lights size={template.baseplate} height={modelTop(model)} />
       <Ground size={template.baseplate} />
       <Baseplate size={template.baseplate} kind={template.kind} onPointer={normalTaps ? onBaseplatePointer : undefined} />
       <InstancedBricks bricks={solid} onBrickPointer={normalTaps ? onBrickPointer : undefined} />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitView, plateCorners, projectBounds, rectInside, type NdcRect, type Vec3 } from './viewFit'
+import { boxCorners, fitView, framePoints, plateCorners, projectBounds, rectInside, type NdcRect, type Vec3 } from './viewFit'
 
 const FOV = 45
 const norm = (v: Vec3): Vec3 => {
@@ -12,6 +12,30 @@ const DIR = norm([0.45, 0.7, 0.75])
 describe('plateCorners', () => {
   it('lists the four top corners of the plate', () => {
     expect(plateCorners({ w: 16, d: 8 })).toEqual([[0, 0, 0], [16, 0, 0], [16, 0, 8], [0, 0, 8]])
+  })
+})
+
+describe('framePoints', () => {
+  const tower = { minX: 3, minY: 0, minZ: 3, maxX: 13, maxY: 115, maxZ: 13 }
+  it('lists a model box in world units (plates are 0.4 high)', () => {
+    const corners = boxCorners(tower)
+    expect(corners).toHaveLength(8)
+    expect(corners).toContainEqual([3, 0, 3])
+    expect(corners).toContainEqual([13, 46, 13])
+  })
+  it('is the plate alone without a model, the plate plus the model box with one', () => {
+    expect(framePoints({ w: 16, d: 16 }, null)).toEqual(plateCorners({ w: 16, d: 16 }))
+    expect(framePoints({ w: 16, d: 16 }, tower)).toEqual([...plateCorners({ w: 16, d: 16 }), ...boxCorners(tower)])
+  })
+  it('lets fitView show a whole tower, not just its plate', () => {
+    const safe = { x0: -0.7, y0: -0.6, x1: 0.62, y1: 0.8 }
+    const points = framePoints({ w: 16, d: 16 }, tower)
+    const plateOnly = fitView(plateCorners({ w: 16, d: 16 }), DIR, FOV, 4 / 3, safe)
+    // Framed for the plate alone, the tower's top is off screen (or even behind the camera).
+    const cut = projectBounds(points, plateOnly.position, plateOnly.target, FOV, 4 / 3)
+    expect(cut === null || !rectInside(cut, safe, 1e-3)).toBe(true)
+    const { target, position } = fitView(points, DIR, FOV, 4 / 3, safe)
+    expect(rectInside(projectBounds(points, position, target, FOV, 4 / 3)!, safe, 1e-3)).toBe(true)
   })
 })
 
