@@ -90,7 +90,6 @@ export const vi = {
   cityEdit: 'Sửa trong xưởng',
   drivePick: 'Chọn xe để lái',
   driveNeedsWheels: 'Cần thêm bánh xe',
-  driveLoading: 'Đang chuẩn bị xe...',
   driveGas: 'Chạy',
   driveReverse: 'Lùi',
   driveFlip: 'Lật xe lại',

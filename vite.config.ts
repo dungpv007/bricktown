@@ -31,6 +31,25 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    // three.js (~760 kB) and Rapier (its WASM is inlined as base64, ~2.2 MB) are single vendor chunks by
+    // nature and only load with the scenes that need them; everything else stays far below this.
+    chunkSizeWarningLimit: 2400,
+    rolldownOptions: {
+      output: {
+        // Stable vendor chunks: the engine rarely changes, so it stays cached while app code is updated.
+        codeSplitting: {
+          groups: [
+            { name: 'rapier', test: /node_modules[\\/]@dimforge[\\/]/, priority: 30 },
+            { name: 'three', test: /node_modules[\\/](three|three-stdlib)[\\/]/, priority: 20 },
+            { name: 'r3f', test: /node_modules[\\/]@react-three[\\/]/, priority: 10 },
+          ],
+        },
+      },
+    },
+  },
+  // Drive is lazy: pre-bundle its engine up front so the dev server never re-optimizes (and reloads the page) mid-session.
+  optimizeDeps: { include: ['@react-three/rapier'] },
   server: { host: true },
   test: {
     include: ['src/**/*.test.ts'],

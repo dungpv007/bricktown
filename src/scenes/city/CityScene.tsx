@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { MapControls, PerspectiveCamera, Stats } from '@react-three/drei'
+import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { addRoads, CELL, footprintCells } from '../../core/city'
@@ -12,6 +12,7 @@ import { createGhostMaterial } from '../../render/materials'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useCityEditor, type CityTool } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
+import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT, placementMatrix } from './Placements'
 import Roads from './Roads'
@@ -432,7 +433,7 @@ export default function CityScene() {
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 450, 900]} />
       <CityWorld />
-      {import.meta.env.DEV && <Stats className="bt-stats" />}
+      <DevStats />
     </Canvas>
   )
 }

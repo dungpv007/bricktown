@@ -2,20 +2,22 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
-import GuidedPicker from './scenes/guided/GuidedPicker'
-import GuidedScene from './scenes/guided/GuidedScene'
-import GuidedUI from './scenes/guided/GuidedUI'
-import WorkshopScene from './scenes/workshop/WorkshopScene'
-import WorkshopUI from './scenes/workshop/WorkshopUI'
-import CityScene from './scenes/city/CityScene'
-import CityUI from './scenes/city/CityUI'
-import { DriveLoading } from './scenes/drive/DriveUI'
 import VehiclePicker from './scenes/drive/VehiclePicker'
 import MainMenu from './ui/MainMenu'
+import SceneLoading from './ui/SceneLoading'
 import TopBar from './ui/TopBar'
 import type { TKey } from './ui/i18n'
 
-// Lazy: only Drive mode downloads the physics engine (Rapier WASM).
+// Each mode's 3D scene (and its UI) is its own chunk, so the menu loads fast and the heavy
+// parts download on first use; the service worker precaches them all for offline play.
+// Drive additionally carries the physics engine (Rapier WASM).
+const WorkshopScene = lazy(() => import('./scenes/workshop/WorkshopScene'))
+const WorkshopUI = lazy(() => import('./scenes/workshop/WorkshopUI'))
+const GuidedPicker = lazy(() => import('./scenes/guided/GuidedPicker'))
+const GuidedScene = lazy(() => import('./scenes/guided/GuidedScene'))
+const GuidedUI = lazy(() => import('./scenes/guided/GuidedUI'))
+const CityScene = lazy(() => import('./scenes/city/CityScene'))
+const CityUI = lazy(() => import('./scenes/city/CityUI'))
 const DriveScene = lazy(() => import('./scenes/drive/DriveScene'))
 
 type PlayMode = Exclude<Mode, 'menu'>
@@ -30,8 +32,10 @@ const TITLE_KEYS: Record<PlayMode, TKey> = {
 function Workshop() {
   return (
     <div className="bt-screen" data-testid="mode-workshop">
-      <WorkshopScene />
-      <WorkshopUI />
+      <Suspense fallback={<SceneLoading />}>
+        <WorkshopScene />
+        <WorkshopUI />
+      </Suspense>
     </div>
   )
 }
@@ -49,14 +53,16 @@ function Guided() {
   const showPicker = !celebrating && (browsing || !hasBuild)
   return (
     <div className="bt-screen" data-testid="mode-guided">
-      {showPicker ? (
-        <GuidedPicker onPick={() => setBrowsing(false)} />
-      ) : (
-        <>
-          <GuidedScene />
-          <GuidedUI onBrowse={() => setBrowsing(true)} />
-        </>
-      )}
+      <Suspense fallback={<SceneLoading />}>
+        {showPicker ? (
+          <GuidedPicker onPick={() => setBrowsing(false)} />
+        ) : (
+          <>
+            <GuidedScene />
+            <GuidedUI onBrowse={() => setBrowsing(true)} />
+          </>
+        )}
+      </Suspense>
     </div>
   )
 }
@@ -64,8 +70,10 @@ function Guided() {
 function City() {
   return (
     <div className="bt-screen" data-testid="mode-city">
-      <CityScene />
-      <CityUI />
+      <Suspense fallback={<SceneLoading />}>
+        <CityScene />
+        <CityUI />
+      </Suspense>
     </div>
   )
 }
@@ -79,7 +87,7 @@ function Drive() {
       {source === null ? (
         <VehiclePicker onPick={setSource} />
       ) : (
-        <Suspense fallback={<DriveLoading />}>
+        <Suspense fallback={<SceneLoading />}>
           <DriveScene source={source} onChangeVehicle={pickAgain} />
         </Suspense>
       )}

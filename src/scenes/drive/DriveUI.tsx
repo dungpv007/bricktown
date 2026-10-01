@@ -82,14 +82,3 @@ export default function DriveUI({ onChangeVehicle }: { onChangeVehicle: () => vo
     </div>
   )
 }
-
-/** Shown while the drive scene (and the physics engine) loads. */
-export function DriveLoading() {
-  const t = useT()
-  return (
-    <div className="bt-drive-loading" data-testid="drive-loading" role="status">
-      <span className="bt-drive-loading-car" aria-hidden="true">🚗</span>
-      {t('driveLoading')}
-    </div>
-  )
-}

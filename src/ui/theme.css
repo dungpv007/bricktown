@@ -1200,7 +1200,7 @@ form.bt-dialog,
   white-space: nowrap;
 }
 
-.bt-drive-loading {
+.bt-scene-loading {
   position: absolute;
   inset: 0;
   display: flex;
@@ -1214,13 +1214,13 @@ form.bt-dialog,
   text-shadow: 0 3px 0 var(--bt-blue);
 }
 
-.bt-drive-loading-car {
+.bt-scene-loading-brick {
   font-size: 96px;
   line-height: 1;
-  animation: bt-drive-bounce 0.6s ease-in-out infinite alternate;
+  animation: bt-scene-bounce 0.6s ease-in-out infinite alternate;
 }
 
-@keyframes bt-drive-bounce {
+@keyframes bt-scene-bounce {
   from {
     transform: translate(-24px, 0) rotate(-4deg);
   }

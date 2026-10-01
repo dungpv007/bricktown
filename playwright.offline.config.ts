@@ -1,17 +1,19 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const ORIGIN = 'http://localhost:4173'
+
+// Runs against the production build (service worker + precache), not the dev server.
 export default defineConfig({
   testDir: 'e2e',
-  // Needs a production build: run by `npm run e2e:offline` (playwright.offline.config.ts).
-  testIgnore: 'offline.spec.ts',
+  testMatch: 'offline.spec.ts',
   use: {
-    baseURL: 'http://localhost:5173',
-    // First-launch onboarding is off by default so specs reach the menu; its own spec turns it on.
+    baseURL: ORIGIN,
+    serviceWorkers: 'allow',
     storageState: {
       cookies: [],
       origins: [
         {
-          origin: 'http://localhost:5173',
+          origin: ORIGIN,
           localStorage: [
             { name: 'bricktown-onboarded', value: '1' },
             { name: 'bricktown-install-hint-dismissed', value: '1' },
@@ -21,5 +23,10 @@ export default defineConfig({
     },
   },
   projects: [{ name: 'tablet', use: { ...devices['iPad (gen 7) landscape'], browserName: 'chromium' } }],
-  webServer: { command: 'npm run dev', url: 'http://localhost:5173', reuseExistingServer: true },
+  webServer: {
+    command: 'npm run build && npm run preview -- --port 4173 --strictPort',
+    url: ORIGIN,
+    reuseExistingServer: false,
+    timeout: 120_000,
+  },
 })

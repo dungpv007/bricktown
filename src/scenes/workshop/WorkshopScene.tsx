@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, Stats } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { canPlace } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
@@ -12,6 +12,7 @@ import InstancedBricks from '../../render/InstancedBricks'
 import { useEditor } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
+import DevStats from '../../ui/DevStats'
 
 export const SKY = '#87ceeb'
 const GROUND = '#a9dc9b'
@@ -204,7 +205,7 @@ export default function WorkshopScene() {
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 80, 220]} />
       <WorkshopWorld />
-      {import.meta.env.DEV && <Stats className="bt-stats" />}
+      <DevStats />
     </Canvas>
   )
 }

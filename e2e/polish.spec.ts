@@ -1,10 +1,15 @@
 import { expect, test } from '@playwright/test'
 
-const ORIGIN = 'http://localhost:5173'
-const flags = (...names: string[]) => ({
-  cookies: [],
-  origins: [{ origin: ORIGIN, localStorage: names.map((name) => ({ name, value: '1' })) }],
-})
+/** Starts each test with exactly these localStorage flags set (works on whatever origin the config serves). */
+const useFlags = (...names: string[]) => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  test.beforeEach(({ page }) =>
+    page.addInitScript((flagNames) => {
+      for (const name of flagNames) if (!sessionStorage.getItem('seeded')) localStorage.setItem(name, '1')
+      sessionStorage.setItem('seeded', '1')
+    }, names),
+  )
+}
 
 interface BtWindow {
   __bt: {
@@ -14,7 +19,7 @@ interface BtWindow {
 }
 
 test.describe('first launch', () => {
-  test.use({ storageState: flags('bricktown-install-hint-dismissed') })
+  useFlags('bricktown-install-hint-dismissed')
 
   test('onboarding walks through three cards and does not return', async ({ page }) => {
     await page.goto('/')
@@ -53,7 +58,7 @@ test('mute toggle persists across a reload', async ({ page }) => {
 })
 
 test.describe('install tip', () => {
-  test.use({ storageState: flags('bricktown-onboarded') })
+  useFlags('bricktown-onboarded')
 
   test('shows on iOS in the browser and stays dismissed', async ({ page }) => {
     await page.goto('/')

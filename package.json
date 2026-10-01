@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:offline": "playwright test -c playwright.offline.config.ts",
     "lint": "eslint .",
     "icons": "node scripts/icons.mjs",
     "format": "prettier --write ."
