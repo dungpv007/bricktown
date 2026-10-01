@@ -49,12 +49,22 @@ export default function TopRight({ children }: { children: ReactNode }) {
       check()
     }
     const observer = new ResizeObserver(check)
-    observer.observe(items)
-    for (const n of document.querySelectorAll(LEFT_NEIGHBOURS)) observer.observe(n)
+    const watch = () => {
+      observer.observe(items)
+      for (const n of document.querySelectorAll(LEFT_NEIGHBOURS)) observer.observe(n)
+    }
+    watch()
+    // Left neighbours that mount later (the top bar's save warning, a lazy step counter) count too.
+    const mutation = new MutationObserver(() => {
+      watch()
+      check()
+    })
+    mutation.observe(document.getElementById('root') ?? document.body, { childList: true, subtree: true })
     window.addEventListener('resize', onResize)
     return () => {
       cancelAnimationFrame(frame)
       observer.disconnect()
+      mutation.disconnect()
       window.removeEventListener('resize', onResize)
     }
   }, [])

@@ -3,7 +3,7 @@ import { COLORS, colorMaterialKind, type MaterialKind } from '../core/colors'
 import { colorsCollapsed, useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
-import { currentDeviceClass, useDeviceClass } from './deviceClass'
+import { currentDeviceClass, useDeviceClass } from '../state/deviceClass'
 import { useT } from './i18n'
 
 const KIND_ORDER: MaterialKind[] = ['opaque', 'trans', 'metal']

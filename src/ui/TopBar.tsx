@@ -12,8 +12,9 @@ const TITLE_GAP = 8
 
 /**
  * True while the title would touch one of the screen's top-row controls (narrow phones): it then
- * hides (the back button is enough) instead of being covered. Checked whenever the window, the
- * title or the screen's controls change.
+ * hides (the back button is enough) instead of being covered. A hidden title keeps its place, so
+ * its box (what is measured) is the same either way. Checked whenever the window, the title, the
+ * top bar or the screen's controls change.
  */
 function useTitleSqueezed(title: RefObject<HTMLElement | null>): boolean {
   const [squeezed, setSqueezed] = useState(false)
@@ -32,10 +33,20 @@ function useTitleSqueezed(title: RefObject<HTMLElement | null>): boolean {
         setSqueezed(touches)
       })
     }
+    // The title, the back button beside it and the screen's controls: any of them changing size
+    // (a ✏️ appears, a status grows, a row folds) can make room or take it.
     const resize = new ResizeObserver(check)
-    resize.observe(el)
-    // The screen's controls mount later (lazy scenes) and change (a ✏️ appears, a status grows).
-    const mutation = new MutationObserver(check)
+    const watch = () => {
+      resize.observe(el)
+      if (el.parentElement) resize.observe(el.parentElement)
+      for (const n of document.querySelectorAll(TITLE_NEIGHBOURS)) resize.observe(n)
+    }
+    watch()
+    // The screen's controls mount later (lazy scenes): watch them as they come.
+    const mutation = new MutationObserver(() => {
+      watch()
+      check()
+    })
     mutation.observe(document.getElementById('root') ?? document.body, { childList: true, subtree: true })
     window.addEventListener('resize', check)
     return () => {

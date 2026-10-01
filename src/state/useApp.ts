@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
-import { DEVICE_CLASSES, type DeviceClass } from '../ui/deviceClass'
+import { DEVICE_CLASSES, type DeviceClass } from './deviceClass'
 
 export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive' | 'maze' | 'mazeDrive'
 export type Lang = 'vi' | 'en'

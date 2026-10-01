@@ -71,6 +71,9 @@ async function hudProblems(page: Page): Promise<{ overlaps: string[]; offscreen:
         if (ix > 1 && iy > 1) overlaps.push(`${a.name} × ${b.name}`)
       }
     }
+    // A hidden title must be one TopBar hid on purpose (no room), not one lost some other way.
+    const title = document.querySelector('[data-testid="mode-title"]')
+    if (title && !visible(title) && title.getAttribute('data-squeezed') !== 'true') overlaps.push('mode-title hidden but not squeezed')
     const offscreen = boxes
       .filter((b: Box) => b.x < -1 || b.y < -1 || b.x + b.w > innerWidth + 1 || b.y + b.h > innerHeight + 1)
       .map((b) => b.name)
@@ -78,12 +81,27 @@ async function hudProblems(page: Page): Promise<{ overlaps: string[]; offscreen:
   })
 }
 
+/** Samples taken per check; a layout that flips between frames fails at least one of them. */
+const SAMPLES = 6
+
+/**
+ * The HUD is tidy now and stays tidy: several samples a few frames apart (with a window resize
+ * event in the middle, which makes the measuring components look again) must all be clean.
+ * Lazy screens, folding and measuring may take a moment to settle first.
+ */
 async function expectTidy(page: Page, screen: string) {
-  // Lazy screens, folding and measuring settle over a few frames.
-  await expect.poll(() => hudProblems(page), { message: `${screen}: HUD overlaps or leaves the screen` }).toEqual({
-    overlaps: [],
-    offscreen: [],
-  })
+  const samples = async () => {
+    const seen: string[] = []
+    for (let i = 0; i < SAMPLES; i++) {
+      if (i === SAMPLES / 2) await page.evaluate(() => window.dispatchEvent(new Event('resize')))
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+      await page.waitForTimeout(60)
+      const { overlaps, offscreen } = await hudProblems(page)
+      seen.push(...overlaps, ...offscreen.map((n) => `${n} off screen`))
+    }
+    return [...new Set(seen)]
+  }
+  await expect.poll(samples, { message: `${screen}: HUD overlaps or leaves the screen`, timeout: 20_000 }).toEqual([])
 }
 
 const devHandle = (page: Page) => page.waitForFunction(() => (window as unknown as { __bt?: unknown }).__bt !== undefined)

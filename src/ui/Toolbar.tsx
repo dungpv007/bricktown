@@ -1,5 +1,5 @@
 import { useEditor } from '../state/useEditor'
-import { useDeviceClass } from './deviceClass'
+import { useDeviceClass } from '../state/deviceClass'
 import { useT, type TKey } from './i18n'
 
 type Action = 'rotate' | 'recolor' | 'duplicate' | 'delete' | 'deselect'

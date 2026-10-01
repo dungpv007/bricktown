@@ -167,9 +167,11 @@
   white-space: nowrap;
 }
 
-/* No room beside the screen's own top-right controls (TopBar measures): hidden, still measurable. */
+/*
+ * No room beside the screen's own top-right controls (TopBar measures): hidden but kept in place,
+ * so the next measurement sees the same box and the answer does not flip back and forth.
+ */
 .bt-topbar-title[data-squeezed='true'] {
-  position: absolute;
   visibility: hidden;
   pointer-events: none;
 }
@@ -343,7 +345,7 @@
 }
 
 .bt-colors-caret {
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
   line-height: 1;
 }
 
@@ -358,7 +360,7 @@
   border-radius: 50%;
   background: var(--bt-yellow);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
-  font-size: calc(14px * var(--bt-s));
+  font-size: max(12px, calc(14px * var(--bt-s)));
 }
 
 /* Workshop palette parts drag up onto the view; sideways still scrolls the row. */
@@ -508,7 +510,7 @@
   min-width: calc(72px * var(--bt-s));
   height: var(--bt-touch);
   padding: 0 calc(6px * var(--bt-s));
-  font-size: max(11px, calc(13px * var(--bt-s)));
+  font-size: max(12px, calc(13px * var(--bt-s)));
 }
 
 .bt-part-btn svg {
@@ -735,7 +737,7 @@
 }
 
 .bt-card-size {
-  font-size: calc(16px * var(--bt-s));
+  font-size: max(12px, calc(16px * var(--bt-s)));
   opacity: 0.85;
 }
 
@@ -890,7 +892,7 @@
 }
 
 .bt-tpl-stars {
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
   letter-spacing: 2px;
 }
 
@@ -970,7 +972,7 @@
 }
 
 .bt-needed-title {
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
   font-weight: 800;
   text-align: center;
 }
@@ -1168,7 +1170,7 @@ form.bt-dialog,
   gap: calc(6px * var(--bt-s));
   width: 100%;
   padding: calc(8px * var(--bt-s));
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
 }
 
 .bt-thumb,
@@ -1230,7 +1232,7 @@ form.bt-dialog,
   border-radius: var(--bt-radius);
   background: var(--bt-yellow);
   color: var(--bt-ink);
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
   font-weight: 800;
   box-shadow: var(--bt-shadow);
 }
@@ -1458,7 +1460,7 @@ form.bt-dialog,
   justify-content: center;
   gap: calc(2px * var(--bt-s));
   padding: 0 calc(12px * var(--bt-s));
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
 }
 
 .bt-city-drawer-toggle > span:first-child {
@@ -1493,7 +1495,7 @@ form.bt-dialog,
   gap: 2px;
   width: calc(112px * var(--bt-s));
   padding: calc(4px * var(--bt-s));
-  font-size: max(11px, calc(13px * var(--bt-s)));
+  font-size: max(12px, calc(13px * var(--bt-s)));
 }
 
 .bt-source-thumb {
@@ -1873,7 +1875,7 @@ form.bt-dialog,
   padding: calc(2px * var(--bt-s)) calc(10px * var(--bt-s));
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.28);
-  font-size: calc(16px * var(--bt-s));
+  font-size: max(12px, calc(16px * var(--bt-s)));
   font-weight: 800;
 }
 
@@ -2001,7 +2003,7 @@ form.bt-dialog,
 }
 
 .bt-maze-status-text {
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
 }
 
 .bt-maze-side {
@@ -2208,7 +2210,7 @@ form.bt-dialog,
   gap: calc(8px * var(--bt-s));
   padding: calc(6px * var(--bt-s)) calc(12px * var(--bt-s));
   background: var(--bt-yellow);
-  font-size: calc(18px * var(--bt-s));
+  font-size: max(12px, calc(18px * var(--bt-s)));
   text-align: left;
 }
 

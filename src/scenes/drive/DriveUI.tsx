@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import VirtualJoystick from '../../input/VirtualJoystick'
 import { DRIVE_KEYS, releaseOnInterruption, useDriveInput, type Pedal } from '../../state/useDriveInput'
 import { useDriveStatus } from '../../state/useDriveStatus'
-import { useDeviceClass } from '../../ui/deviceClass'
+import { useDeviceClass } from '../../state/deviceClass'
 import { useT, type TKey } from '../../ui/i18n'
 
 interface ButtonProps {
