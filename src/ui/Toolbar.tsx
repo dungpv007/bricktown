@@ -1,12 +1,13 @@
 import { useEditor } from '../state/useEditor'
 import { useT, type TKey } from './i18n'
 
-type Action = 'rotate' | 'duplicate' | 'delete' | 'deselect'
+type Action = 'rotate' | 'recolor' | 'duplicate' | 'delete' | 'deselect'
 
 const ACTIONS: Array<{ action: Action; icon: string; labelKey: TKey }> = [
-  { action: 'rotate', icon: '↻', labelKey: 'toolRotate' },
+  { action: 'rotate', icon: '↻', labelKey: 'actRotate' },
+  { action: 'recolor', icon: '🎨', labelKey: 'actRecolor' },
   { action: 'duplicate', icon: '📋', labelKey: 'actDuplicate' },
-  { action: 'delete', icon: '🗑️', labelKey: 'toolDelete' },
+  { action: 'delete', icon: '🗑️', labelKey: 'actDelete' },
   { action: 'deselect', icon: '✕', labelKey: 'actDeselect' },
 ]
 
@@ -14,13 +15,14 @@ const run = (action: Action) => {
   const ed = useEditor.getState()
   switch (action) {
     case 'rotate': return ed.rotateSelected()
+    case 'recolor': return ed.hintColors() // the swatches do the recolouring
     case 'duplicate': return ed.duplicateSelected()
     case 'delete': return ed.deleteSelected()
     case 'deselect': return ed.deselect()
   }
 }
 
-/** What can be done to the selected brick; shown only while a brick is selected. Recolour = a colour swatch. */
+/** What can be done to the selected brick; shown only while a brick is selected. 🎨 points at the colour swatches. */
 function ActionBar() {
   const t = useT()
   return (

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { PickHit } from '../../core/pick'
 import type { Brick } from '../../core/types'
 import { gestureIntent, type GestureFacts, type GestureStart } from '../../input/gestureIntent'
+import { setDragActive } from '../../input/dragActivity'
 import { createGestureTracker, sampleOf, TAP_MAX_PX } from '../../input/tapGesture'
 
 export interface WorkshopGestureHandlers {
@@ -30,13 +31,17 @@ interface Gesture {
   y0: number
   pointers: number
   primary: boolean
+  /** The pointer has been TAP_MAX_PX or more from where it went down. */
+  moved: boolean
   dragging: boolean
 }
 
 /**
  * The workshop's canvas gestures (see `gestureIntent`): a tap selects a brick, quick-places on the
  * empty plate or deselects on the sky; one finger dragging from a brick moves it while the camera
- * stays still; any other one-finger drag orbits and two fingers pinch / pan (OrbitControls). The
+ * stays still (a long still press on a brick selects it, like a tap); any other one-finger drag
+ * orbits and two fingers pinch / pan (OrbitControls). Leaving the app or losing the pointer
+ * cancels a brick drag (the brick stays where it was). The
  * scene is picked with its own raycast at pointerdown, so every decision is made here, before or
  * regardless of R3F's own pointer events.
  */
@@ -49,12 +54,19 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
   useEffect(() => {
     const tracker = createGestureTracker()
     let g: Gesture | null = null
-    const facts = (gesture: Gesture, moved: boolean, tap: boolean): GestureFacts => ({
-      start: gesture.start, pointers: gesture.pointers, primary: gesture.primary, moved, tap,
+    const facts = (gesture: Gesture, ended: boolean, tap = false): GestureFacts => ({
+      start: gesture.start, pointers: gesture.pointers, primary: gesture.primary, moved: gesture.moved, tap, ended,
     })
-    /** Ends the current gesture's brick drag (if any) and gives the camera back. */
+    /** Ends the current gesture's brick drag (drops or cancels it), if it has one. */
+    const endDrag = (drop: boolean) => {
+      if (!g?.dragging) return
+      g.dragging = false
+      setDragActive('brick', false)
+      h.current.dragEnd(drop)
+    }
+    /** Ends the current gesture and gives the camera back. */
     const finish = (drop: boolean) => {
-      if (g?.dragging) h.current.dragEnd(drop)
+      endDrag(drop)
       g = null
       h.current.setOrbit(true)
     }
@@ -64,8 +76,7 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
         // A second finger: pinch / pan the camera, whatever the first finger was doing.
         if (g) {
           g.pointers++
-          if (g.dragging) h.current.dragEnd(false)
-          g.dragging = false
+          endDrag(false)
         }
         h.current.setOrbit(true)
         return
@@ -81,10 +92,11 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
         y0: e.clientY,
         pointers: 1,
         primary: e.button === 0,
+        moved: false,
         dragging: false,
       }
       // Pressing a brick may become a move: the camera must not turn under the finger.
-      h.current.setOrbit(gestureIntent(facts(g, false, false)) !== 'hold-brick')
+      h.current.setOrbit(gestureIntent(facts(g, false)) !== 'hold-brick')
     }
 
     const onMove = (e: PointerEvent) => {
@@ -93,10 +105,11 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
         return
       }
       if (e.pointerId !== g.pointerId) return
-      const moved = Math.hypot(e.clientX - g.x0, e.clientY - g.y0) >= TAP_MAX_PX
+      if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) >= TAP_MAX_PX) g.moved = true
       const brick = g.hit?.brick
-      if (!g.dragging && brick && gestureIntent(facts(g, moved, false)) === 'drag-brick') {
+      if (!g.dragging && brick && gestureIntent(facts(g, false)) === 'drag-brick') {
         g.dragging = true
+        setDragActive('brick', true)
         h.current.dragStart(brick)
       }
       if (g.dragging && brick) h.current.dragMove(h.current.pick(e.clientX, e.clientY, brick.id))
@@ -105,6 +118,7 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
     const onUp = (e: PointerEvent) => {
       const end = tracker.up(sampleOf(e))
       if (!g || e.pointerId !== g.pointerId) return
+      if (Math.hypot(e.clientX - g.x0, e.clientY - g.y0) >= TAP_MAX_PX) g.moved = true
       if (g.dragging) {
         const brick = g.hit?.brick
         if (brick) h.current.dragMove(h.current.pick(e.clientX, e.clientY, brick.id))
@@ -112,7 +126,7 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
         return
       }
       const { hit } = g
-      const intent = gestureIntent(facts(g, false, end.tap))
+      const intent = gestureIntent(facts(g, true, end.tap))
       finish(false)
       if (intent === 'tap-select' && hit?.brick) h.current.tapBrick(hit.brick)
       else if (intent === 'tap-place' && hit) h.current.tapPlate(hit)
@@ -128,6 +142,19 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
       if (e.pointerType === 'mouse') h.current.hover(null)
     }
 
+    // The app lost focus or was hidden, or the pointer was taken away: no release will come.
+    const abandon = () => {
+      if (!g) return
+      tracker.cancel(g.pointerId)
+      finish(false)
+    }
+    const onLostCapture = (e: PointerEvent) => {
+      if (g && e.pointerId === g.pointerId) abandon()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') abandon()
+    }
+
     // pointerdown on the canvas itself (presses on HUD buttons never start a gesture); moves and
     // releases on window, which also sees them outside the canvas (over the HUD).
     el.addEventListener('pointerdown', onDown)
@@ -135,14 +162,19 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp, true)
     window.addEventListener('pointercancel', onCancel, true)
+    el.addEventListener('lostpointercapture', onLostCapture)
+    window.addEventListener('blur', abandon)
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
+      el.removeEventListener('lostpointercapture', onLostCapture)
+      window.removeEventListener('blur', abandon)
+      document.removeEventListener('visibilitychange', onVisibility)
       el.removeEventListener('pointerdown', onDown)
       el.removeEventListener('pointerleave', onLeave)
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp, true)
       window.removeEventListener('pointercancel', onCancel, true)
-      if (g?.dragging) h.current.dragEnd(false)
-      h.current.setOrbit(true)
+      finish(false)
     }
   }, [el])
 }

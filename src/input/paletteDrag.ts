@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { setDragActive } from './dragActivity'
 import { TAP_MAX_PX } from './tapGesture'
 
 export interface ClientPoint { x: number; y: number }
@@ -26,7 +27,8 @@ export function registerPaletteDropTarget(t: PaletteDropTarget): () => void {
  * e.g. in Guided Build, the button only clicks). The button captures the pointer and the moves /
  * release are followed on the document, so touch drags work too. `begin` runs once the press has
  * moved far enough to be a drag (it makes the button's part the current one); a press that does
- * not move stays a normal click.
+ * not move stays a normal click. Losing the pointer (pointercancel, lost capture), the window
+ * losing focus or the page being hidden cancels the drag.
  */
 export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLElement>) => void {
   const beginRef = useRef(begin)
@@ -42,8 +44,9 @@ export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLEle
     const id = e.pointerId
     const x0 = e.clientX
     const y0 = e.clientY
+    const button = e.currentTarget
     try {
-      e.currentTarget.setPointerCapture(id)
+      button.setPointerCapture(id)
     } catch {
       /* the pointer is already gone */
     }
@@ -52,6 +55,7 @@ export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLEle
       if (ev.pointerId !== id) return
       if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) >= TAP_MAX_PX) {
         dragging = true
+        setDragActive('palette', true)
         beginRef.current()
       }
       if (dragging) target?.hover({ x: ev.clientX, y: ev.clientY })
@@ -61,23 +65,33 @@ export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLEle
       cleanup()
       if (dragging) target?.drop({ x: ev.clientX, y: ev.clientY })
     }
-    const onCancel = (ev: PointerEvent) => {
-      if (ev.pointerId !== id) return
+    const cancel = () => {
       cleanup()
       if (dragging) target?.hover(null)
+    }
+    const onCancel = (ev: PointerEvent) => {
+      if (ev.pointerId === id) cancel()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') cancel()
     }
     const cleanup = () => {
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       document.removeEventListener('pointercancel', onCancel)
+      button.removeEventListener('lostpointercapture', onCancel)
+      window.removeEventListener('blur', cancel)
+      document.removeEventListener('visibilitychange', onVisibility)
+      setDragActive('palette', false)
       stop.current = null
     }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
     document.addEventListener('pointercancel', onCancel)
-    stop.current = () => {
-      cleanup()
-      if (dragging) target?.hover(null)
-    }
+    // Fires after pointerup too, but by then the release has already cleaned up.
+    button.addEventListener('lostpointercapture', onCancel)
+    window.addEventListener('blur', cancel)
+    document.addEventListener('visibilitychange', onVisibility)
+    stop.current = cancel
   }, [])
 }

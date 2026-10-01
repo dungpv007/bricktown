@@ -154,13 +154,19 @@ describe('useEditor selection', () => {
     expect(bricks()).toHaveLength(1)
   })
 
-  it('paintSelected recolours the selected brick (undoable) and leaves the colour for new bricks', () => {
+  it('paintSelected recolours the selected brick (undoable) and makes it the colour for new bricks', () => {
     ed().select(id)
     ed().paintSelected(9)
     expect(bricks()[0].c).toBe(9)
-    expect(ed().color).toBe(5)
+    expect(ed().color).toBe(9)
     ed().undo()
     expect(bricks()[0].c).toBe(5)
+  })
+
+  it('hintColors asks the colour column to draw attention to itself', () => {
+    const seq = ed().colorHintSeq
+    ed().hintColors()
+    expect(ed().colorHintSeq).toBe(seq + 1)
   })
 
   it('painting a brick with its own colour changes nothing and leaves no undo step', () => {

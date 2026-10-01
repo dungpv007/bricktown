@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { gestureIntent, type GestureFacts } from './gestureIntent'
 
 const facts = (f: Partial<GestureFacts>): GestureFacts => ({
-  start: 'plate', pointers: 1, primary: true, moved: false, tap: false, ...f,
+  start: 'plate', pointers: 1, primary: true, moved: false, tap: false, ended: false, ...f,
 })
 
 describe('gestureIntent', () => {
@@ -21,6 +21,16 @@ describe('gestureIntent', () => {
   it('a press held still on a brick does nothing yet (the camera must not turn either)', () => {
     expect(gestureIntent(facts({ start: 'brick' }))).toBe('hold-brick')
     expect(gestureIntent(facts({ start: 'plate' }))).toBe('orbit')
+  })
+
+  it('a long still press on a brick selects it when released (young kids press long)', () => {
+    expect(gestureIntent(facts({ start: 'brick', ended: true }))).toBe('tap-select')
+    // ...but not after it moved (that was a drag), nor on the plate / sky (no quick-place, no deselect).
+    expect(gestureIntent(facts({ start: 'brick', ended: true, moved: true }))).toBe('drag-brick')
+    expect(gestureIntent(facts({ start: 'plate', ended: true }))).toBe('orbit')
+    expect(gestureIntent(facts({ start: 'sky', ended: true }))).toBe('orbit')
+    expect(gestureIntent(facts({ start: 'brick', ended: true, pointers: 2 }))).toBe('pinch')
+    expect(gestureIntent(facts({ start: 'brick', ended: true, primary: false }))).toBe('orbit')
   })
 
   it('a second finger always means pinch / pan, even from a brick', () => {

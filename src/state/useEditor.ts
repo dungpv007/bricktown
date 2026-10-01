@@ -37,6 +37,8 @@ export interface EditorState {
   errorSeq: number
   /** The brick the action bar (rotate, recolour, delete, duplicate) works on. */
   selectedId: string | null
+  /** Incremented by `hintColors`: the colour column pulses to show where recolouring happens. */
+  colorHintSeq: number
   canUndo: boolean
   canRedo: boolean
   viewShift: ViewShift
@@ -63,8 +65,13 @@ export interface EditorState {
   deleteSelected: () => void
   /** Copies the selected brick to the first free spot (see `duplicateSpot`) and selects the copy. */
   duplicateSelected: () => void
-  /** Recolours the selected brick; a figure gets the colour on its torso and opens the figure editor. */
+  /**
+   * Recolours the selected brick (a figure: its torso, and the figure editor opens) and makes
+   * `color` the colour for new bricks too, so the pressed swatch stays true after deselecting.
+   */
   paintSelected: (color: number) => void
+  /** Points the player at the colour column (the action bar's recolour button). */
+  hintColors: () => void
   /** Moves brick `id` to `to` as one undo step and selects it (rejected when it does not fit there). */
   moveBrick: (id: string, to: Spot) => void
   /** Grows or shrinks the baseplate by one step on `side` (undoable). */
@@ -155,6 +162,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     lastError: null,
     errorSeq: 0,
     selectedId: null,
+    colorHintSeq: 0,
     canUndo: false,
     canRedo: false,
     viewShift: { seq: 0, dx: 0, dz: 0 },
@@ -218,6 +226,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     paintSelected: (color) => {
       const target = selected()
       if (!target) return
+      set({ color })
       const bricks = workshop().bricks
       if (isFigure(target)) {
         // Painting a figure recolours its torso, then shows it in the figure editor for more.
@@ -228,6 +237,8 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (target.c === color) return // already this colour: nothing to undo
       commit(bricks, { bricks: paintBrick(bricks, target.id, color), error: null }, sfx.paint)
     },
+
+    hintColors: () => set((s) => ({ colorHintSeq: s.colorHintSeq + 1 })),
 
     moveBrick: (id, to) => {
       const { bricks, baseplate } = workshop()

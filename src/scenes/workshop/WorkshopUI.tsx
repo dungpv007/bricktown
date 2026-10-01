@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { isResizeError } from '../../core/baseplate'
 import type { Baseplate, Blueprint, BlueprintKind } from '../../core/types'
+import { isDragActive } from '../../input/dragActivity'
 import { useEditor, useWorkshopHasBricks, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import BlueprintLibrary from '../../ui/BlueprintLibrary'
@@ -102,7 +103,8 @@ function useSelectionKeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Not while typing, nor behind an open dialog (the library, the figure editor...).
-      if (typingIn(e.target) || e.altKey || document.querySelector('[role="dialog"]')) return
+      // Nor mid-drag: deleting or turning the brick under the finger would surprise.
+      if (typingIn(e.target) || e.altKey || isDragActive() || document.querySelector('[role="dialog"]')) return
       const ed = useEditor.getState()
       if (ed.selectedId === null) return
       const mod = e.ctrlKey || e.metaKey

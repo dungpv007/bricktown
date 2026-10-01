@@ -241,6 +241,20 @@
   .bt-actionbar { animation: none; }
 }
 
+/* The action bar's 🎨 points here: the colour column pulses for a moment. */
+.bt-colors.bt-colors-hint {
+  animation: bt-colors-hint 0.4s ease-in-out 4 alternate;
+}
+
+@keyframes bt-colors-hint {
+  from { box-shadow: 0 0 0 0 rgba(255, 213, 0, 0); }
+  to { box-shadow: 0 0 0 8px var(--bt-yellow); transform: scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-colors.bt-colors-hint { animation: none; outline: 6px solid var(--bt-yellow); }
+}
+
 /* Workshop palette parts drag up onto the view; sideways still scrolls the row. */
 .bt-part-drag {
   touch-action: pan-x;

@@ -144,12 +144,15 @@ test('workshop: tap a brick to select it, then rotate, duplicate, recolour, dele
   expect(copy).toMatchObject({ p: 'brick_2x4', x: 6, y: 3, z: 6, r: 1 }) // on top of the original
   expect(await selectedId(page)).toBe(copy.id)
 
-  // With a selection, a colour swatch recolours the selected brick (not the colour for new bricks).
-  const newColour = await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().color)
+  // 🎨 points at the colour column; a swatch then recolours the selected brick and becomes the
+  // colour for new bricks too.
+  await page.getByTestId('act-recolor').tap()
+  await expect(page.locator('.bt-colors')).toHaveClass(/bt-colors-hint/)
   await page.getByTestId('color-1').tap()
   await expect.poll(async () => (await bricks(page))[1].c).toBe(1)
   expect((await bricks(page))[0].c).toBe(brick.c)
-  expect(await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().color)).toBe(newColour)
+  expect(await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().color)).toBe(1)
+  await expect(page.getByTestId('color-1')).toHaveAttribute('aria-pressed', 'true')
 
   await page.getByTestId('act-delete').tap()
   await expect.poll(() => brickCount(page)).toBe(1)
@@ -167,6 +170,46 @@ test('workshop: tap a brick to select it, then rotate, duplicate, recolour, dele
   await expect(page.getByTestId('action-bar')).toHaveCount(0)
   expect(await brickCount(page)).toBe(1)
   expect(errors).toEqual([])
+})
+
+test('workshop: a long still press on a brick selects it', async ({ page }) => {
+  await openWorkshop(page)
+  await placeAt(page, 6, 0, 6)
+  const at = await screenOf(page, top2x4(6, 6))
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...at, id: 1 }] })
+  await page.waitForTimeout(700)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+  await expect(page.getByTestId('action-bar')).toBeVisible()
+  expect(await selectedId(page)).toBe((await bricks(page))[0].id)
+  expect(await bricks(page)).toMatchObject([{ x: 6, y: 0, z: 6 }])
+})
+
+test('workshop: the selected brick stands out in the middle of a wall', async ({ page }) => {
+  await openWorkshop(page)
+  // A wall 4 bricks wide and 3 high: 2x4s turned to lie along X (4 studs), front face at z = 8.
+  await page.evaluate(() => {
+    const bt = (window as unknown as BtWindow).__bt
+    ;(bt.useEditor as unknown as { setState(s: { rot: number }): void }).setState({ rot: 1 })
+    const ed = bt.useEditor.getState()
+    ed.setPart('brick_2x4')
+    for (let y = 0; y < 9; y += 3) for (let x = 0; x < 16; x += 4) ed.place(x, y, 6)
+    ed.deselect()
+  })
+  expect(await brickCount(page)).toBe(12)
+  // Tap the front face of the second brick of the middle row.
+  const at = await screenOf(page, [6, 1.8, 8.01])
+  await page.touchscreen.tap(at.x, at.y)
+  await expect(page.getByTestId('action-bar')).toBeVisible()
+  const picked = await page.evaluate(() => {
+    const bt = (window as unknown as BtWindow).__bt
+    const id = bt.useEditor.getState().selectedId
+    return bt.useGame.getState().data.workshop.bricks.find((b) => b.id === id) ?? null
+  })
+  expect(picked).toMatchObject({ x: 4, y: 3, z: 6 })
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: 'test-results/w1-selected-wall.png' })
 })
 
 test('workshop: keyboard acts on the selected brick', async ({ page }) => {
@@ -240,6 +283,34 @@ test('workshop: a mid-drag ghost follows the finger while the brick stays in the
   await expect.poll(async () => (await bricks(page))[0]).toMatchObject({ x: 10, z: 9 })
 })
 
+test('workshop: a second finger during a brick drag cancels the move and pinches the camera', async ({ page }) => {
+  await openWorkshop(page)
+  await placeAt(page, 2, 0, 2)
+  const bounds = await plateBounds(page)
+  const from = await screenOf(page, top2x4(2, 2))
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<{ x: number; y: number; id: number }>) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points })
+  await touch('touchStart', [{ ...from, id: 1 }])
+  for (let i = 1; i <= 5; i++) {
+    await touch('touchMove', [{ x: from.x + 20 * i, y: from.y + 10 * i, id: 1 }])
+    await page.waitForTimeout(16)
+  }
+  const a = { x: from.x + 100, y: from.y + 50, id: 1 }
+  const b = { x: from.x + 200, y: from.y + 50, id: 2 }
+  await touch('touchStart', [a, b])
+  for (let i = 1; i <= 6; i++) {
+    await touch('touchMove', [{ ...a, x: a.x - 20 * i }, { ...b, x: b.x + 20 * i }])
+    await page.waitForTimeout(16)
+  }
+  await touch('touchEnd', [])
+  await cdp.detach()
+  await page.waitForTimeout(400)
+  expect(await bricks(page)).toMatchObject([{ x: 2, y: 0, z: 2 }])
+  await expect(page.getByTestId('place-error')).toHaveCount(0)
+  expect(await plateBounds(page)).not.toEqual(bounds)
+})
+
 test('workshop: an invalid drop keeps the brick where it was', async ({ page }) => {
   await openWorkshop(page)
   await placeAt(page, 2, 0, 2)
@@ -306,6 +377,29 @@ test('workshop: a palette drag released over the palette or the sky places nothi
   await page.waitForTimeout(300)
   expect(await brickCount(page)).toBe(0)
   await expect(page.getByTestId('place-error')).toHaveCount(0)
+})
+
+test('workshop: a palette drag cancelled by the system (pointercancel) places nothing', async ({ page }) => {
+  await openWorkshop(page)
+  const button = await page.getByTestId('part-brick_2x2').boundingBox()
+  if (!button) throw new Error('no part button')
+  const from = { x: button.x + button.width / 2, y: button.y + button.height / 2 }
+  const to = await screenOf(page, [8.5, 0, 8.5])
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchCancel', points: Array<{ x: number; y: number }>) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p) => ({ ...p, id: 1 })) })
+  await touch('touchStart', [from])
+  for (let i = 1; i <= 10; i++) {
+    await touch('touchMove', [{ x: from.x + ((to.x - from.x) * i) / 10, y: from.y + ((to.y - from.y) * i) / 10 }])
+    await page.waitForTimeout(16)
+  }
+  await touch('touchCancel', [])
+  await cdp.detach()
+  await page.waitForTimeout(300)
+  expect(await brickCount(page)).toBe(0)
+  // Nothing is left half-dragged: a tap on the plate still quick-places.
+  await page.touchscreen.tap(to.x, to.y)
+  await expect.poll(() => brickCount(page)).toBe(1)
 })
 
 test('workshop: new model asks before wiping a build', async ({ page }) => {
