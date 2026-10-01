@@ -11,13 +11,21 @@ import { currentMaze, useMazeEditor, useShownMaze, type MazeTool } from '../../s
 import DevStats from '../../ui/DevStats'
 import MazeModel, { cellCenter } from './MazeModel'
 import { mazeScreen } from './mazeScreen'
-import { frameMaze, safeRect, WALL_HEIGHT } from './mazeView'
+import { hudFreeRect, toNdc, type HudEdges } from '../workshop/safeArea'
+import { frameMaze, WALL_HEIGHT } from './mazeView'
 
 const SKY = '#87ceeb'
 const SHADOW_MAP_SIZE = 2048
 const FOV = 45
-/** Screen margins (px) the HUD covers: tool column, side column, top bar, name chip. */
-export const MAZE_HUD_MARGINS = { left: 100, right: 100, top: 88, bottom: 84 }
+/** The maze editor's HUD panels, by the screen edge they cover (see `hudFreeRect`). */
+const MAZE_HUD: HudEdges = {
+  left: ['.bt-maze-tools'],
+  right: ['.bt-maze-side'],
+  top: ['.bt-topbar-title', '.bt-topright'],
+  bottom: ['.bt-maze-name'],
+}
+/** Seconds after a size change during which the HUD is measured again every frame. */
+const HUD_SETTLE_S = 1.5
 
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 const TOP_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), -WALL_HEIGHT)
@@ -76,16 +84,28 @@ const PAINT_MOUSE = { MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
 /** Tilted top-down camera that frames the whole maze (again whenever its size changes), kept over it. */
 function CameraRig({ w, h, tool }: { w: number; h: number; tool: MazeTool }) {
   const controls = useRef<MapControlsImpl>(null)
-  /** What the view was last framed for ("w x h @ canvas size"); framing again only when that changes. */
+  /** What the view was last framed for (maze size, canvas size, HUD-free rect); framed again only when that changes. */
   const framedFor = useRef('')
+  const sizeKey = useRef('')
+  const settleUntil = useRef(0)
 
-  // Framed from the render loop: the controls and the canvas size only exist after the first frames.
-  useFrame(({ camera, size }) => {
+  // Framed from the render loop: the controls and the canvas size only exist after the first frames,
+  // and the HUD (its own lazy chunk) may appear a little later, so the free rect is measured again
+  // for a short while after each size change, then only when a size changes.
+  useFrame(({ camera, size, gl, clock }) => {
     const c = controls.current
-    const key = `${w}x${h}@${size.width}x${size.height}`
-    if (!c || size.width === 0 || size.height === 0 || framedFor.current === key) return
+    if (!c || size.width === 0 || size.height === 0) return
+    const sk = `${w}x${h}@${size.width}x${size.height}`
+    if (sk !== sizeKey.current) {
+      sizeKey.current = sk
+      settleUntil.current = clock.elapsedTime + HUD_SETTLE_S
+    }
+    if (clock.elapsedTime > settleUntil.current && framedFor.current.startsWith(sk)) return
+    const free = hudFreeRect(gl.domElement, MAZE_HUD)
+    const key = `${sk}:${free.left},${free.top},${free.right},${free.bottom}`
+    if (framedFor.current === key) return
     framedFor.current = key
-    const frame = frameMaze(w, h, size.width / size.height, FOV, safeRect(size.width, size.height, MAZE_HUD_MARGINS))
+    const frame = frameMaze(w, h, size.width / size.height, FOV, toNdc(free, size.width, size.height))
     camera.position.set(...frame.position)
     c.target.set(...frame.target)
     c.maxDistance = frame.distance * 1.6

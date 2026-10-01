@@ -174,8 +174,7 @@ test('maze: the kid’s maze is saved by itself and is there after a reload', as
   await page.getByTestId('maze-color').click()
   await page.getByTestId('maze-color-3').click()
   const name = page.getByTestId('maze-name')
-  await name.fill('Lâu đài')
-  await name.press('Enter')
+  await name.fill('Lâu đài') // saved as typed: no Enter, no blur needed
   const maze = (await openMaze(page))!
   expect(maze.name).toBe('Lâu đài')
 

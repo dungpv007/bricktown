@@ -184,22 +184,28 @@ function SideColumn() {
   )
 }
 
-/** The maze's name, editable; saved when the field is left or Enter is pressed. */
+/**
+ * The maze's name, editable. Every change is saved at once (the whole typing is one undo step), so
+ * nothing is lost when the kid leaves without closing the keyboard; leaving the field shows the
+ * saved name again (a blank field means the name is kept).
+ */
 function NameChip() {
   const t = useT()
   const maze = useShownMaze()
   const name = maze?.name ?? ''
   const [draft, setDraft] = useState(name)
-  const [editingFor, setEditingFor] = useState(name)
-  // A new maze (or an undo) changed the name under the field: show it.
-  if (editingFor !== name) {
-    setEditingFor(name)
-    setDraft(name)
+  const [shownFor, setShownFor] = useState(name)
+  // A new maze or an undo changed the name under the field: show it. A name that only differs
+  // from the draft by the trimming of the save keeps the draft (and its trailing space) as typed.
+  if (shownFor !== name) {
+    setShownFor(name)
+    if (draft.trim().slice(0, MAZE_NAME_MAX) !== name) setDraft(name)
   }
-  const save = () => {
-    useMazeEditor.getState().rename(draft)
-    setDraft(currentMaze()?.name ?? draft)
+  const change = (value: string) => {
+    setDraft(value)
+    useMazeEditor.getState().rename(value)
   }
+  const showSaved = () => setDraft(currentMaze()?.name ?? draft)
   return (
     <form
       className="bt-maze-name bt-hud-panel"
@@ -215,8 +221,8 @@ function NameChip() {
         value={draft}
         maxLength={MAZE_NAME_MAX}
         enterKeyHint="done"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={save}
+        onChange={(e) => change(e.target.value)}
+        onBlur={showSaved}
       />
     </form>
   )

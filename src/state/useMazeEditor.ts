@@ -101,13 +101,21 @@ export function useHasOpenMaze(): boolean {
   return hasTemplate || hasOwn
 }
 
-/** "Mê cung 3": the first number not already used by one of the kid's mazes. */
-function nextDefaultName(): string {
-  const base = t('mazeDefaultName')
+/** "<base> <n>": the first number from `from` not already used by one of the kid's mazes. */
+function numberedName(base: string, from: number): string {
   const used = new Set(game().data.mazes.map((m) => m.name))
-  let n = game().data.mazes.length + 1
+  let n = from
   while (used.has(`${base} ${n}`)) n++
   return `${base} ${n}`
+}
+
+/** "Mê cung 3" for a new maze. */
+const nextDefaultName = () => numberedName(t('mazeDefaultName'), game().data.mazes.length + 1)
+
+/** "Trái tim 2" for the kid's copy of a ready-made maze (the template itself counts as 1), in today's language. */
+function copyName(templateId: string | undefined, fallback: string): string {
+  const tpl = templateId === undefined ? undefined : getMazeTemplate(templateId)
+  return numberedName(tpl ? tpl.name[useApp.getState().lang] : fallback, 2)
 }
 
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31)
@@ -127,6 +135,8 @@ interface Stroke {
 }
 
 let stroke: Stroke | null = null
+/** The last saved change was a rename: further renames (typing on) join its undo step. */
+let renaming = false
 
 export const useMazeEditor = create<MazeEditorState>()((set, get) => {
   const reject = (error: MazeEditError) => {
@@ -137,22 +147,28 @@ export const useMazeEditor = create<MazeEditorState>()((set, get) => {
   const open = (mazeId: string, templateMaze: Maze | null) => {
     history.clear()
     stroke = null
+    renaming = false
     set({ mazeId, templateMaze, preview: null, tool: 'wall', lastError: null, canUndo: false })
   }
 
   /**
    * Saves `after` (the result of an edit of the current maze) and records the maze before it for
    * undo. An unchanged result (same object) saves nothing and returns false. A ready-made maze is
-   * first turned into the kid's own copy, so it never changes in place.
+   * first turned into the kid's own copy ("Trái tim 2"), so it never changes in place. A rename
+   * that follows a rename does not add an undo step (`rename`: one per typing session).
    */
-  const commit = (after: Maze, sound: () => void): boolean => {
+  const commit = (after: Maze, sound: () => void, isRename = false): boolean => {
     const before = currentMaze()
     if (!before || after === before) return false
     const now = Date.now()
     const { templateMaze } = get()
     const identity = templateMaze ? { id: newId('maze'), createdAt: now } : { id: before.id, createdAt: before.createdAt }
-    history.push({ ...before, ...identity })
-    const saved = { ...after, ...identity, updatedAt: now }
+    const copiedName = templateMaze ? copyName(templateMaze.templateId, templateMaze.name) : null
+    if (!(isRename && renaming)) history.push({ ...before, ...identity, ...(copiedName ? { name: copiedName } : {}) })
+    renaming = isRename
+    // A copy takes the numbered name, unless this very change names it.
+    const name = copiedName && after.name === before.name ? copiedName : after.name
+    const saved = { ...after, ...identity, name, updatedAt: now }
     game().upsertMaze(saved)
     set({ mazeId: saved.id, templateMaze: null, lastError: null, canUndo: history.canUndo() })
     sound()
@@ -212,6 +228,7 @@ export const useMazeEditor = create<MazeEditorState>()((set, get) => {
     close: () => {
       history.clear()
       stroke = null
+      renaming = false
       set({ mazeId: null, templateMaze: null, preview: null, lastError: null, canUndo: false })
     },
 
@@ -298,11 +315,12 @@ export const useMazeEditor = create<MazeEditorState>()((set, get) => {
     rename: (name) => {
       const maze = currentMaze()
       const clean = name.trim().slice(0, MAZE_NAME_MAX)
-      if (maze && clean !== '' && clean !== maze.name) commit({ ...maze, name: clean }, () => undefined)
+      if (maze && clean !== '' && clean !== maze.name) commit({ ...maze, name: clean }, () => undefined, true)
     },
 
     undo: () => {
       get().strokeCancel()
+      renaming = false
       const maze = currentMaze()
       if (!maze) return
       const prev = history.undo(maze)

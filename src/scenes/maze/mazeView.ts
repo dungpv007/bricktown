@@ -101,13 +101,3 @@ export function frameMaze(
   }
   return { target, position: at(target, distance), distance }
 }
-
-/** The safe rectangle in NDC for a canvas of `width` x `height` px with HUD margins in px. */
-export function safeRect(width: number, height: number, margins: { left: number; right: number; top: number; bottom: number }): NdcRect {
-  const x0 = (margins.left / width) * 2 - 1
-  const x1 = 1 - (margins.right / width) * 2
-  const y1 = 1 - (margins.top / height) * 2
-  const y0 = (margins.bottom / height) * 2 - 1
-  // A HUD bigger than the screen still leaves a sane (tiny) view rather than an inverted one.
-  return x1 - x0 > 0.2 && y1 - y0 > 0.2 ? { x0, y0, x1, y1 } : { x0: -1, y0: -1, x1: 1, y1: 1 }
-}

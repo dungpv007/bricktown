@@ -54,7 +54,7 @@ describe('useMazeEditor: opening mazes', () => {
     expect(mazes()).toHaveLength(1)
     const own = mazes()[0]
     expect(own.id).not.toBe('tpl:easy')
-    expect(own).toMatchObject({ templateId: 'easy', name: getMazeTemplate('easy')!.name.vi })
+    expect(own).toMatchObject({ templateId: 'easy', name: `${getMazeTemplate('easy')!.name.vi} 2` })
     expect(ed().mazeId).toBe(own.id)
     expect(maze()).toBe(own)
     expect(walls().has('2,1')).toBe(true)
@@ -65,6 +65,27 @@ describe('useMazeEditor: opening mazes', () => {
     expect(new Set(maze().walls)).toEqual(before)
     expect(mazes()).toHaveLength(1)
     expect(ed().canUndo).toBe(false)
+  })
+
+  it('copies of a ready-made maze are numbered, named in the language of the moment', () => {
+    const copy = () => {
+      ed().openTemplate('heart')
+      ed().setTool('coin')
+      ed().tapCell(c(7, 13)) // a floor cell of the heart's stem
+      return maze().name
+    }
+    const heart = getMazeTemplate('heart')!.name
+    expect(copy()).toBe(`${heart.vi} 2`)
+    expect(copy()).toBe(`${heart.vi} 3`)
+    useApp.setState({ lang: 'en' })
+    expect(copy()).toBe(`${heart.en} 2`)
+  })
+
+  it('a name typed into a ready-made maze is the copy’s name', () => {
+    ed().openTemplate('easy')
+    ed().rename('Của em')
+    expect(mazes()).toHaveLength(1)
+    expect(maze().name).toBe('Của em')
   })
 
   it('a change that changes nothing keeps the ready-made maze untouched and is refused', () => {
@@ -286,5 +307,19 @@ describe('useMazeEditor: whole-maze changes', () => {
     expect(maze().name).toBe('Lâu đài')
     ed().rename('   ')
     expect(maze().name).toBe('Lâu đài') // an empty name is not a name
+  })
+
+  it('typing a name saves each keystroke but undoes as one step', () => {
+    ed().newMaze(7)
+    const original = maze().name
+    ed().setTool('wall')
+    ed().tapCell(c(3, 3))
+    for (const typed of ['L', 'Lâ', 'Lâu']) ed().rename(typed)
+    expect(maze().name).toBe('Lâu')
+    ed().undo()
+    expect(maze().name).toBe(original)
+    expect(walls().has('3,3')).toBe(true)
+    ed().undo()
+    expect(walls().has('3,3')).toBe(false)
   })
 })
