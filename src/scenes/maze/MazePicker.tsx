@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { MAZE_TEMPLATES } from '../../content/mazes'
-import type { Maze, MazeTemplate } from '../../core/maze'
-import type { MazeRecord } from '../../core/types'
+import { isPlayable, type Maze, type MazeTemplate } from '../../core/maze'
+import { buildMazePackage } from '../../core/share'
+import type { MazeChallenge, MazeRecord } from '../../core/types'
 import { useApp } from '../../state/useApp'
 import { useGame } from '../../state/useGame'
 import { useMazeEditor } from '../../state/useMazeEditor'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import { useT } from '../../ui/i18n'
+import ShareDialog from '../../ui/share/ShareDialog'
 import { mazeThumbnail } from './mazeThumbnail'
 import { DIFFICULTIES, DIFFICULTY_KEY, NEW_MAZE_SIZES, SizeIcon } from './mazeChoices'
 
@@ -23,6 +25,25 @@ function Best({ record }: { record: MazeRecord | undefined }) {
       🏆 {seconds}s <span className="bt-maze-best-stars">{'★'.repeat(record.stars)}{'☆'.repeat(3 - record.stars)}</span>
     </span>
   )
+}
+
+/** A friend's time to beat on a shared maze: "🏁 Vượt 42s?", or "✓ Đã vượt 42s" once the kid's best is faster. */
+function Challenge({ challenge, record }: { challenge: MazeChallenge | undefined; record: MazeRecord | undefined }) {
+  const t = useT()
+  if (!challenge) return null
+  const seconds = Math.ceil(challenge.timeMs / 1000)
+  const beaten = record !== undefined && record.timeMs < challenge.timeMs
+  return (
+    <span className={`bt-maze-challenge${beaten ? ' bt-maze-challenge-done' : ''}`} data-testid="maze-challenge">
+      {beaten ? `✓ ${t('mazeChallengeDone')} ${seconds}s` : `🏁 ${t('mazeChallengeBeat')} ${seconds}s?`}
+    </span>
+  )
+}
+
+/** Shares the kid's maze with its best run as the challenge. */
+function ShareMaze({ maze, record, onClose }: { maze: Maze; record: MazeRecord | undefined; onClose: () => void }) {
+  const build = useCallback(() => buildMazePackage(maze, record), [maze, record])
+  return <ShareDialog build={build} icon="🌀" onClose={onClose} />
 }
 
 function Thumb({ cacheKey, maze }: { cacheKey: string; maze: Maze }) {
@@ -46,7 +67,10 @@ export default function MazePicker() {
   const lang = useApp((s) => s.lang)
   const mine = useGame((s) => s.data.mazes)
   const records = useGame((s) => s.data.mazeRecords)
+  const challenges = useGame((s) => s.data.mazeChallenges)
   const [choice, setChoice] = useState<Choice>(null)
+  const [sharing, setSharing] = useState<Maze | null>(null)
+  const [notReady, setNotReady] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const ed = useMazeEditor.getState
   const newestFirst = [...mine].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -90,6 +114,15 @@ export default function MazePicker() {
                   <Thumb cacheKey={`${m.id}:${m.updatedAt}`} maze={m} />
                   <span className="bt-maze-own-name">{m.name}</span>
                   <Best record={records[m.id]} />
+                  <Challenge challenge={challenges[m.id]} record={records[m.id]} />
+                </button>
+                <button
+                  className={`bt-btn bt-share-chip${isPlayable(m) ? '' : ' bt-share-chip-off'}`}
+                  data-testid={`share-maze-${m.id}`}
+                  aria-label={t('share')}
+                  onClick={() => (isPlayable(m) ? setSharing(m) : setNotReady(true))}
+                >
+                  🔗
                 </button>
                 <button
                   className="bt-btn bt-maze-del"
@@ -137,6 +170,20 @@ export default function MazePicker() {
             </div>
             <button className="bt-btn bt-no" data-testid="maze-choose-close" aria-label={t('close')} onClick={() => setChoice(null)}>
               ✗
+            </button>
+          </div>
+        </div>
+      )}
+      {sharing && <ShareMaze maze={sharing} record={records[sharing.id]} onClose={() => setSharing(null)} />}
+      {notReady && (
+        <div className="bt-modal-backdrop" onClick={() => setNotReady(false)}>
+          <div className="bt-dialog bt-ask" role="alertdialog" aria-label={t('shareMazeNotReady')} data-testid="share-maze-not-ready">
+            <p className="bt-ask-text">
+              <span aria-hidden="true">🚪🌀🏁 </span>
+              {t('shareMazeNotReady')}
+            </p>
+            <button className="bt-btn bt-yes" data-testid="share-maze-not-ready-ok" aria-label={t('close')} onClick={() => setNotReady(false)}>
+              ✓
             </button>
           </div>
         </div>

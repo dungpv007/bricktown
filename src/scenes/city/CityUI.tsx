@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { TEMPLATES } from '../../content/templates'
+import { buildCityPackage } from '../../core/share'
 import type { Blueprint, Template } from '../../core/types'
 import { getThumbnail } from '../../render/thumbnails'
 import { isTemplateSource, templateSource } from '../../render/sources'
@@ -11,6 +12,7 @@ import { KIND_ICON } from '../../ui/blueprintKinds'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import ErrorBadge from '../../ui/ErrorBadge'
 import { useT, type TKey } from '../../ui/i18n'
+import ShareDialog from '../../ui/share/ShareDialog'
 import { useThumbnail } from '../../ui/useThumbnail'
 
 const TOOLS: Array<{ tool: CityTool; icon: string; labelKey: TKey }> = [
@@ -131,6 +133,31 @@ function SourceDrawer() {
   )
 }
 
+/** Shares the whole city with the models it uses (an empty city has nothing to share). */
+function ShareCity() {
+  const t = useT()
+  const [open, setOpen] = useState(false)
+  const empty = useGame((s) => s.data.city.placements.length === 0 && s.data.city.roads.length === 0)
+  const build = useCallback(() => {
+    const { city, blueprints } = useGame.getState().data
+    return buildCityPackage(city, blueprints, { name: t('shareCityName') })
+  }, [t])
+  return (
+    <>
+      <button
+        className="bt-btn bt-icon-btn"
+        data-testid="share-city"
+        aria-label={empty ? t('shareCityEmpty') : t('share')}
+        disabled={empty}
+        onClick={() => setOpen(true)}
+      >
+        🔗
+      </button>
+      {open && <ShareDialog build={build} icon="🏙️" onClose={() => setOpen(false)} />}
+    </>
+  )
+}
+
 /** HTML overlay on top of the city canvas. */
 export default function CityUI() {
   const t = useT()
@@ -170,6 +197,7 @@ export default function CityUI() {
             ✏️
           </button>
         )}
+        <ShareCity />
         <button className="bt-btn bt-city-drive" data-testid="city-drive" aria-label={t('menuDrive')} onClick={() => setMode('drive')}>
           <span aria-hidden="true">🚗</span> {t('menuDrive')}
         </button>

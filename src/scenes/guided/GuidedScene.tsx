@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
-import { getTemplate } from '../../content/templates'
+import { useGuidedTemplate } from '../../state/guidedTemplates'
 import { COLORS, GLASS_COLOR } from '../../core/colors'
 import { bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
@@ -233,7 +233,7 @@ function GuidedWorld() {
   const guided = useGame((s) => s.data.guided)
   const celebration = useGuided((s) => s.celebration)
   const templateId = celebration?.templateId ?? guided?.templateId
-  const template = templateId ? getTemplate(templateId) : undefined
+  const template = useGuidedTemplate(templateId)
   if (!template) return null
   return <TemplateWorld template={template} guided={celebration ? null : guided} celebrating={celebration !== null} />
 }

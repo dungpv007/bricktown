@@ -4,8 +4,9 @@ import { startAutosave } from '../persistence/autosave'
 import { loadCurrentSlot } from '../persistence/session'
 import { useGame } from '../state/useGame'
 import { useT } from './i18n'
+import ShareImportHost from './share/ShareImportHost'
 
-/** Loads the current slot, shows a loading screen until ready, runs autosave, then renders the app. */
+/** Loads the current slot, shows a loading screen until ready, runs autosave, then renders the app (and receives shares). */
 export default function Boot() {
   const t = useT()
   const loaded = useGame((s) => s.loaded)
@@ -45,5 +46,11 @@ export default function Boot() {
       </div>
     )
   }
-  return <App />
+  return (
+    <>
+      <App />
+      {/* After the save is loaded: a share link (#s=) is previewed against it, never applied on its own. */}
+      <ShareImportHost />
+    </>
+  )
 }
