@@ -12,7 +12,7 @@ export interface NdcRect {
 }
 
 /** Wall blocks are two bricks (6 plates) tall. */
-export const WALL_PLATES = 6
+const WALL_PLATES = 6
 export const WALL_HEIGHT = platesToWorld(WALL_PLATES)
 /** Void walls (no floor around them, see `voidWalls`) are drawn as one-plate hedges. */
 export const HEDGE_HEIGHT = platesToWorld(1)
