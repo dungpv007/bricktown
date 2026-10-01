@@ -34,6 +34,14 @@ describe('serialize', () => {
     expect(() => migrate(null)).toThrow('unsupported save')
     expect(() => migrate([])).toThrow('unsupported save')
   })
+  it('rejects saves missing blueprints, city or workshop', () => {
+    for (const key of ['blueprints', 'city', 'workshop'] as const) {
+      const partial: Record<string, unknown> = { ...createEmptySave() }
+      delete partial[key]
+      expect(() => migrate(partial)).toThrow('unsupported save')
+      expect(() => importSave(JSON.stringify({ app: 'bricktown', ...partial }))).toThrow('unsupported save')
+    }
+  })
   it('migrate accepts current version', () => {
     const save = createEmptySave()
     expect(migrate(save)).toEqual(save)

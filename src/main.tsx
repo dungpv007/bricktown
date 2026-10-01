@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import App from './App'
+import Boot from './ui/Boot'
 import './index.css'
 import './ui/theme.css'
 import { useApp } from './state/useApp'
@@ -13,6 +13,6 @@ if (import.meta.env.DEV) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Boot />
   </StrictMode>,
 )

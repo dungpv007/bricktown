@@ -1,6 +1,9 @@
-import type { Mode, SlotId } from '../state/useApp'
+import { useState } from 'react'
+import type { Mode } from '../state/useApp'
+import { usePersistStatus } from '../persistence/status'
 import { useApp } from '../state/useApp'
 import { useT, type TKey } from './i18n'
+import SlotMenu from './SlotMenu'
 
 type PlayMode = Exclude<Mode, 'menu'>
 
@@ -11,15 +14,13 @@ const CARDS: Array<{ mode: PlayMode; labelKey: TKey; icon: string; color: string
   { mode: 'drive', labelKey: 'menuDrive', icon: '🚗', color: 'var(--bt-orange)' },
 ]
 
-const SLOTS: SlotId[] = [1, 2, 3]
-
 export default function MainMenu() {
   const t = useT()
   const lang = useApp((s) => s.lang)
   const setLang = useApp((s) => s.setLang)
-  const slotId = useApp((s) => s.slotId)
-  const setSlot = useApp((s) => s.setSlot)
   const setMode = useApp((s) => s.setMode)
+  const persistError = usePersistStatus((s) => s.error)
+  const [slotsOpen, setSlotsOpen] = useState(false)
 
   return (
     <div className="bt-screen bt-menu" data-testid="main-menu">
@@ -47,20 +48,26 @@ export default function MainMenu() {
         >
           🌐 {lang === 'vi' ? 'VI' : 'EN'}
         </button>
-        <div className="bt-row" role="group" aria-label={t('slot')}>
-          {SLOTS.map((n) => (
-            <button
-              key={n}
-              className="bt-btn"
-              data-testid={`slot-${n}`}
-              aria-pressed={slotId === n}
-              onClick={() => setSlot(n)}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
+        <button
+          className="bt-btn"
+          data-testid="settings"
+          aria-label={t('menuSettings')}
+          onClick={() => setSlotsOpen(true)}
+        >
+          ⚙️ {t('slot')}
+        </button>
+        {persistError && (
+          <span
+            className="bt-warning"
+            data-testid="persist-warning"
+            role="img"
+            aria-label={persistError === 'load' ? t('loadWarning') : t('saveFailed')}
+          >
+            ⚠️
+          </span>
+        )}
       </div>
+      {slotsOpen && <SlotMenu onClose={() => setSlotsOpen(false)} />}
     </div>
   )
 }

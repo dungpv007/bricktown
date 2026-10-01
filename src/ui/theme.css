@@ -136,6 +136,7 @@
 .bt-placeholder {
   align-items: center;
   justify-content: center;
+  gap: 16px;
   font-size: 28px;
   font-weight: 800;
 }
@@ -378,4 +379,110 @@
   top: 12px !important;
   left: auto !important;
   right: 96px !important;
+}
+
+/* ---------- Save slots / persistence ---------- */
+.bt-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(27, 42, 65, 0.6);
+}
+
+.bt-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(100%, 520px);
+  max-height: 100%;
+  overflow: auto;
+  padding: 20px;
+  box-sizing: border-box;
+  border-radius: var(--bt-radius);
+  background: var(--bt-sky);
+  color: var(--bt-ink);
+}
+
+.bt-panel-head {
+  justify-content: space-between;
+}
+
+.bt-panel-title {
+  margin: 0;
+  font-size: 28px;
+}
+
+.bt-slot-row {
+  display: flex;
+  gap: 12px;
+}
+
+.bt-slot-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 80px;
+  text-align: left;
+}
+
+.bt-slot-num {
+  font-size: 36px;
+}
+
+.bt-slot-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.bt-btn:disabled {
+  opacity: 0.5;
+}
+
+.bt-error {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--bt-red);
+}
+
+.bt-confirm {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.96);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.bt-confirm p {
+  margin: 0;
+}
+
+.bt-yes {
+  background: var(--bt-green);
+  color: var(--bt-white);
+  font-size: 36px;
+}
+
+.bt-no {
+  background: var(--bt-red);
+  color: var(--bt-white);
+  font-size: 36px;
+}
+
+.bt-warning {
+  font-size: 40px;
+  line-height: 1;
 }
