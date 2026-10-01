@@ -174,6 +174,8 @@ describe('serialize', () => {
           { ...template, id: 'no_steps', steps: [] }, // a brick in no step: Guided could never finish it
           { ...template, id: 'floating', bricks: [{ ...template.bricks[0], y: 5 }] },
           { ...template, id: 'odd_steps', steps: [5] }, // a shape validateTemplate does not expect
+          { ...template, id: 'huge_plate', baseplate: { w: 4096, d: 16 } }, // bigger than any plate
+          { ...template, id: 'zero_plate', baseplate: { w: 0, d: 16 } },
         ],
         mazes: [{ id: 'm' }, 'maze', null],
         mazeChallenges: {

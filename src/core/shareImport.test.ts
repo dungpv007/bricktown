@@ -82,8 +82,9 @@ describe('sanitizeName', () => {
   it('keeps emoji sequences whole and counts them as one character each', () => {
     const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467) // joined by ZWJ
     expect(sanitizeName(`Nhà ${family}`)).toBe(`Nhà ${family}`)
-    const cut = sanitizeName(family.repeat(50))
-    expect(cut).toBe(family.repeat(40))
+    const cut = sanitizeName(family.repeat(50)) // 8 code units each: the 200-unit cap stops it at 25
+    expect(cut).toBe(family.repeat(SHARE_LIMITS.nameUnits / family.length))
+    expect(sanitizeName('\u{1F3E0}'.repeat(50))).toBe('\u{1F3E0}'.repeat(40)) // 2 units each: 40 characters
     const flag = String.fromCodePoint(0x1f1fb, 0x1f1f3) // a flag: two code points, one character
     expect(sanitizeName('x'.repeat(39) + flag + 'yyy')).toBe('x'.repeat(39) + flag)
   })
@@ -92,6 +93,27 @@ describe('sanitizeName', () => {
     expect(sanitizeName(String.fromCodePoint(0x200b, 0x202e), 'Mê cung')).toBe('Mê cung')
     expect(sanitizeName(7, 'Thành phố')).toBe('Thành phố')
     expect(sanitizeName('An', 'Mô hình')).toBe('An')
+  })
+  it('caps a name at 200 UTF-16 code units without splitting a character', () => {
+    const heavy = 'e' + '\u0301'.repeat(30) // one character, 31 code units
+    const out = sanitizeName(heavy.repeat(40))
+    expect(out.length).toBeLessThanOrEqual(SHARE_LIMITS.nameUnits)
+    expect(out).toBe(heavy.repeat(Math.floor(SHARE_LIMITS.nameUnits / heavy.length)))
+    expect(sanitizeName('e' + '\u0301'.repeat(300), 'Mô hình')).toBe('Mô hình') // one character too long to keep
+  })
+  it('never leaves a lone surrogate, from the scan limit or from the input', () => {
+    const hasLone = (s: string) => /[\uD800-\uDFFF]/u.test(s)
+    const cut = sanitizeName('\u200b'.repeat(4095) + '\u{1F600}', 'Mô hình') // the scan limit splits the emoji
+    expect(hasLone(cut)).toBe(false)
+    expect(cut).toBe('Mô hình')
+    expect(sanitizeName('a\uD800b\uDC00c')).toBe('abc')
+  })
+  it('falls back when the name has only invisible characters', () => {
+    for (const cp of [0x200d, 0xfe0f, 0x3164, 0x115f, 0x1160, 0x034f, 0x180e, 0xffa0, 0x2800, 0x17b4]) {
+      expect(sanitizeName(String.fromCodePoint(cp, cp, 0x20, cp), 'Mê cung')).toBe('Mê cung')
+    }
+    expect(sanitizeName('A\u3164B')).toBe('AB') // Hangul fillers are stripped
+    expect(sanitizeName('\u2764\uFE0F')).toBe('\u2764\uFE0F') // an emoji with its variation selector stays
   })
   it('keeps markup as plain text (names are only ever rendered as text)', () => {
     expect(sanitizeName('<script>alert(1)</script>')).toBe('<script>alert(1)</script>')
@@ -207,6 +229,10 @@ describe('validatePackage', () => {
       expect(withMaze({ exit: { cx: 0, cz: 1 } })).toEqual({ error: 'invalid' }) // same as the entry
       expect(withMaze({ wallColor: 77 })).toEqual({ error: 'invalid' })
       expect(withMaze({ walls: 'everywhere' as unknown as string[] })).toEqual({ error: 'invalid' })
+    })
+    it('rejects a gap in the outer ring that is not a door', () => {
+      expect(withMaze({ walls: maze().walls.filter((k) => k !== '3,0') })).toEqual({ error: 'invalid' })
+      expect(withMaze({ walls: maze().walls.filter((k) => k !== '6,6') })).toEqual({ error: 'invalid' }) // a corner
     })
     it('rejects a maze that cannot be played: a missing door or no way through', () => {
       expect(withMaze({ entry: null })).toEqual({ error: 'invalid' })

@@ -1,3 +1,4 @@
+import { PLATE_MAX } from './baseplate'
 import { COLORS } from './colors'
 import { parseFig } from './figures'
 import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, isBorder, isCorner, type Cell, type Maze } from './maze'
@@ -129,10 +130,11 @@ function isSoundTemplate(t: Template): boolean {
   }
 }
 
-/** Enough of a template's shape for `validateTemplate` to make sense of it. */
+/** Enough of a template's shape for `validateTemplate` to make sense of it, on a plate the app can show. */
 function isTemplateLike(v: unknown): v is Record<string, unknown> & { bricks: unknown[] } {
   return (
     isRecord(v) && typeof v.id === 'string' && isRecord(v.name) && isRecord(v.baseplate) &&
+    isPositiveInt(v.baseplate.w) && isPositiveInt(v.baseplate.d) && v.baseplate.w <= PLATE_MAX && v.baseplate.d <= PLATE_MAX &&
     Array.isArray(v.bricks) && Array.isArray(v.steps)
   )
 }
