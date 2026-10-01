@@ -153,8 +153,29 @@ const nextTarget = (page: Page) =>
     return { key: `${b.p}-${b.c}`, world: [b.x + 0.5, b.y * 0.4 + 0.2, b.z + 0.5] as [number, number, number] }
   })
 
-const screenOf = (page: Page, p: [number, number, number]) =>
-  page.evaluate((w) => (window as unknown as BtWindow).__bt.plateScreen.project!(w), p)
+/** Where `p` is on screen once the camera holds still (a step change may start a short glide). */
+async function settledScreenOf(page: Page, p: [number, number, number]): Promise<Point> {
+  const sample = () =>
+    page.evaluate(
+      (w) =>
+        new Promise<{ a: Point; b: Point }>((resolve) => {
+          const project = (window as unknown as BtWindow).__bt.plateScreen.project!
+          const a = project(w)
+          // Two frames later: unchanged means the camera is not moving.
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve({ a, b: project(w) })))
+        }),
+      p,
+    )
+  let last: Point = { x: 0, y: 0 }
+  await expect
+    .poll(async () => {
+      const { a, b } = await sample()
+      last = b
+      return Math.hypot(a.x - b.x, a.y - b.y) < 0.5
+    })
+    .toBe(true)
+  return last
+}
 
 async function cardCenter(page: Page, key: string): Promise<Point> {
   const box = await page.getByTestId(`needed-${key}`).boundingBox()
@@ -194,11 +215,10 @@ async function openTemplate(page: Page, id: string, difficulty: 'easy' | 'normal
   await page.getByTestId(`tpl-${id}`).click()
   await expect(page.getByTestId('guided-canvas')).toBeVisible()
   await expect.poll(() => page.evaluate(() => (window as unknown as BtWindow).__bt.plateScreen.project !== null)).toBe(true)
-  await page.waitForTimeout(600) // the camera may still glide to the first step
 }
 
 test('guided (easy): the whole tree is built by dragging pieces from the tray onto the model', async ({ page }) => {
-  test.setTimeout(60_000) // six touch drags with camera glides in between
+  test.setTimeout(120_000) // six touch drags with camera glides in between; slow under parallel load
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await openTemplate(page, 'tree', 'easy')
@@ -211,12 +231,12 @@ test('guided (easy): the whole tree is built by dragging pieces from the tray on
   await page.screenshot({ path: 'test-results/g1-tray-hint.png' })
 
   let first = true
-  for (let steps = 0; await hasBuild(page); steps++) {
-    expect(steps).toBeLessThan(20)
-    const before = await placedCount(page)
+  for (let step = 1; await hasBuild(page); step++) {
+    expect(step).toBeLessThan(20)
+    await expect(page.getByTestId('step-counter')).toHaveText(new RegExp(`^${step}/`))
     const target = await nextTarget(page)
     // Near the ghost, not on it: the magnet pulls the piece in.
-    const at = await screenOf(page, target.world)
+    const at = await settledScreenOf(page, target.world)
     const to = { x: at.x + 12, y: at.y + 10 }
     await touchDrag(page, await cardCenter(page, target.key), to, async () => {
       if (!first) return
@@ -224,8 +244,8 @@ test('guided (easy): the whole tree is built by dragging pieces from the tray on
     })
     if (first) await expect(page.getByTestId('drag-hint')).toHaveCount(0) // gone after the first drop
     first = false
-    await expect.poll(() => placedCount(page).then((n) => (n === -1 ? Infinity : n))).toBeGreaterThan(before)
-    await page.waitForTimeout(500) // let a new step's camera glide finish
+    // Each tree step is one brick: the drop moves on to the next step (or finishes the tree).
+    await expect(page.getByTestId('step-counter').or(page.getByTestId('celebration'))).not.toHaveText(new RegExp(`^${step}/`))
   }
   await expect(page.getByTestId('celebration')).toBeVisible()
   const state = await page.evaluate(() => (window as unknown as BtWindow).__bt.useGame.getState().data)
@@ -241,10 +261,9 @@ test('guided (normal): a piece needs the right turn; ↻ turns it and the exact 
   // Step 1 (two 1x2 legs) is placed through the store; step 2 asks for a plate 2x4 turned once.
   await placeCurrentStep(page)
   await expect(page.getByTestId('step-counter')).toHaveText(/^2\//)
-  await page.waitForTimeout(600)
   const target = await nextTarget(page)
   expect(target.key).toBe('plate_2x4-10')
-  const to = await screenOf(page, target.world)
+  const to = await settledScreenOf(page, target.world)
 
   // Unturned: rejected, nothing placed, back to the tray.
   await touchDrag(page, await cardCenter(page, target.key), to)

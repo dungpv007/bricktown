@@ -2,14 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { COLORS } from '../../core/colors'
 import { trayCards, type TrayCard } from '../../core/guidedTray'
 import { PART_BY_ID } from '../../core/parts/catalog'
-import type { Brick, GuidedState, Template } from '../../core/types'
+import type { Brick, GuidedState, PartCategory, Template } from '../../core/types'
 import { usePaletteDrag } from '../../input/paletteDrag'
 import { getPartThumbnail } from '../../render/thumbnails'
 import { useApp } from '../../state/useApp'
 import { useGuided } from '../../state/useGuided'
 import { useGuidedDrag } from '../../state/useGuidedDrag'
 import { FigureImage } from '../../ui/FigureEditor'
-import { useT } from '../../ui/i18n'
+import { useT, type TKey } from '../../ui/i18n'
 import { PartIcon } from '../../ui/PartPalette'
 import { useThumbnail } from '../../ui/useThumbnail'
 
@@ -20,6 +20,30 @@ const SHAKE_MS = 400
 function viewedBricks(t: Template, g: GuidedState, viewStep: number): Brick[] {
   const bricks = (t.steps[viewStep] ?? []).map((i) => t.bricks[i])
   return viewStep < g.step ? bricks : bricks.filter((b) => !g.placed.includes(b.id))
+}
+
+const CATEGORY_KEY: Record<PartCategory, TKey> = {
+  brick: 'catBrick',
+  plate: 'catPlate',
+  slope: 'catSlope',
+  round: 'catRound',
+  door_window: 'catDoorWindow',
+  wheel: 'catWheel',
+  furniture: 'catFurniture',
+  nature: 'catNature',
+  decor: 'catDecor',
+  figure: 'catFigure',
+}
+
+/** "Gạch 2×2 Nâu, 2×": what a card holds, for screen readers. */
+function useCardName(card: TrayCard): string {
+  const t = useT()
+  const lang = useApp((s) => s.lang)
+  const part = PART_BY_ID[card.p]
+  if (!part) return ''
+  const kind = t(CATEGORY_KEY[part.category])
+  const name = card.fig ? kind : `${kind} ${part.w}×${part.d} ${COLORS[card.c]?.name[lang] ?? ''}`.trim()
+  return `${name}, ${card.bricks.length}×`
 }
 
 const cardSelector = (key: string) => `[data-card-key="${CSS.escape(key)}"]`
@@ -62,6 +86,7 @@ function CardButton({ card, index }: { card: TrayCard; index: number }) {
     },
     { cancelOnSecondPointer: true },
   )
+  const name = useCardName(card)
   const count = card.bricks.length
   return (
     <button
@@ -70,7 +95,7 @@ function CardButton({ card, index }: { card: TrayCard; index: number }) {
       data-card-key={card.key}
       data-card-index={index}
       data-dragging={dragging}
-      aria-label={`${t('dragPiece')} (${count})`}
+      aria-label={`${name}: ${t('dragPiece')}`}
       aria-pressed={!easy && selected}
       onPointerDown={startDrag}
       onClick={select}
@@ -78,6 +103,17 @@ function CardButton({ card, index }: { card: TrayCard; index: number }) {
       <TurnedPiece card={card} rot={easy ? 0 : rot} />
       {count > 1 && <span className="bt-tray-count">{`×${count}`}</span>}
     </button>
+  )
+}
+
+/** A card of an earlier step being looked at: shows the piece, cannot be dragged. */
+function ReadOnlyCard({ card }: { card: TrayCard }) {
+  const name = useCardName(card)
+  return (
+    <div className="bt-btn bt-tray-card" data-testid={`needed-${card.key}`} role="img" aria-label={name} aria-disabled="true">
+      <TurnedPiece card={card} rot={0} />
+      {card.bricks.length > 1 && <span className="bt-tray-count">{`×${card.bricks.length}`}</span>}
+    </div>
   )
 }
 
@@ -156,26 +192,47 @@ function DragAvatar() {
   )
 }
 
-/** "Drag me": a hand sliding from the first card to its spot on the model (first step, until the first drop). */
+/**
+ * "Drag me": a hand sliding from the first card to its spot on the model (first step, until the
+ * first placement). Stays mounted (hidden) during a drag and follows the card when the tray scrolls
+ * or the window resizes.
+ */
 function DragHint() {
   const to = useGuidedDrag((s) => s.hintTo)
   const dragging = useGuidedDrag((s) => s.card !== null)
   const ref = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
     const el = ref.current
-    const cardEl = document.querySelector('[data-card-index="0"]')
-    if (!el || !cardEl || !to) return
-    const r = cardEl.getBoundingClientRect()
-    const x = r.left + r.width / 2
-    const y = r.top + r.height / 2
-    el.style.left = `${x}px`
-    el.style.top = `${y}px`
-    el.style.setProperty('--bt-hint-dx', `${to.x - x}px`)
-    el.style.setProperty('--bt-hint-dy', `${to.y - y}px`)
-  }, [to])
-  if (!to || dragging) return null
+    if (!el || !to) return
+    const place = () => {
+      const cardEl = document.querySelector('[data-card-index="0"]')
+      if (!cardEl) return
+      const r = cardEl.getBoundingClientRect()
+      const x = r.left + r.width / 2
+      const y = r.top + r.height / 2
+      el.style.left = `${x}px`
+      el.style.top = `${y}px`
+      el.style.setProperty('--bt-hint-dx', `${to.x - x}px`)
+      el.style.setProperty('--bt-hint-dy', `${to.y - y}px`)
+    }
+    place()
+    const row = document.querySelector('.bt-tray-cards')
+    row?.addEventListener('scroll', place, { passive: true })
+    window.addEventListener('resize', place)
+    return () => {
+      row?.removeEventListener('scroll', place)
+      window.removeEventListener('resize', place)
+    }
+  }, [to, dragging])
+  if (!to) return null
   return (
-    <div ref={ref} className="bt-drag-hint" data-testid="drag-hint" aria-hidden="true">
+    <div
+      ref={ref}
+      className="bt-drag-hint"
+      data-testid="drag-hint"
+      style={dragging ? { visibility: 'hidden' } : undefined}
+      aria-hidden="true"
+    >
       👆
     </div>
   )
@@ -199,10 +256,7 @@ export default function GuidedTray({ template, guided }: { template: Template; g
         <div className="bt-tray-cards">
           {cards.map((card, i) =>
             viewingPast ? (
-              <div key={card.key} className="bt-btn bt-tray-card" data-testid={`needed-${card.key}`} aria-disabled="true">
-                <TurnedPiece card={card} rot={0} />
-                {card.bricks.length > 1 && <span className="bt-tray-count">{`×${card.bricks.length}`}</span>}
-              </div>
+              <ReadOnlyCard key={card.key} card={card} />
             ) : (
               <CardButton key={card.key} card={card} index={i} />
             ),

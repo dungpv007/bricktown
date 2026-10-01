@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { figPreset } from './figures'
-import { SNAP_RADIUS, distanceToBrick, dropAnchor, snapTarget, trayCards } from './guidedTray'
+import { SNAP_PX, brickCorners, dropAnchor, snapTargetOnScreen, trayCards, type ScreenProjection } from './guidedTray'
 import { getPart } from './parts/catalog'
 import { targetAnchor, type PickHit } from './pick'
 import type { Brick } from './types'
@@ -55,69 +55,64 @@ describe('trayCards', () => {
   })
 })
 
-describe('distanceToBrick', () => {
-  // A 2x4 at (2, 0, 3), r = 0: x 2..4, z 3..7, 3 plates (1.2 world) tall.
-  const b = brick('b', 'brick_2x4', 2, 0, 3)
-
-  it('is 0 on or inside the brick', () => {
-    expect(distanceToBrick([3, 0.6, 5], b)).toBe(0)
-    expect(distanceToBrick([2, 1.2, 3], b)).toBe(0)
-  })
-
-  it('measures to the nearest point of the brick box', () => {
-    expect(distanceToBrick([0, 0, 5], b)).toBeCloseTo(2)
-    expect(distanceToBrick([3, 3.2, 5], b)).toBeCloseTo(2)
-    expect(distanceToBrick([5, 0, 8], b)).toBeCloseTo(Math.SQRT2)
-  })
-
-  it('uses the rotated footprint', () => {
-    // r = 1: 4 along X, 2 along Z.
-    const turned = brick('t', 'brick_2x4', 2, 0, 3, 1)
-    expect(distanceToBrick([5.5, 0, 4], turned)).toBe(0)
-    expect(distanceToBrick([3, 0, 6], turned)).toBeCloseTo(1)
-  })
-
-  it('starts at the brick bottom plate', () => {
-    const high = brick('h', 'brick_1x1', 0, 6, 0) // bottom at 2.4 world
-    expect(distanceToBrick([0.5, 0, 0.5], high)).toBeCloseTo(2.4)
+describe('brickCorners', () => {
+  it('lists the 8 corners of the box the brick fills (rotated footprint, plates to world)', () => {
+    const corners = brickCorners(brick('b', 'brick_2x4', 2, 3, 1, 1)) // r = 1: 4 along X, 2 along Z
+    expect(corners).toHaveLength(8)
+    const span = (i: number) => [Math.min(...corners.map((c) => c[i])), Math.max(...corners.map((c) => c[i]))]
+    expect(span(0)).toEqual([2, 6])
+    expect(span(1)[0]).toBeCloseTo(1.2)
+    expect(span(1)[1]).toBeCloseTo(2.4)
+    expect(span(2)).toEqual([1, 3])
   })
 })
 
-describe('snapTarget', () => {
-  const near = brick('near', 'brick_2x2', 0, 0, 0)
-  const far = brick('far', 'brick_2x2', 10, 0, 0)
+describe('snapTargetOnScreen', () => {
+  // Seen from straight above, 10 px per stud; `lifted` also draws higher points further up the screen.
+  const top: ScreenProjection = ([x, , z]) => ({ x: x * 10, y: z * 10 })
+  const lifted: ScreenProjection = ([x, y, z]) => ({ x: x * 10, y: z * 10 - y * 10 })
+  const near = brick('near', 'brick_2x2', 0, 0, 0) // screen box 0..20 x 0..20
+  const far = brick('far', 'brick_2x2', 10, 0, 0) // screen box 100..120 x 0..20
 
-  it('picks the target nearest to the point within the radius', () => {
-    expect(snapTarget([far, near], [2.5, 0, 1], SNAP_RADIUS)?.id).toBe('near')
-    expect(snapTarget([near, far], [9, 0, 1], SNAP_RADIUS)?.id).toBe('far')
+  it('picks the target whose screen box is nearest to the finger, within the reach', () => {
+    expect(snapTargetOnScreen([far, near], { x: 50, y: 10 }, top, 40)?.id).toBe('near')
+    expect(snapTargetOnScreen([near, far], { x: 75, y: 10 }, top, 40)?.id).toBe('far')
   })
 
-  it('snaps when the finger is right on the target', () => {
-    expect(snapTarget([near], [1, 1.2, 1], SNAP_RADIUS)?.id).toBe('near')
+  it('snaps with the finger right on the target', () => {
+    expect(snapTargetOnScreen([near], { x: 10, y: 10 }, top, 40)?.id).toBe('near')
   })
 
-  it('returns null when every target is farther than the radius', () => {
-    expect(snapTarget([near, far], [6, 0, 1], SNAP_RADIUS)).toBeNull()
-    expect(snapTarget([near], [2 + SNAP_RADIUS + 0.01, 0, 1], SNAP_RADIUS)).toBeNull()
+  it('returns null when every target is beyond the reach; the reach itself still snaps', () => {
+    expect(snapTargetOnScreen([near, far], { x: 60, y: 10 }, top, 39)).toBeNull()
+    expect(snapTargetOnScreen([near], { x: 60, y: 10 }, top, 40)?.id).toBe('near')
   })
 
-  it('accepts a point exactly at the radius', () => {
-    expect(snapTarget([near], [2 + SNAP_RADIUS, 0, 1], SNAP_RADIUS)?.id).toBe('near')
+  it('prefers the target whose centre is nearer when the finger is inside several boxes', () => {
+    const big = brick('big', 'plate_4x4', 0, 0, 0) // screen box 0..40
+    const small = brick('small', 'brick_1x1', 3, 0, 3) // screen box 30..40
+    expect(snapTargetOnScreen([big, small], { x: 34, y: 34 }, top, 40)?.id).toBe('small')
   })
 
-  it('breaks ties by order (step order)', () => {
+  it('breaks exact ties by order (step order)', () => {
     const left = brick('left', 'brick_2x2', 0, 0, 0)
     const right = brick('right', 'brick_2x2', 4, 0, 0)
-    expect(snapTarget([left, right], [3, 0, 1], SNAP_RADIUS)?.id).toBe('left')
-    expect(snapTarget([right, left], [3, 0, 1], SNAP_RADIUS)?.id).toBe('right')
+    expect(snapTargetOnScreen([left, right], { x: 30, y: 10 }, top, 40)?.id).toBe('left')
+    expect(snapTargetOnScreen([right, left], { x: 30, y: 10 }, top, 40)?.id).toBe('right')
+  })
+
+  it('reaches a target high up a tall build when the finger is beside it on screen', () => {
+    const high = brick('high', 'brick_1x1', 0, 30, 0) // 12 studs up: drawn around y -120..-132
+    expect(snapTargetOnScreen([high], { x: 20, y: -125 }, lifted, SNAP_PX)?.id).toBe('high')
+    expect(snapTargetOnScreen([high], { x: 5, y: 5 }, lifted, SNAP_PX)).toBeNull() // under it, on the plate
   })
 
   it('returns null without targets', () => {
-    expect(snapTarget([], [0, 0, 0], SNAP_RADIUS)).toBeNull()
+    expect(snapTargetOnScreen([], { x: 0, y: 0 }, top, SNAP_PX)).toBeNull()
   })
 
-  it('snaps to about 3 studs', () => {
-    expect(SNAP_RADIUS).toBeGreaterThanOrEqual(2)
-    expect(SNAP_RADIUS).toBeLessThanOrEqual(4)
+  it('reaches about a fingertip', () => {
+    expect(SNAP_PX).toBeGreaterThanOrEqual(40)
+    expect(SNAP_PX).toBeLessThanOrEqual(90)
   })
 })

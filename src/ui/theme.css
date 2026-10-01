@@ -932,8 +932,12 @@
   90%, 100% { transform: translate(var(--bt-hint-dx, 0), var(--bt-hint-dy, -120px)) scale(1); opacity: 0; }
 }
 
+/* Without motion the hand just points at the spot on the model. */
 @media (prefers-reduced-motion: reduce) {
-  .bt-drag-hint { animation: none; }
+  .bt-drag-hint {
+    animation: none;
+    transform: translate(var(--bt-hint-dx, 0), var(--bt-hint-dy, 0));
+  }
 }
 
 .bt-celebrate {

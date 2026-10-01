@@ -8,6 +8,7 @@ import { useApp } from './useApp'
 import { useEditor } from './useEditor'
 import { useGame } from './useGame'
 import { useGuided } from './useGuided'
+import { useGuidedDrag } from './useGuidedDrag'
 
 const g = () => useGuided.getState()
 const guided = () => useGame.getState().data.guided
@@ -25,7 +26,7 @@ beforeEach(() => {
   const data = createEmptySave()
   data.workshop = { ...data.workshop, bricks: [WORKSHOP_BRICK] }
   useGame.setState({ data })
-  useGuided.setState({ viewStep: 0, errorSeq: 0, celebration: null, cardRots: {}, selectedCard: null, dropped: false })
+  useGuided.setState({ viewStep: 0, errorSeq: 0, celebration: null, cardRots: {}, selectedCard: null, placedOnce: false })
   useApp.setState({ lang: 'vi' })
   useEditor.setState({ partId: 'brick_1x1', color: 0, rot: 0, category: 'brick' })
 })
@@ -247,42 +248,44 @@ describe('useGuided tray', () => {
     expect(g().cardRots).toEqual({})
   })
 
-  it('dropOn (easy): places the pending brick the piece snapped to and notes the first drop', () => {
+  it('dropOn (easy): places the pending brick the piece snapped to and notes the first placement', () => {
     g().start('tree')
     const target = pending()
-    expect(g().dropped).toBe(false)
+    expect(g().placedOnce).toBe(false)
     expect(g().dropOn(target.id)).toEqual(target)
     expect(guided()!.placed).toEqual([target.id])
-    expect(g().dropped).toBe(true)
+    expect(g().placedOnce).toBe(true)
   })
 
-  it('dropOn refuses a brick that is not pending, without noting a drop', () => {
+  it('dropOn refuses a brick that is not pending, without noting a placement', () => {
     g().start('tree')
     const later = tree.bricks[tree.steps[tree.steps.length - 1][0]]
     expect(g().dropOn(later.id)).toBeNull()
-    expect(g().dropped).toBe(false)
+    expect(g().placedOnce).toBe(false)
     expect(guided()!.placed).toEqual([])
   })
 
   it('dropAt (normal): places a matching candidate (any equivalent rotation) and returns the template brick', () => {
     g().start('bench')
     finishStep()
+    useGuided.setState({ placedOnce: false })
     const plate = pending() // plate 2x4 turned once (r = 1)
     expect(plate).toMatchObject({ p: 'plate_2x4', r: 1 })
     expect(g().dropAt({ ...plate, r: 3 })).toEqual(plate)
     expect(guided()!.placed).toContain(plate.id)
-    expect(g().dropped).toBe(true)
+    expect(g().placedOnce).toBe(true)
   })
 
-  it('dropAt rejects a wrong rotation: shakes (errorSeq), places nothing, notes no drop', () => {
+  it('dropAt rejects a wrong rotation: shakes (errorSeq), places nothing, notes no placement', () => {
     g().start('bench')
     finishStep()
+    useGuided.setState({ placedOnce: false })
     const plate = pending()
     const before = guided()!.placed
     expect(g().dropAt({ ...plate, r: 0 })).toBeNull()
     expect(g().errorSeq).toBe(1)
     expect(guided()!.placed).toEqual(before)
-    expect(g().dropped).toBe(false)
+    expect(g().placedOnce).toBe(false)
   })
 
   it('a drop that ends the model still celebrates', () => {
@@ -290,5 +293,22 @@ describe('useGuided tray', () => {
     for (let i = 0; i < tree.bricks.length - 1; i++) g().placeGhost(pending().id)
     expect(g().dropOn(pending().id)).not.toBeNull()
     expect(g().celebration?.templateId).toBe('tree')
+  })
+
+  it('a tapped ghost (placeGhost) counts as the first placement too', () => {
+    g().start('tree')
+    g().placeGhost(pending().id)
+    expect(g().placedOnce).toBe(true)
+  })
+
+  it("start and resume forget the last drag, so the tray never replays an old fly-back", () => {
+    const card = { ...g().cards()[0], key: 'k', p: 'brick_2x2', c: 9, bricks: [], r: 0 as const }
+    useGuidedDrag.setState({ last: { outcome: 'missed', at: { x: 1, y: 2 }, card, seq: 3 }, hintTo: { x: 5, y: 5 } })
+    g().start('tree')
+    expect(useGuidedDrag.getState().last).toBeNull()
+    expect(useGuidedDrag.getState().hintTo).toBeNull()
+    useGuidedDrag.setState({ last: { outcome: 'missed', at: { x: 1, y: 2 }, card, seq: 4 } })
+    g().resume()
+    expect(useGuidedDrag.getState().last).toBeNull()
   })
 })

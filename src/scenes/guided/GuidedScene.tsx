@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getTemplate } from '../../content/templates'
 import { COLORS, GLASS_COLOR } from '../../core/colors'
-import { SNAP_RADIUS, dropAnchor, snapTarget } from '../../core/guidedTray'
+import { SNAP_PX, dropAnchor, snapTargetOnScreen, type ScreenProjection } from '../../core/guidedTray'
 import { bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
 import { brickBodyGeometry } from '../../core/parts/brickGeometry'
@@ -47,6 +47,19 @@ interface Preview {
   /** Easy mode: the target ghost the piece snapped onto. */
   snapId?: string
 }
+
+const samePreview = (a: Preview | null, b: Preview | null) =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.partId === b.partId &&
+    a.fig === b.fig &&
+    a.rot === b.rot &&
+    a.valid === b.valid &&
+    a.snapId === b.snapId &&
+    a.anchor.x === b.anchor.x &&
+    a.anchor.y === b.anchor.y &&
+    a.anchor.z === b.anchor.z)
 
 const stepBricks = (t: Template, from: number, to: number): Brick[] =>
   t.steps.slice(from, to).flat().map((i) => t.bricks[i])
@@ -166,7 +179,7 @@ interface WorldProps {
 function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   const viewStep = useGuided((s) => s.viewStep)
   const errorSeq = useGuided((s) => s.errorSeq)
-  const dropped = useGuided((s) => s.dropped)
+  const placedOnce = useGuided((s) => s.placedOnce)
   const easy = useApp((s) => s.difficulty === 'easy')
   const consumeTap = useTap()
 
@@ -207,19 +220,32 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
     [el, get, raycaster],
   )
 
-  // Lets e2e specs (dev handle) aim at bricks, as in the workshop.
-  useEffect(() => {
-    plateScreen.project = ([x, y, z]) => {
+  /** Where a world point is on screen (client pixels). */
+  const toScreen = useCallback<ScreenProjection>(
+    ([x, y, z]) => {
       const v = new THREE.Vector3(x, y, z).project(get().camera)
       const r = el.getBoundingClientRect()
       return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }
-    }
+    },
+    [el, get],
+  )
+
+  // Lets e2e specs (dev handle) aim at bricks, as in the workshop.
+  useEffect(() => {
+    plateScreen.project = toScreen
     return () => {
       plateScreen.project = null
     }
-  }, [el, get])
+  }, [toScreen])
 
-  const [preview, setPreview] = useState<Preview | null>(null)
+  // Set only when what is shown changes: the finger moves far more often than the piece's spot.
+  const [preview, setPreviewState] = useState<Preview | null>(null)
+  const previewRef = useRef<Preview | null>(null)
+  const setPreview = useCallback((next: Preview | null) => {
+    if (samePreview(previewRef.current, next)) return
+    previewRef.current = next
+    setPreviewState(next)
+  }, [])
   const [pop, setPop] = useState<{ brick: Brick; seq: number } | null>(null)
   const easyRef = useRef(easy)
   const guidedRef = useRef(guided)
@@ -232,13 +258,17 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   useEffect(() => {
     if (!interactive) return
     const overView = (p: ClientPoint) => document.elementFromPoint(p.x, p.y) === el
-    /** Where the dragged `card` would go for `aim`: snapped onto a target (easy) or at the finger (normal). */
-    const previewOf = (card: DraggedCard, aim: Aim | null): Preview | null => {
-      if (!aim) return null
+    /**
+     * Where the dragged `card` would go with the finger at `p` (over the view): snapped onto a target
+     * near the finger on screen (easy), or at what the finger points at (normal).
+     */
+    const previewOf = (card: DraggedCard, p: ClientPoint): Preview | null => {
       if (easyRef.current) {
-        const target = snapTarget(card.bricks, aim.hit.point, SNAP_RADIUS)
+        const target = snapTargetOnScreen(card.bricks, p, toScreen, SNAP_PX)
         return target && { partId: card.p, fig: card.fig, rot: target.r, anchor: target, valid: true, snapId: target.id }
       }
+      const aim = pick(p)
+      if (!aim) return null
       const anchor = dropAnchor(aim.hit, aim.ghost, getPart(card.p), card.r)
       const g = guidedRef.current
       const valid = g !== null && findMatch(template, g.step, g.placed, { p: card.p, c: card.c, r: card.r, ...anchor }) !== null
@@ -253,7 +283,7 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
           drag.end('cancelled', null)
           return
         }
-        const next = overView(p) ? previewOf(drag.card, pick(p)) : null
+        const next = overView(p) ? previewOf(drag.card, p) : null
         setPreview(next)
         drag.move(p, next !== null)
       },
@@ -266,7 +296,7 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
           drag.end('cancelled', p)
           return
         }
-        const next = previewOf(card, pick(p))
+        const next = previewOf(card, p)
         const guidedStore = useGuided.getState()
         let placed: Brick | null = null
         let outcome: DropOutcome = 'missed' // released on nothing: back to the tray, no penalty
@@ -286,7 +316,7 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
       setPreview(null)
       useGuidedDrag.getState().end('cancelled', null)
     }
-  }, [interactive, el, pick, template])
+  }, [interactive, el, pick, toScreen, setPreview, template])
 
   // Easy mode: tapping a pulsing ghost still places it (for the youngest builders).
   const onGhostPointer = useCallback<GhostPointer>(
@@ -309,7 +339,7 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
     [template, finished, shownStep],
   )
   const height = useMemo(() => modelTop(bounds(template.bricks)), [template])
-  const hintBrick = interactive && step === 0 && !dropped ? (ghosts[0] ?? null) : null
+  const hintBrick = interactive && step === 0 && !placedOnce ? (ghosts[0] ?? null) : null
 
   return (
     <>

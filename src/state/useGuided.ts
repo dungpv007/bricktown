@@ -7,6 +7,7 @@ import { findMatch, stepComplete, templateToBlueprint, type PlacedCandidate } fr
 import type { Brick, GuidedState, Rot, Template } from '../core/types'
 import { useApp } from './useApp'
 import { useGame } from './useGame'
+import { useGuidedDrag } from './useGuidedDrag'
 
 export interface Celebration {
   templateId: string
@@ -24,8 +25,8 @@ export interface GuidedStore {
   cardRots: Record<string, Rot>
   /** The tray card ↻ turns: the last one tapped or dragged (null: the first card). Cleared on each new step. */
   selectedCard: string | null
-  /** True once a dragged piece was dropped in place this session (hides the "drag me" hint). Not saved. */
-  dropped: boolean
+  /** True once a brick was placed this session, by drag or tap (hides the "drag me" hint). Not saved. */
+  placedOnce: boolean
   /** Begins `templateId` from scratch (replacing any build in progress). */
   start: (templateId: string) => void
   /** Re-enters the saved build: repairs the step index and views the current step with a fresh tray. */
@@ -69,6 +70,9 @@ export const useGuided = create<GuidedStore>()((set, get) => {
   /** A new step starts with an unturned tray and nothing selected. */
   const freshTray = { cardRots: {}, selectedCard: null }
 
+  /** Entering a build: no drag left over from an earlier visit (its fly-back must not replay). */
+  const forgetDrag = () => useGuidedDrag.setState({ card: null, pointer: null, inScene: false, last: null, hintTo: null })
+
   const firstIncomplete = (t: Template, from: number, placed: readonly string[]) => {
     let step = from
     while (step < t.steps.length && stepComplete(t, step, placed)) step++
@@ -87,6 +91,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
   /** Marks template brick `id` placed, then advances (and auto-selects) or finishes. */
   const commit = (t: Template, g: GuidedState, id: string) => {
     const placed = [...g.placed, id]
+    if (!get().placedOnce) set({ placedOnce: true })
     const step = firstIncomplete(t, g.step, placed)
     if (step >= t.steps.length) {
       finish(t)
@@ -109,13 +114,14 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     celebration: null,
     cardRots: {},
     selectedCard: null,
-    dropped: false,
+    placedOnce: false,
 
     start: (templateId) => {
       const t = getTemplate(templateId)
       if (!t) return
       useGame.getState().setGuided({ templateId, step: 0, placed: [] })
       set({ viewStep: 0, celebration: null, ...freshTray })
+      forgetDrag()
     },
 
     resume: () => {
@@ -137,6 +143,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
         useGame.getState().setGuided({ ...g, step, placed })
       }
       set({ viewStep: step, celebration: null, ...freshTray })
+      forgetDrag()
     },
 
     pending: () => {
@@ -162,17 +169,13 @@ export const useGuided = create<GuidedStore>()((set, get) => {
 
     dropOn: (brickId) => {
       const brick = get().pending().find((b) => b.id === brickId)
-      if (!brick || !get().placeGhost(brickId)) return null
-      set({ dropped: true })
-      return brick
+      return brick && get().placeGhost(brickId) ? brick : null
     },
 
     dropAt: (candidate) => {
       const a = active()
       const match = a ? findMatch(a.t, a.g.step, a.g.placed, candidate) : null
-      if (!get().tryPlace(candidate) || !match) return null
-      set({ dropped: true })
-      return match
+      return get().tryPlace(candidate) ? match : null
     },
 
     tryPlace: (candidate) => {

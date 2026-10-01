@@ -1,12 +1,19 @@
 import { figKey, isFigure } from './figures'
 import { getPart } from './parts/catalog'
-import { targetAnchor, type PickHit } from './pick'
+import { targetAnchor, type PickHit, type Vec3 } from './pick'
 import { footprint } from './rotation'
 import type { Brick, FigStyle, PartDef, Rot } from './types'
 import { platesToWorld } from './units'
 
-/** How close (world units = studs) a dragged piece must come to a target for Easy mode to snap it there. */
-export const SNAP_RADIUS = 3
+/**
+ * How close on screen (CSS pixels, about a fingertip) the finger must come to a target for Easy mode
+ * to snap the dragged piece there. Measured on screen so targets high up a tall build snap too.
+ */
+export const SNAP_PX = 64
+
+export interface ScreenPoint { x: number; y: number }
+/** Where a world point appears on screen. */
+export type ScreenProjection = (p: Vec3) => ScreenPoint
 
 /** One card of the Guided tray: a part in one colour (a figure: in one look) and the bricks it stands for. */
 export interface TrayCard {
@@ -33,29 +40,43 @@ export function trayCards(bricks: readonly Brick[]): TrayCard[] {
   return [...cards.values()]
 }
 
-/** Distance (world units) from `point` to the box `brick` fills; 0 on or inside it. */
-export function distanceToBrick(point: readonly [number, number, number], brick: Brick): number {
+/** The 8 corners (world units) of the box `brick` fills. */
+export function brickCorners(brick: Brick): Vec3[] {
   const part = getPart(brick.p)
   const { fx, fz } = footprint(part, brick.r)
-  const gap = (v: number, lo: number, hi: number) => Math.max(lo - v, 0, v - hi)
-  const dx = gap(point[0], brick.x, brick.x + fx)
-  const dy = gap(point[1], platesToWorld(brick.y), platesToWorld(brick.y + part.h))
-  const dz = gap(point[2], brick.z, brick.z + fz)
-  return Math.hypot(dx, dy, dz)
+  const y0 = platesToWorld(brick.y)
+  const y1 = platesToWorld(brick.y + part.h)
+  const out: Vec3[] = []
+  for (const x of [brick.x, brick.x + fx]) for (const y of [y0, y1]) for (const z of [brick.z, brick.z + fz]) out.push([x, y, z])
+  return out
 }
 
 /**
- * Easy-mode magnet: the target nearest to `point` (where the finger points in the scene) that is at
- * most `radius` away, or null. Ties go to the earlier target (step order).
+ * Easy-mode magnet: the target whose on-screen box (the bounds of its projected corners) is nearest
+ * to `finger`, if it is at most `maxPx` away; null otherwise. With the finger inside several boxes the
+ * one whose centre is nearer wins; exact ties go to the earlier target (step order).
  */
-export function snapTarget(targets: readonly Brick[], point: readonly [number, number, number], radius: number): Brick | null {
+export function snapTargetOnScreen(
+  targets: readonly Brick[],
+  finger: ScreenPoint,
+  project: ScreenProjection,
+  maxPx: number,
+): Brick | null {
   let best: Brick | null = null
-  let bestDistance = Infinity
+  let bestEdge = Infinity
+  let bestCentre = Infinity
   for (const t of targets) {
-    const d = distanceToBrick(point, t)
-    if (d <= radius && d < bestDistance) {
+    const pts = brickCorners(t).map(project)
+    const xs = pts.map((p) => p.x)
+    const ys = pts.map((p) => p.y)
+    const [l, r, top, bottom] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    const edge = Math.hypot(Math.max(l - finger.x, 0, finger.x - r), Math.max(top - finger.y, 0, finger.y - bottom))
+    const centre = Math.hypot((l + r) / 2 - finger.x, (top + bottom) / 2 - finger.y)
+    if (edge > maxPx) continue
+    if (edge < bestEdge || (edge === bestEdge && centre < bestCentre)) {
       best = t
-      bestDistance = d
+      bestEdge = edge
+      bestCentre = centre
     }
   }
   return best
