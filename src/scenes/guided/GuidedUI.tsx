@@ -8,6 +8,7 @@ import { useEditor, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { useGuided } from '../../state/useGuided'
 import ColorPicker from '../../ui/ColorPicker'
+import ConfirmDialog from '../../ui/ConfirmDialog'
 import { useT } from '../../ui/i18n'
 import PartPalette, { PartIcon } from '../../ui/PartPalette'
 
@@ -174,17 +175,7 @@ function CelebrationOverlay({ onBrowse }: { onBrowse: () => void }) {
           </button>
         </div>
         {confirming && (
-          <div className="bt-confirm" data-testid="confirm-dialog" role="alertdialog">
-            <p>{t('confirmReplaceWorkshop')}</p>
-            <div className="bt-row">
-              <button className="bt-btn bt-yes" data-testid="confirm-yes" aria-label={t('confirmYes')} onClick={openInWorkshop}>
-                ✓
-              </button>
-              <button className="bt-btn bt-no" data-testid="confirm-no" aria-label={t('back')} onClick={() => setConfirming(false)}>
-                ✗
-              </button>
-            </div>
-          </div>
+          <ConfirmDialog messageKey="confirmReplaceWorkshop" onYes={openInWorkshop} onNo={() => setConfirming(false)} />
         )}
       </div>
     </div>

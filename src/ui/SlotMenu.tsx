@@ -7,6 +7,7 @@ import { deleteSlotById, importIntoCurrentSlot, switchSlot } from '../persistenc
 import { useApp, type SlotId } from '../state/useApp'
 import { usePersistStatus } from '../persistence/status'
 import { useGame } from '../state/useGame'
+import ConfirmDialog from './ConfirmDialog'
 import { useT, type TKey } from './i18n'
 
 const SLOTS: SlotId[] = [1, 2, 3]
@@ -157,17 +158,11 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
         )}
 
         {pending && (
-          <div className="bt-confirm" data-testid="confirm-dialog" role="alertdialog">
-            <p>{pending.kind === 'delete' ? t('confirmDelete') : t('confirmImport')}</p>
-            <div className="bt-row">
-              <button className="bt-btn bt-yes" data-testid="confirm-yes" aria-label="OK" onClick={onConfirm}>
-                ✓
-              </button>
-              <button className="bt-btn bt-no" data-testid="confirm-no" aria-label={t('back')} onClick={() => setPending(null)}>
-                ✗
-              </button>
-            </div>
-          </div>
+          <ConfirmDialog
+            messageKey={pending.kind === 'delete' ? 'confirmDelete' : 'confirmImport'}
+            onYes={onConfirm}
+            onNo={() => setPending(null)}
+          />
         )}
       </div>
     </div>

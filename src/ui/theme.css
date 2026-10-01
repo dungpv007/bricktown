@@ -453,24 +453,6 @@
   color: var(--bt-red);
 }
 
-.bt-confirm {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  border-radius: var(--bt-radius);
-  background: rgba(255, 255, 255, 0.96);
-  font-size: 26px;
-  font-weight: 800;
-}
-
-.bt-confirm p {
-  margin: 0;
-}
-
 .bt-yes {
   background: var(--bt-green);
   color: var(--bt-white);

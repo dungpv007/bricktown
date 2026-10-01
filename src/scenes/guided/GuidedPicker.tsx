@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { TEMPLATES } from '../../content/templates'
-import type { BlueprintKind, Template } from '../../core/types'
+import type { Template } from '../../core/types'
 import { getThumbnail } from '../../render/thumbnails'
 import { useApp } from '../../state/useApp'
 import { useGame } from '../../state/useGame'
 import { useGuided } from '../../state/useGuided'
+import { KIND_ICON } from '../../ui/blueprintKinds'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import { useT } from '../../ui/i18n'
 import { useThumbnail } from '../../ui/useThumbnail'
@@ -28,7 +29,6 @@ const TAG_ICON: Record<string, string> = {
   'building:fire_station': '🧯',
   'building:restaurant': '🍜',
 }
-const KIND_ICON: Record<BlueprintKind, string> = { building: '🏢', vehicle: '🚙', prop: '🧸' }
 const CARD_COLORS = ['var(--bt-green)', 'var(--bt-orange)', 'var(--bt-blue)', 'var(--bt-red)']
 
 const iconOf = (t: Template) =>

@@ -6,7 +6,10 @@ interface Props {
   onNo: () => void
 }
 
-/** Big green check / red cross question that sits above any other dialog. */
+/**
+ * Big green check / red cross question that sits above any other dialog. Every yes/no question in
+ * the app uses this (or the same order): ✗ on the left, ✓ on the right.
+ */
 export default function ConfirmDialog({ messageKey, onYes, onNo }: Props) {
   const t = useT()
   return (
@@ -17,7 +20,7 @@ export default function ConfirmDialog({ messageKey, onYes, onNo }: Props) {
         onNo()
       }}
     >
-      <div className="bt-dialog bt-ask" role="alertdialog" aria-label={t(messageKey)} onClick={(e) => e.stopPropagation()}>
+      <div className="bt-dialog bt-ask" data-testid="confirm-dialog" role="alertdialog" aria-label={t(messageKey)} onClick={(e) => e.stopPropagation()}>
         <p className="bt-ask-text">{t(messageKey)}</p>
         <div className="bt-row">
           <button className="bt-btn bt-no" data-testid="confirm-no" aria-label={t('no')} onClick={onNo}>
