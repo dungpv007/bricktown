@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Baseplate, Blueprint, BlueprintKind } from '../../core/types'
 import { useEditor, useWorkshopHasBricks, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import BlueprintLibrary from '../../ui/BlueprintLibrary'
 import ColorPicker from '../../ui/ColorPicker'
 import ConfirmDialog from '../../ui/ConfirmDialog'
+import ErrorBadge from '../../ui/ErrorBadge'
 import { useT, type TKey } from '../../ui/i18n'
 import PartPalette from '../../ui/PartPalette'
 import SaveBlueprintDialog from '../../ui/SaveBlueprintDialog'
@@ -25,8 +26,6 @@ const MODEL_OPTIONS: ModelOption[] = [
   { id: 'building-large', kind: 'building', baseplate: { w: 32, d: 32 }, icon: '🏢', labelKeys: ['kindBuilding', 'sizeLarge'], color: 'var(--bt-blue)' },
   { id: 'prop', kind: 'prop', baseplate: { w: 8, d: 8 }, icon: '🪑', labelKeys: ['kindProp'], color: 'var(--bt-red)' },
 ]
-
-const ERROR_ICON_MS = 900
 
 function NewModelPicker({ onClose }: { onClose: () => void }) {
   const t = useT()
@@ -91,27 +90,10 @@ function NewModelPicker({ onClose }: { onClose: () => void }) {
   )
 }
 
-/** Brief red icon whenever an action is rejected (no text). */
-function ErrorBadge() {
-  const t = useT()
-  const errorSeq = useEditor((s) => s.errorSeq)
-  const [hiddenSeq, setHiddenSeq] = useState(errorSeq)
-  useEffect(() => {
-    if (errorSeq === hiddenSeq) return
-    const id = setTimeout(() => setHiddenSeq(errorSeq), ERROR_ICON_MS)
-    return () => clearTimeout(id)
-  }, [errorSeq, hiddenSeq])
-  if (errorSeq === hiddenSeq) return null
-  return (
-    <div key={errorSeq} className="bt-error-badge" role="status" aria-label={t('cantPlace')} data-testid="place-error">
-      🚫
-    </div>
-  )
-}
-
 /** HTML overlay on top of the workshop canvas. */
 export default function WorkshopUI() {
   const t = useT()
+  const errorSeq = useEditor((s) => s.errorSeq)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -168,7 +150,7 @@ export default function WorkshopUI() {
       <Toolbar />
       <ColorPicker />
       <PartPalette />
-      <ErrorBadge />
+      <ErrorBadge errorSeq={errorSeq} testId="place-error" />
       {pickerOpen && <NewModelPicker onClose={() => setPickerOpen(false)} />}
       {saveOpen && <SaveBlueprintDialog onClose={() => setSaveOpen(false)} />}
       {libraryOpen && <BlueprintLibrary onPick={onPick} onClose={() => setLibraryOpen(false)} />}

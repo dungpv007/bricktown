@@ -140,6 +140,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (!target) return
       switch (tool) {
         case 'paint':
+          if (target.c === color) return // already this colour: nothing to undo
           commit(bricks, { bricks: paintBrick(bricks, id, color), error: null }, sfx.paint)
           break
         case 'delete':

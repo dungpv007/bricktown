@@ -45,8 +45,9 @@ describe('workshop sounds', () => {
 
   it('paint and pop for the paint and delete tools', () => {
     ed().place(0, 0, 0)
-    const id = useGame.getState().data.workshop.bricks[0].id
+    const { id, c } = useGame.getState().data.workshop.bricks[0]
     ed().setTool('paint')
+    ed().setColor(c + 1) // a different colour: repainting the same one is a silent no-op
     ed().tapBrick(id)
     expect(sfx.paint).toHaveBeenCalledTimes(1)
     ed().setTool('delete')

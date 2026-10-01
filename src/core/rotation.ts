@@ -2,6 +2,13 @@ import { getPart } from './parts/catalog'
 import type { Brick, PartDef, Rot } from './types'
 import { platesToWorld } from './units'
 
+/**
+ * cos/sin of r quarter turns, exact (no float noise from Math.cos(Math.PI / 2)). Index with a `Rot`.
+ * Part-space (x, z) turns to world as `x' = x * cos + z * sin`, `z' = -x * sin + z * cos`.
+ */
+export const QUARTER_COS: readonly number[] = [1, 0, -1, 0]
+export const QUARTER_SIN: readonly number[] = [0, 1, 0, -1]
+
 /** Rotated footprint in studs: odd rotations swap width and depth. */
 export function footprint(part: PartDef, r: Rot): { fx: number; fz: number } {
   return r % 2 === 0 ? { fx: part.w, fz: part.d } : { fx: part.d, fz: part.w }

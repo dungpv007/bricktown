@@ -65,6 +65,8 @@ const FLIP_LIFT = 1
 /** The production-safe status (`useDriveStatus`) is refreshed every this many physics steps. */
 const STATUS_EVERY = 6
 
+const TWO_PI = Math.PI * 2
+
 const FORWARD = new THREE.Vector3(0, 0, -1)
 const UP = new THREE.Vector3(0, 1, 0)
 const tmpQuat = new THREE.Quaternion()
@@ -209,8 +211,10 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
   const steps = useRef(0)
   const steering = useRef(0)
   const forwardSpeed = useRef(0)
-  /** Distance rolled so far, which turns the wheels (Rapier's `wheelRotation` stays 0 in this version). */
-  const rolled = useRef(0)
+  /** Set by the layout cleanup: the physics step must never build a controller after that. */
+  const unmounted = useRef(false)
+  /** Spin angle of each wheel (radians, wrapped to one turn: Rapier's `wheelRotation` stays 0 in this version). */
+  const spin = useRef<number[]>([])
   const flipSeen = useRef(useDriveInput.getState().flipSeq)
   const steerGroups = useRef<Array<THREE.Group | null>>([])
   const spinGroups = useRef<Array<THREE.Group | null>>([])
@@ -229,14 +233,15 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
   // rigid body in a passive effect, after this component's own effects ran (production has no
   // StrictMode re-run to paper over that). Removal stays in a layout cleanup, which runs before
   // <Physics> frees the world (a passive cleanup) when the scene unmounts.
-  useLayoutEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    unmounted.current = false // StrictMode re-runs the effect after its cleanup
+    return () => {
+      unmounted.current = true
       const b = binding.current
       binding.current = null
       if (b) removeController(world, b.controller)
-    },
-    [world],
-  )
+    }
+  }, [world])
 
   /** The controller for the current rigid body and wheels, built (or rebuilt) on demand. */
   const controllerFor = (w: World, rb: RapierRigidBody): VehicleController => {
@@ -250,7 +255,7 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
 
   useBeforePhysicsStep((w) => {
     const rb = body.current
-    if (!rb) return
+    if (!rb || unmounted.current) return
     const c = controllerFor(w, rb)
     const dt = w.timestep
     const drive = useDriveInput.getState()
@@ -291,15 +296,16 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
   useFrame((_, dt) => {
     const c = binding.current?.controller
     if (!c) return
-    rolled.current += forwardSpeed.current * dt
     mounts.forEach((mount, i) => {
+      // Rolling towards -Z turns the top of the wheel forward: negative around +X. Wrapped each frame
+      // (per wheel, as the radii differ) so the angle never grows large enough to lose float precision.
+      spin.current[i] = ((spin.current[i] ?? 0) - (forwardSpeed.current * dt) / config.wheels[i].radius) % TWO_PI
       const steer = steerGroups.current[i]
-      const spin = spinGroups.current[i]
-      if (!steer || !spin) return
+      const spinGroup = spinGroups.current[i]
+      if (!steer || !spinGroup) return
       steer.position.y = mount.y - (c.wheelSuspensionLength(i) ?? SUSPENSION_REST)
       steer.rotation.y = c.wheelSteering(i) ?? 0
-      // Rolling towards -Z turns the top of the wheel forward: negative around +X.
-      spin.rotation.x = (-rolled.current / config.wheels[i].radius) % (Math.PI * 2)
+      spinGroup.rotation.x = spin.current[i]
     })
   })
 

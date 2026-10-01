@@ -108,6 +108,17 @@ describe('useEditor tapBrick', () => {
     expect(bricks()[0].c).toBe(5)
   })
 
+  it('painting a brick with its own colour changes nothing and leaves no undo step', () => {
+    ed().setTool('paint')
+    ed().setColor(5)
+    const before = bricks()
+    ed().tapBrick(id)
+    expect(bricks()).toBe(before)
+    expect(ed().lastError).toBeNull()
+    ed().undo() // undoes the placement from beforeEach, not a phantom paint
+    expect(bricks()).toHaveLength(0)
+  })
+
   it('delete removes the brick and is undoable', () => {
     ed().setTool('delete')
     ed().tapBrick(id)

@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { CELL } from '../../core/city'
 import { roadTileAt, type RoadTile } from '../../core/roads'
 import type { Rot } from '../../core/types'
+import { useInstanceCapacity } from '../../render/instanceCapacity'
 
 /**
  * Road cells as flat tiles: one InstancedMesh per tile type (straight, corner, ...), each tile built
@@ -118,17 +119,12 @@ interface TileInstance {
 }
 
 const MIN_CAPACITY = 16
-function capacityFor(count: number): number {
-  let cap = MIN_CAPACITY
-  while (cap < count) cap *= 2
-  return cap
-}
 
 const tmpMatrix = new THREE.Matrix4()
 
 function TileMesh({ tile, instances }: { tile: RoadTile; instances: TileInstance[] }) {
   const ref = useRef<THREE.InstancedMesh>(null)
-  const capacity = capacityFor(instances.length)
+  const capacity = useInstanceCapacity(instances.length, MIN_CAPACITY)
   useLayoutEffect(() => {
     const mesh = ref.current
     if (!mesh) return

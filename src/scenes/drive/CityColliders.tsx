@@ -1,10 +1,9 @@
 import { useMemo } from 'react'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
-import * as THREE from 'three'
-import type { BakedModel } from '../../core/bake'
 import { CELL } from '../../core/city'
-import { placementWorldBox, type Box } from '../../core/drive'
+import { isSolidBox, placementWorldBox, type Box } from '../../core/drive'
 import type { Blueprint, CityState } from '../../core/types'
+import { bakedModelBox } from '../../render/placementTransform'
 import { resolveRenderable } from '../../render/sources'
 
 /** How far the ground reaches past the city plate (matches the land drawn by CityGround). */
@@ -15,18 +14,6 @@ const WALL_THICKNESS = 2
 /** Low friction on buildings so a car scrapes along a wall instead of climbing it. */
 const BUILDING_FRICTION = 0.2
 
-/** Model-space bounding box of a baked model (shared cache: never dispose); null when it has no geometry. */
-function modelBox(baked: BakedModel): Box | null {
-  const box = new THREE.Box3()
-  for (const g of [baked.opaque, baked.glass]) {
-    if (!g || g.getAttribute('position').count === 0) continue
-    if (!g.boundingBox) g.computeBoundingBox()
-    if (g.boundingBox) box.union(g.boundingBox)
-  }
-  if (box.isEmpty()) return null
-  return { min: box.min.toArray(), max: box.max.toArray() }
-}
-
 interface Solid {
   id: string
   center: [number, number, number]
@@ -35,8 +22,8 @@ interface Solid {
 
 /**
  * Static physics for the city: a ground slab under the plate and the land around it, invisible
- * walls at the plate edge, and one fixed box per placed model (its baked bounding box, turned and
- * moved like the drawn model).
+ * walls at the plate edge, and one fixed box per placed model taller than `MIN_SOLID_HEIGHT` (its baked
+ * bounding box, turned and moved like the drawn model).
  */
 export default function CityColliders({ city, blueprints }: { city: CityState; blueprints: Blueprint[] }) {
   const solids = useMemo<Solid[]>(() => {
@@ -45,7 +32,7 @@ export default function CityColliders({ city, blueprints }: { city: CityState; b
       if (!boxes.has(source)) {
         // Safe resolver: a model with a part this version does not know gets no collider (the city shows a placeholder).
         const r = resolveRenderable(source, { blueprints })
-        const box = r ? modelBox(r.baked) : null
+        const box = r ? bakedModelBox(r.baked) : null
         boxes.set(source, r && box ? { box, baseplate: r.baseplate } : null)
       }
       return boxes.get(source) ?? null
@@ -54,11 +41,13 @@ export default function CityColliders({ city, blueprints }: { city: CityState; b
     for (const p of city.placements) {
       const m = boxOf(p.source)
       if (!m) continue // deleted blueprint / unknown template or part: nothing drawn, nothing to hit
+      // Flat decorations (a one-plate garden) are driven over, not bumped into.
+      if (!isSolidBox(m.box)) continue
       const { min, max } = placementWorldBox(p, m.baseplate, m.box)
       out.push({
         id: p.id,
         center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
-        half: [(max[0] - min[0]) / 2, Math.max(0.5, (max[1] - min[1]) / 2), (max[2] - min[2]) / 2],
+        half: [(max[0] - min[0]) / 2, (max[1] - min[1]) / 2, (max[2] - min[2]) / 2],
       })
     }
     return out

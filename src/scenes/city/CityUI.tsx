@@ -9,6 +9,7 @@ import { useEditor, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { KIND_ICON } from '../../ui/blueprintKinds'
 import ConfirmDialog from '../../ui/ConfirmDialog'
+import ErrorBadge from '../../ui/ErrorBadge'
 import { useT, type TKey } from '../../ui/i18n'
 import { useThumbnail } from '../../ui/useThumbnail'
 
@@ -18,8 +19,6 @@ const TOOLS: Array<{ tool: CityTool; icon: string; labelKey: TKey }> = [
   { tool: 'erase', icon: '🗑️', labelKey: 'toolDelete' },
   { tool: 'rotate', icon: '🔄', labelKey: 'toolRotate' },
 ]
-
-const ERROR_ICON_MS = 900
 
 function CityToolbar() {
   const t = useT()
@@ -132,27 +131,10 @@ function SourceDrawer() {
   )
 }
 
-/** Brief red icon whenever a city action is rejected (no text). */
-function ErrorBadge() {
-  const t = useT()
-  const errorSeq = useCityEditor((s) => s.errorSeq)
-  const [hiddenSeq, setHiddenSeq] = useState(errorSeq)
-  useEffect(() => {
-    if (errorSeq === hiddenSeq) return
-    const id = setTimeout(() => setHiddenSeq(errorSeq), ERROR_ICON_MS)
-    return () => clearTimeout(id)
-  }, [errorSeq, hiddenSeq])
-  if (errorSeq === hiddenSeq) return null
-  return (
-    <div key={errorSeq} className="bt-error-badge" role="status" aria-label={t('cantPlace')} data-testid="city-error">
-      🚫
-    </div>
-  )
-}
-
 /** HTML overlay on top of the city canvas. */
 export default function CityUI() {
   const t = useT()
+  const errorSeq = useCityEditor((s) => s.errorSeq)
   const setMode = useApp((s) => s.setMode)
   const loadBricks = useEditor((s) => s.loadBricks)
   const [pendingEdit, setPendingEdit] = useState<Blueprint | null>(null)
@@ -194,7 +176,7 @@ export default function CityUI() {
       </div>
       <CityToolbar />
       <SourceDrawer />
-      <ErrorBadge />
+      <ErrorBadge errorSeq={errorSeq} testId="city-error" />
       {pendingEdit && (
         <ConfirmDialog messageKey="confirmReplaceModel" onYes={() => openInWorkshop(pendingEdit)} onNo={() => setPendingEdit(null)} />
       )}

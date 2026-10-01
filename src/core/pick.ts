@@ -1,5 +1,5 @@
 import { getPart } from './parts/catalog'
-import { footprint } from './rotation'
+import { footprint, QUARTER_COS, QUARTER_SIN } from './rotation'
 import type { Brick, PartDef, Rot } from './types'
 import { platesToWorld } from './units'
 
@@ -16,16 +16,13 @@ export interface PickHit {
 /** Tolerance (world units) for treating a hit at/above a brick's top as the top face (stud sides). */
 const TOP_EPS = 0.01
 
-const COS: readonly number[] = [1, 0, -1, 0]
-const SIN: readonly number[] = [0, 1, 0, -1]
-
 /**
  * Rotates a part-space normal into world space for a brick rotated `r` quarter turns
  * (same convention as mesh `rotation.y = r * PI / 2`). Exact for quarter turns.
  */
 export function rotateNormalY([x, y, z]: Vec3, r: Rot): Vec3 {
-  const c = COS[r]
-  const s = SIN[r]
+  const c = QUARTER_COS[r]
+  const s = QUARTER_SIN[r]
   // `+ 0` turns -0 into 0.
   return [x * c + z * s + 0, y, -x * s + z * c + 0]
 }

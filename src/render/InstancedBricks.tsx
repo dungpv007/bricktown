@@ -5,6 +5,7 @@ import { COLORS } from '../core/colors'
 import { getPartGeometry } from '../core/parts/geometry'
 import { brickCenter } from '../core/rotation'
 import type { Brick } from '../core/types'
+import { useInstanceCapacity } from './instanceCapacity'
 import { brickMaterial, glassMaterial } from './materials'
 
 export type BrickPointerHandler = (e: ThreeEvent<PointerEvent>, brick: Brick) => void
@@ -23,13 +24,6 @@ interface BrickGroupData {
 }
 
 const MIN_CAPACITY = 16
-
-/** Instance buffer size: next power of two, so the mesh is only rebuilt when a group doubles. */
-function capacityFor(count: number): number {
-  let cap = MIN_CAPACITY
-  while (cap < count) cap *= 2
-  return cap
-}
 
 function groupBricks(bricks: Brick[]): BrickGroupData[] {
   const groups = new Map<string, BrickGroupData>()
@@ -55,7 +49,7 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0)
 
 function BrickGroup({ partId, glass, bricks, onBrickPointer }: Omit<BrickGroupData, 'key'> & Pick<Props, 'onBrickPointer'>) {
   const ref = useRef<THREE.InstancedMesh>(null)
-  const capacity = capacityFor(bricks.length)
+  const capacity = useInstanceCapacity(bricks.length, MIN_CAPACITY)
   const geometry = getPartGeometry(partId)
 
   useLayoutEffect(() => {

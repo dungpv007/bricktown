@@ -2,29 +2,11 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { BakedModel } from '../../core/bake'
 import { CELL, footprintCells } from '../../core/city'
-import { placementCenter } from '../../core/cityPlan'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
+import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { bakedGlassMaterial, bakedMaterial } from '../../render/materials'
+import { placementMatrix } from '../../render/placementTransform'
 import { makeSizeOf, resolveRenderable, type RenderableSource } from '../../render/sources'
-
-const Y_AXIS = new THREE.Vector3(0, 1, 0)
-const tmpOffset = new THREE.Vector3()
-
-/**
- * Model -> world matrix of a placement: the model (baseplate x in [0, w], z in [0, d]) is turned
- * `rot` quarter turns around its own centre and centred on its footprint cells.
- */
-export function placementMatrix(
-  target: THREE.Matrix4,
-  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot'>,
-  baseplate: Baseplate,
-): THREE.Matrix4 {
-  const { x, z } = placementCenter(p, baseplate)
-  const angle = (p.rot * Math.PI) / 2
-  // world = R * (v - modelCentre) + footprintCentre
-  tmpOffset.set(-baseplate.w / 2, 0, -baseplate.d / 2).applyAxisAngle(Y_AXIS, angle)
-  return target.makeRotationY(angle).setPosition(x + tmpOffset.x, tmpOffset.y, z + tmpOffset.z)
-}
 
 /** Height (studs) of a baked model, at least 1. */
 export function bakedHeight(baked: BakedModel): number {
@@ -50,11 +32,6 @@ export function footprintBox(
 }
 
 const MIN_CAPACITY = 8
-function capacityFor(count: number): number {
-  let cap = MIN_CAPACITY
-  while (cap < count) cap *= 2
-  return cap
-}
 
 const tmpMatrix = new THREE.Matrix4()
 
@@ -70,7 +47,7 @@ function BakedInstances({
   placements: CityPlacement[]
 }) {
   const ref = useRef<THREE.InstancedMesh>(null)
-  const capacity = capacityFor(placements.length)
+  const capacity = useInstanceCapacity(placements.length, MIN_CAPACITY)
   // A new geometry (the blueprint was edited) recreates the mesh, so it needs its matrices again.
   useLayoutEffect(() => {
     const mesh = ref.current
@@ -119,7 +96,7 @@ const PLACEHOLDER_GAP = 0.5
 /** Grey blocks for placements whose blueprint is gone or broken, so they stay visible and erasable. */
 function Placeholders({ placements, sizeOf }: { placements: CityPlacement[]; sizeOf: (source: string) => Baseplate }) {
   const ref = useRef<THREE.InstancedMesh>(null)
-  const capacity = capacityFor(placements.length)
+  const capacity = useInstanceCapacity(placements.length, MIN_CAPACITY)
   useLayoutEffect(() => {
     const mesh = ref.current
     if (!mesh) return

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { COLORS } from './colors'
 import { getPartGeometry } from './parts/geometry'
-import { brickCenter } from './rotation'
+import { brickCenter, QUARTER_COS, QUARTER_SIN } from './rotation'
 import type { Brick, Rot } from './types'
 
 /**
@@ -14,10 +14,6 @@ export interface BakedModel {
   /** Bricks painted with a glass colour; null when the model has none. */
   glass: THREE.BufferGeometry | null
 }
-
-// cos/sin of r quarter turns, exact (no float noise from Math.cos(Math.PI / 2)).
-const COS = [1, 0, -1, 0] as const
-const SIN = [0, 1, 0, -1] as const
 
 const FALLBACK_HEX = '#ffffff'
 const tmpColor = new THREE.Color()
@@ -43,8 +39,8 @@ function mergeBricks(bricks: Brick[]): THREE.BufferGeometry {
     const pos = src.getAttribute('position')
     const nor = src.getAttribute('normal')
     const [cx, cy, cz] = brickCenter(b)
-    const cos = COS[b.r as Rot]
-    const sin = SIN[b.r as Rot]
+    const cos = QUARTER_COS[b.r as Rot]
+    const sin = QUARTER_SIN[b.r as Rot]
     tmpColor.set(COLORS[b.c]?.hex ?? FALLBACK_HEX)
     for (let v = 0; v < pos.count; v++, offset += 3) {
       const px = pos.getX(v)

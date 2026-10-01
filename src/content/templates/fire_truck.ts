@@ -36,10 +36,10 @@ for (const y of [6, 9, 12]) {
 }
 b.add('plate_4x8', 2, 15, 6, 0, WHITE)
 
-// A ladder along the roof: two rails with three rungs between them.
+// A ladder along the roof (z 6..13, nothing overhangs): two rails of two plates with three rungs between them.
 for (const x of [2, 5]) {
-  b.add('plate_1x4', x, 16, 7, 0, LADDER)
-  b.add('plate_1x4', x, 16, 11, 0, LADDER)
+  b.add('plate_1x4', x, 16, 6, 0, LADDER)
+  b.add('plate_1x4', x, 16, 10, 0, LADDER)
 }
 for (const z of [8, 10, 12]) b.add('plate_1x2', 3, 16, z, 1, LADDER)
 

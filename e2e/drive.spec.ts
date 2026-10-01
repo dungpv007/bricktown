@@ -44,13 +44,33 @@ async function setUpCity(page: Page, placements: unknown[] = []) {
   }, placements)
 }
 
+/**
+ * Polls until the car is at rest: forward speed near zero and no vertical movement between two
+ * samples (it has settled on its wheels, or has stopped against a wall).
+ */
+async function waitUntilStill(page: Page) {
+  let last = await carState(page)
+  await expect
+    .poll(
+      async () => {
+        await page.waitForTimeout(100)
+        const now = await carState(page)
+        const still = now !== null && last !== null && Math.abs(now.speed) < 0.2 && Math.abs(now.y - last.y) < 0.005
+        last = now
+        return still
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true)
+}
+
 async function startDriving(page: Page, source: string) {
   await page.getByTestId('menu-drive').click()
   await page.getByTestId(`veh-${source}`).click()
   await expect(page.getByTestId('mode-drive').locator('canvas')).toBeVisible()
   await expect(page.getByTestId('drive-gas')).toBeVisible()
   await expect.poll(() => carState(page)).not.toBeNull()
-  await page.waitForTimeout(500) // let the car settle on its wheels
+  await waitUntilStill(page) // let the car settle on its wheels
 }
 
 /** Holds a pedal with the mouse for `ms`. */
@@ -118,7 +138,7 @@ test('drive: a building stops the car at full speed', async ({ page }) => {
   await setUpCity(page, [{ id: 'blocker', source: 'tpl:house_small', cx: 20, cz: 16, rot: 0 }])
   await startDriving(page, 'tpl:car')
   await hold(page, 'drive-gas', 5000)
-  await page.waitForTimeout(500)
+  await waitUntilStill(page)
   const s = (await carState(page))!
   // Stopped south of the house (cells z >= 16): no tunnelling through it.
   expect(s.z).toBeGreaterThan(16 * CELL + 4)
@@ -157,7 +177,7 @@ test('drive: the stick steers and the flip button rights the car', async ({ page
   await expect.poll(async () => (await carState(page))!.upY, { timeout: 5000 }).toBeLessThan(-0.9)
   await page.getByTestId('drive-flip').click()
   await expect.poll(async () => (await carState(page))!.upY, { timeout: 5000 }).toBeGreaterThan(0.95)
-  await page.waitForTimeout(1000)
+  await waitUntilStill(page)
   const flipped = (await carState(page))!
   expect(flipped.upY).toBeGreaterThan(0.95)
   expect(flipped.y).toBeGreaterThan(-0.3)
