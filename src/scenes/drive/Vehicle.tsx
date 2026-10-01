@@ -183,6 +183,8 @@ interface Props {
   setup: DrivableSetup
   /** Start position of the body origin (the wheel bottoms, under the model centre). */
   spawn: [number, number, number]
+  /** Start heading (radians around +Y, 0 = facing -Z); also used when the car falls out of the world. */
+  spawnYaw?: number
   /** Follows the (interpolated) chassis; read by the chase camera. */
   chassisRef: RefObject<THREE.Group | null>
 }
@@ -192,7 +194,7 @@ interface Props {
  * ray-cast vehicle controller for the wheels. Forward is -Z; every wheel drives, the front
  * ones steer. Mass sits at axle height and the inertia is padded so kids rarely flip it.
  */
-export default function Vehicle({ setup, spawn, chassisRef }: Props) {
+export default function Vehicle({ setup, spawn, spawnYaw = 0, chassisRef }: Props) {
   const { config, wheelBricks, bodyBricks } = setup
   const { world } = useRapier()
   const body = useRef<RapierRigidBody>(null)
@@ -205,6 +207,7 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
   /** Spin angle of each wheel (radians, wrapped to one turn: Rapier's `wheelRotation` stays 0 in this version). */
   const spin = useRef<number[]>([])
   const flipSeen = useRef(useDriveInput.getState().flipSeq)
+  const placeSeen = useRef(useDriveInput.getState().placeSeq)
   const steerGroups = useRef<Array<THREE.Group | null>>([])
   const spinGroups = useRef<Array<THREE.Group | null>>([])
 
@@ -253,7 +256,12 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
       flipSeen.current = drive.flipSeq
       flipUpright(rb, config.chassis)
     }
-    if (rb.translation().y < FALL_LIMIT) placeBody(rb, { x: spawn[0], y: spawn[1], z: spawn[2] }, 0)
+    if (drive.placeSeq !== placeSeen.current) {
+      placeSeen.current = drive.placeSeq
+      const p = drive.placeTarget
+      if (p) placeBody(rb, { x: p.x, y: spawn[1], z: p.z }, p.yaw)
+    }
+    if (rb.translation().y < FALL_LIMIT) placeBody(rb, { x: spawn[0], y: spawn[1], z: spawn[2] }, spawnYaw)
 
     const input = drive.read()
     const v = rb.linvel()
@@ -300,12 +308,14 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
 
   // Model space -> body space: the origin is under the model centre, at the wheel bottoms.
   const [ox, oy, oz] = config.origin
+  const rotation = useMemo<[number, number, number]>(() => [0, spawnYaw, 0], [spawnYaw])
   return (
     <RigidBody
       ref={body}
       type="dynamic"
       colliders={false}
       position={spawn}
+      rotation={rotation}
       ccd
       canSleep={false}
       linearDamping={0.05}

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { sameLayout, type Maze } from '../core/maze'
 import { createEmptySave } from '../core/serialize'
-import type { Blueprint, CityState, GuidedState, SaveData, WorkshopState } from '../core/types'
+import type { Blueprint, CityState, GuidedState, MazeRecord, SaveData, WorkshopState } from '../core/types'
 
 export interface GameState {
   data: SaveData
@@ -14,6 +15,26 @@ export interface GameState {
   setCity: (city: CityState) => void
   setGuided: (g: GuidedState | null) => void
   markTemplateCompleted: (id: string) => void
+  /**
+   * Adds the kid's maze, or replaces the one with the same id (keeping its place in the list). A
+   * replacement that changes the layout (walls, doors, coins, size: see `sameLayout`) also forgets
+   * the maze's best run and a friend's challenge on it, which no longer match; a new name or
+   * colour keeps them.
+   */
+  upsertMaze: (maze: Maze) => void
+  /** Also forgets the maze's best run and a friend's challenge on it. */
+  deleteMaze: (id: string) => void
+  /** Stores a run as the maze's record (`key`: maze id, or `tpl:<id>`); deciding what is "best" is the caller's job. */
+  setMazeRecord: (key: string, record: MazeRecord) => void
+}
+
+/** The save without the best run and the challenge kept for maze `id`. */
+function forgetRuns(d: SaveData, id: string): SaveData {
+  const { [id]: _record, ...mazeRecords } = d.mazeRecords
+  const { [id]: _challenge, ...mazeChallenges } = d.mazeChallenges
+  void _record
+  void _challenge
+  return { ...d, mazeRecords, mazeChallenges }
 }
 
 export const useGame = create<GameState>()((set) => {
@@ -43,5 +64,14 @@ export const useGame = create<GameState>()((set) => {
       update((d) =>
         d.completedTemplates.includes(id) ? d : { ...d, completedTemplates: [...d.completedTemplates, id] },
       ),
+    upsertMaze: (maze) =>
+      update((d) => {
+        const old = d.mazes.find((m) => m.id === maze.id)
+        if (!old) return { ...d, mazes: [...d.mazes, maze] }
+        const mazes = d.mazes.map((m) => (m.id === maze.id ? maze : m))
+        return sameLayout(old, maze) ? { ...d, mazes } : { ...forgetRuns(d, maze.id), mazes }
+      }),
+    deleteMaze: (id) => update((d) => ({ ...forgetRuns(d, id), mazes: d.mazes.filter((m) => m.id !== id) })),
+    setMazeRecord: (key, record) => update((d) => ({ ...d, mazeRecords: { ...d.mazeRecords, [key]: record } })),
   }
 })

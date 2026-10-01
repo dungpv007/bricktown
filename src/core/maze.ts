@@ -128,6 +128,25 @@ export function createEmptyMaze(w: number, h: number, opts: CreateMazeOptions = 
   }
 }
 
+const sameDoor = (a: Cell | null, b: Cell | null): boolean => (a === null ? b === null : sameCell(a, b))
+const sameKeys = (a: string[], b: string[]): boolean => {
+  const set = new Set(a)
+  return set.size === new Set(b).size && b.every((k) => set.has(k))
+}
+
+/**
+ * Whether two mazes drive the same: same size, walls, doors and coins (cell lists compared as
+ * sets). The name, colours, ids and timestamps do not count. A run's record only stands for the
+ * layout it was driven on.
+ */
+export function sameLayout(a: Maze, b: Maze): boolean {
+  return (
+    a.w === b.w && a.h === b.h &&
+    sameDoor(a.entry, b.entry) && sameDoor(a.exit, b.exit) &&
+    sameKeys(a.walls, b.walls) && sameKeys(a.coins, b.coins)
+  )
+}
+
 /**
  * Make `cell` a wall (`wall` true) or open floor (false). No-op (same maze) on the entry/exit cells,
  * outside the grid, and when removing a wall on the outer ring: the border only opens through
