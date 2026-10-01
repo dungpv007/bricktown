@@ -344,13 +344,14 @@
   display: flex;
   gap: 10px;
   visibility: hidden;
-  pointer-events: auto;
+  pointer-events: none; /* the gap between the buttons lets taps through to the plate */
   user-select: none;
   -webkit-user-select: none;
 }
 
 .bt-plate-btn {
   background: rgba(255, 255, 255, 0.85);
+  pointer-events: auto;
 }
 
 .bt-topright {

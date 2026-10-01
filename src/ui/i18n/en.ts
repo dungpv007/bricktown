@@ -31,6 +31,7 @@ export const en: Record<keyof typeof vi, string> = {
   cantPlace: "Can't place here",
   plateGrow: 'Make the baseplate bigger',
   plateShrink: 'Make the baseplate smaller',
+  cantResize: "Can't resize the baseplate",
   close: 'Close',
   catBrick: 'Bricks',
   catPlate: 'Plates',

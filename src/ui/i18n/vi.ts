@@ -29,6 +29,7 @@ export const vi = {
   cantPlace: 'Không đặt được',
   plateGrow: 'Mở rộng đế',
   plateShrink: 'Thu nhỏ đế',
+  cantResize: 'Không đổi được cỡ đế',
   close: 'Đóng',
   catBrick: 'Gạch',
   catPlate: 'Tấm',

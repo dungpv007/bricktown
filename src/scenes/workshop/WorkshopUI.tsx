@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { isResizeError } from '../../core/baseplate'
 import type { Baseplate, Blueprint, BlueprintKind } from '../../core/types'
 import { useEditor, useWorkshopHasBricks, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
@@ -94,6 +95,7 @@ function NewModelPicker({ onClose }: { onClose: () => void }) {
 export default function WorkshopUI() {
   const t = useT()
   const errorSeq = useEditor((s) => s.errorSeq)
+  const lastError = useEditor((s) => s.lastError)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [saveOpen, setSaveOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -150,7 +152,7 @@ export default function WorkshopUI() {
       <Toolbar />
       <ColorPicker />
       <PartPalette />
-      <ErrorBadge errorSeq={errorSeq} testId="place-error" />
+      <ErrorBadge errorSeq={errorSeq} testId="place-error" labelKey={isResizeError(lastError) ? 'cantResize' : 'cantPlace'} />
       {pickerOpen && <NewModelPicker onClose={() => setPickerOpen(false)} />}
       {saveOpen && <SaveBlueprintDialog onClose={() => setSaveOpen(false)} />}
       {libraryOpen && <BlueprintLibrary onPick={onPick} onClose={() => setLibraryOpen(false)} />}

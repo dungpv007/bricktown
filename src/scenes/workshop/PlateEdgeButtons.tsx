@@ -6,14 +6,19 @@ import type { Baseplate, BlueprintKind } from '../../core/types'
 import { useEditor } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { useT } from '../../ui/i18n'
+import { plateScreen } from './plateScreen'
+import { safeRect } from './safeArea'
+import { plateCorners } from './viewFit'
 
 const SIDES: PlateSide[] = ['N', 'E', 'S', 'W']
 /** How far outside the plate edge (in studs) the buttons sit. */
 const GAP = 3
-/** The S edge faces the default camera, where a stud spans more pixels: closer keeps it clear of the palette. */
-const S_GAP = 2
 /** A vehicle's front arrow lies just past the N edge: keep its buttons clear of it. */
 const VEHICLE_N_GAP = 8
+/** Button group geometry (matches .bt-icon-btn and .bt-plate-edge): used to keep groups on screen. */
+const BUTTON = 64
+const BUTTON_GAP = 10
+const BUTTON_SHADOW = 6
 
 /** The DOM element holding each edge's buttons (absent when that edge shows none). */
 export type EdgeElements = Partial<Record<PlateSide, HTMLDivElement | null>>
@@ -21,33 +26,63 @@ export type EdgeElements = Partial<Record<PlateSide, HTMLDivElement | null>>
 function edgeAnchor(side: PlateSide, { w, d }: Baseplate, kind: BlueprintKind, out: THREE.Vector3): THREE.Vector3 {
   switch (side) {
     case 'N': return out.set(w / 2, 0, -(kind === 'vehicle' ? VEHICLE_N_GAP : GAP))
-    case 'S': return out.set(w / 2, 0, d + S_GAP)
+    case 'S': return out.set(w / 2, 0, d + GAP)
     case 'W': return out.set(-GAP, 0, d / 2)
     case 'E': return out.set(w + GAP, 0, d / 2)
   }
 }
 
-const anchor = new THREE.Vector3()
-/** The transform last written to each edge element, so unchanged frames skip the DOM. */
-const applied = new WeakMap<HTMLElement, string>()
+const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)))
 
-/** Moves each edge's buttons to that edge's midpoint on screen. */
-function positionEdges(edges: EdgeElements, camera: THREE.Camera, size: { width: number; height: number }) {
+const point = new THREE.Vector3()
+/** The position last written to each edge element (NaN = hidden), so unchanged frames skip the DOM. */
+const applied = new WeakMap<HTMLElement, { x: number; y: number }>()
+
+/** Screen position (pixels) of a world point. */
+function toScreen(p: THREE.Vector3, camera: THREE.Camera, size: { width: number; height: number }) {
+  p.project(camera)
+  return { x: ((p.x + 1) / 2) * size.width, y: ((1 - p.y) / 2) * size.height, inFront: p.z < 1 }
+}
+
+/**
+ * Moves each edge's buttons to that edge's midpoint on screen, kept inside the HUD-free part of
+ * the screen so they stay reachable however the camera is turned.
+ */
+function positionEdges(
+  edges: EdgeElements,
+  camera: THREE.Camera,
+  size: { width: number; height: number },
+  canvas: HTMLElement,
+) {
   const { baseplate, kind } = useGame.getState().data.workshop
   camera.updateMatrixWorld()
+  const safe = safeRect(canvas)
+
+  const b = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }
+  for (const [x, , z] of plateCorners(baseplate)) {
+    const s = toScreen(point.set(x, 0, z), camera, size)
+    b.left = Math.min(b.left, s.x)
+    b.right = Math.max(b.right, s.x)
+    b.top = Math.min(b.top, s.y)
+    b.bottom = Math.max(b.bottom, s.y)
+  }
+  plateScreen.bounds = b
+
   for (const side of SIDES) {
     const el = edges[side]
     if (!el) continue
-    edgeAnchor(side, baseplate, kind, anchor).project(camera)
+    const s = toScreen(edgeAnchor(side, baseplate, kind, point), camera, size)
+    const n = el.childElementCount
+    const halfW = (n * BUTTON + (n - 1) * BUTTON_GAP) / 2
+    const halfH = BUTTON / 2
     // Behind the camera the projection mirrors: hide instead.
-    const visible = anchor.z < 1
-    const x = Math.round(((anchor.x + 1) / 2) * size.width)
-    const y = Math.round(((1 - anchor.y) / 2) * size.height)
-    const css = visible ? `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)` : 'hidden'
-    if (applied.get(el) === css) continue
-    applied.set(el, css)
-    el.style.visibility = visible ? 'visible' : 'hidden'
-    if (visible) el.style.transform = css
+    const x = s.inFront ? Math.round(clamp(s.x, safe.left + halfW, safe.right - halfW)) : NaN
+    const y = s.inFront ? Math.round(clamp(s.y, safe.top + halfH, safe.bottom - halfH - BUTTON_SHADOW)) : NaN
+    const last = applied.get(el)
+    if (last && Object.is(last.x, x) && Object.is(last.y, y)) continue
+    applied.set(el, { x, y })
+    el.style.visibility = s.inFront ? 'visible' : 'hidden'
+    if (s.inFront) el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`
   }
 }
 
@@ -56,7 +91,7 @@ function positionEdges(edges: EdgeElements, camera: THREE.Camera, size: { width:
  * {@link PlateEdgeButtons} in a DOM layer over the canvas) to that edge's midpoint on screen.
  */
 export function PlateEdgeTracker({ edges }: { edges: RefObject<EdgeElements> }) {
-  useFrame(({ camera, size }) => positionEdges(edges.current, camera, size))
+  useFrame(({ camera, size, gl }) => positionEdges(edges.current, camera, size, gl.domElement))
   return null
 }
 

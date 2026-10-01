@@ -10,6 +10,13 @@ export const PLATE_MAX = 48
 export type PlateSide = 'N' | 'E' | 'S' | 'W'
 export type ResizeDir = 'grow' | 'shrink'
 export type ResizeError = 'max' | 'min' | 'not_empty'
+const RESIZE_ERRORS: readonly string[] = ['max', 'min', 'not_empty'] satisfies ResizeError[]
+
+/** True for the errors `resizeBaseplate` reports (as opposed to brick placement errors). */
+export function isResizeError(error: string | null): error is ResizeError {
+  return error !== null && RESIZE_ERRORS.includes(error)
+}
+
 export type ResizeResult = { bricks: Brick[]; baseplate: Baseplate } | { error: ResizeError }
 
 const alongX = (side: PlateSide) => side === 'E' || side === 'W'

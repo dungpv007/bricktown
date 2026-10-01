@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PLATE_MAX, PLATE_MIN, PLATE_STEP, canShrink, plateShift, resizeBaseplate, type PlateSide } from './baseplate'
+import { PLATE_MAX, PLATE_MIN, PLATE_STEP, canShrink, isResizeError, plateShift, resizeBaseplate, type PlateSide } from './baseplate'
 import type { Baseplate, Brick, Rot } from './types'
 
 const b = (id: string, x: number, y: number, z: number, p = 'brick_2x4', r: Rot = 0): Brick => ({
@@ -12,6 +12,16 @@ describe('constants', () => {
     expect(PLATE_STEP).toBe(8)
     expect(PLATE_MIN).toBe(8)
     expect(PLATE_MAX).toBe(48)
+  })
+})
+
+describe('isResizeError', () => {
+  it('tells resize errors from placement errors', () => {
+    expect(isResizeError('max')).toBe(true)
+    expect(isResizeError('min')).toBe(true)
+    expect(isResizeError('not_empty')).toBe(true)
+    expect(isResizeError('collision')).toBe(false)
+    expect(isResizeError(null)).toBe(false)
   })
 })
 
