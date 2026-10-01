@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { flushAutosave, savedSlotData } from './support'
 
 type Bt = {
   useGame: {
@@ -26,7 +27,10 @@ test('a brick added in the workshop survives a reload', async ({ page }) => {
   })
   expect(await brickCount(page)).toBe(1)
 
-  await page.waitForTimeout(2500)
+  await flushAutosave(page)
+  await expect
+    .poll(async () => (await savedSlotData<{ workshop: { bricks: unknown[] } }>(page))?.workshop.bricks.length)
+    .toBe(1)
   await page.reload()
 
   await expect(page.getByTestId('main-menu')).toBeVisible()

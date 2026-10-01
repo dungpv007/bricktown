@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { flushAutosave, savedSlotData } from './support'
 
 interface Saved {
   guided: unknown
@@ -11,28 +12,9 @@ interface BtWindow {
     useApp: { getState(): { setDifficulty(d: 'easy' | 'normal'): void } }
     useGame: { getState(): { data: Saved } }
     useGuided: { getState(): { pending(): Array<{ id: string }>; placeGhost(id: string): boolean } }
-    flushAutosave(): Promise<boolean>
   }
   __btDrive?: { x: number; z: number }
 }
-
-/** The saved slot as it is in IndexedDB right now (what a reload would load), or null. */
-const savedData = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<Saved | null>((resolve, reject) => {
-        const open = indexedDB.open('bricktown')
-        open.onerror = () => reject(open.error)
-        open.onsuccess = () => {
-          const all = open.result.transaction('slots').objectStore('slots').getAll()
-          all.onerror = () => reject(all.error)
-          all.onsuccess = () => {
-            open.result.close()
-            resolve((all.result[0]?.data as Saved | undefined) ?? null)
-          }
-        }
-      }),
-  )
 
 const liveData = (page: Page) => page.evaluate(() => (window as unknown as BtWindow).__bt.useGame.getState().data)
 
@@ -70,15 +52,24 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
   await page.getByTestId('city-tool-road').click()
-  await page.mouse.move(cx - 120, cy)
-  await page.mouse.down()
-  await page.mouse.move(cx, cy, { steps: 8 })
-  await page.mouse.move(cx + 120, cy, { steps: 8 })
-  await page.mouse.up()
-  expect((await liveData(page)).city.roads.length).toBeGreaterThan(3)
+  // The canvas may still be sizing itself right after it appears: repeat the (idempotent) drag until it paints.
+  await expect
+    .poll(async () => {
+      await page.mouse.move(cx - 120, cy)
+      await page.mouse.down()
+      await page.mouse.move(cx, cy, { steps: 8 })
+      await page.mouse.move(cx + 120, cy, { steps: 8 })
+      await page.mouse.up()
+      return (await liveData(page)).city.roads.length
+    })
+    .toBeGreaterThan(3)
   await page.getByTestId(`src-${treeId}`).click()
-  await page.mouse.click(cx, cy + 90)
-  expect((await liveData(page)).city.placements.map((p) => p.source)).toEqual([treeId])
+  await expect
+    .poll(async () => {
+      if ((await liveData(page)).city.placements.length === 0) await page.mouse.click(cx, cy + 90)
+      return (await liveData(page)).city.placements.map((p) => p.source)
+    })
+    .toEqual([treeId])
 
   // Drive: the tree is not a vehicle; take the car and hold gas until it has moved.
   await page.getByTestId('back').click()
@@ -101,10 +92,10 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
   await page.mouse.up()
 
   // Everything reached IndexedDB (not just memory)...
-  await page.evaluate(() => (window as unknown as BtWindow).__bt.flushAutosave())
+  await flushAutosave(page)
   await expect
     .poll(async () => {
-      const d = await savedData(page)
+      const d = await savedSlotData<Saved>(page)
       return d && {
         guided: d.guided,
         completed: d.completedTemplates.includes('tree'),

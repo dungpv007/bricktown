@@ -40,9 +40,12 @@ export default defineConfig({
         // Stable vendor chunks: the engine rarely changes, so it stays cached while app code is updated.
         codeSplitting: {
           groups: [
+            // React and the state library the menu needs, in their own chunk: otherwise they land in the r3f chunk
+            // (which also uses them) and drag three.js into the menu's first paint.
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler|zustand|use-sync-external-store)[\\/]/, priority: 40 },
             { name: 'rapier', test: /node_modules[\\/]@dimforge[\\/]/, priority: 30 },
             { name: 'three', test: /node_modules[\\/](three|three-stdlib)[\\/]/, priority: 20 },
-            { name: 'r3f', test: /node_modules[\\/]@react-three[\\/]/, priority: 10 },
+            { name: 'r3f', test: /node_modules[\\/]@react-three[\\/](fiber|drei)[\\/]/, priority: 10 },
           ],
         },
       },

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { flushAutosave, savedSlotData } from './support'
 
 interface CityData {
   size: number
@@ -31,7 +32,10 @@ test('city: roads and a template placement persist across a reload', async ({ pa
     })
   })
 
-  await page.waitForTimeout(2500) // autosave debounce
+  await flushAutosave(page)
+  await expect
+    .poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.placements.map((p) => p.id))
+    .toEqual(['e2e-house'])
   await page.reload()
   await expect(page.getByTestId('main-menu')).toBeVisible()
   await page.getByTestId('menu-city').click()

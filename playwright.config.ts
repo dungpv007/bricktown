@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: 'e2e',
+  // Scenes are lazy chunks and the dev server transforms them on first use: allow for that under parallel load.
+  expect: { timeout: 15_000 },
   // These need a production build: run by `npm run e2e:offline` (playwright.offline.config.ts).
   testIgnore: ['offline.spec.ts', '*.prod.spec.ts'],
   use: {

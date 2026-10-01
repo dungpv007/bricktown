@@ -2,7 +2,6 @@ import { lazy, useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
-import VehiclePicker from './scenes/drive/VehiclePicker'
 import MainMenu from './ui/MainMenu'
 import SceneBoundary from './ui/SceneBoundary'
 import TopBar from './ui/TopBar'
@@ -18,6 +17,7 @@ const GuidedScene = lazy(() => import('./scenes/guided/GuidedScene'))
 const GuidedUI = lazy(() => import('./scenes/guided/GuidedUI'))
 const CityScene = lazy(() => import('./scenes/city/CityScene'))
 const CityUI = lazy(() => import('./scenes/city/CityUI'))
+const VehiclePicker = lazy(() => import('./scenes/drive/VehiclePicker'))
 const DriveScene = lazy(() => import('./scenes/drive/DriveScene'))
 
 type PlayMode = Exclude<Mode, 'menu'>
@@ -84,13 +84,13 @@ function Drive() {
   const pickAgain = useCallback(() => setSource(null), [])
   return (
     <div className="bt-screen" data-testid="mode-drive">
-      {source === null ? (
-        <VehiclePicker onPick={setSource} />
-      ) : (
-        <SceneBoundary>
+      <SceneBoundary>
+        {source === null ? (
+          <VehiclePicker onPick={setSource} />
+        ) : (
           <DriveScene source={source} onChangeVehicle={pickAgain} />
-        </SceneBoundary>
-      )}
+        )}
+      </SceneBoundary>
     </div>
   )
 }

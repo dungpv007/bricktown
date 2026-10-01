@@ -13,9 +13,14 @@ test('offline: after one visit, menu, workshop and drive (Rapier WASM) work with
     if (r.fromServiceWorker()) fromCache.push(new URL(r.url()).pathname)
   })
 
+  const loaded: string[] = []
+  page.on('request', (r) => loaded.push(new URL(r.url()).pathname))
+
   // First visit online: the service worker installs, precaches everything, then takes control.
   await page.goto('/')
   await expect(page.getByTestId('main-menu')).toBeVisible()
+  // The menu's first paint needs no 3D code: three.js, r3f and the physics engine load with their scenes.
+  expect(loaded.filter((p) => /\/assets\/(three|r3f|rapier)-/.test(p))).toEqual([])
   await page.evaluate(() => navigator.serviceWorker.ready)
   await expect.poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true)
 
