@@ -140,11 +140,19 @@ describe('templateToBlueprint', () => {
     expect(vi.bricks).not.toBe(t.bricks)
     expect(vi.id).not.toBe(en.id)
   })
+  it('keeps the template plate colour', () => {
+    const grey = { ...sample(), baseplate: { w: 8, d: 8, c: 24 } }
+    expect(templateToBlueprint(grey, 'vi').baseplate).toEqual({ w: 8, d: 8, c: 24 })
+  })
 })
 
 describe('validateTemplate', () => {
   it('accepts a sound template', () => {
     expect(validateTemplate(sample())).toEqual([])
+  })
+  it('accepts a plate colour and reports one that is not a colour', () => {
+    expect(validateTemplate({ ...sample(), baseplate: { w: 8, d: 8, c: 24 } })).toEqual([])
+    expect(validateTemplate({ ...sample(), baseplate: { w: 8, d: 8, c: 99 } })).toEqual(['baseplate: color 99 out of range'])
   })
   it('reports bricks missing from steps and bricks listed twice', () => {
     const t = { ...sample(), steps: [[0, 1], [1]] }

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
-import { plateShift, resizeBaseplate, type PlateSide, type ResizeDir, type ResizeError } from '../core/baseplate'
+import { plateColor, plateShift, resizeBaseplate, type PlateSide, type ResizeDir, type ResizeError } from '../core/baseplate'
 import { DEFAULT_COLOR } from '../core/colors'
 import { newId } from '../core/ids'
 import { addBrick, paintBrick, removeBrick, rotateBrick, type PlaceError, type PlaceResult } from '../core/model'
@@ -47,6 +47,8 @@ export interface EditorState {
   cancelCarry: () => void
   /** Grows or shrinks the baseplate by one step on `side` (undoable). */
   resizePlate: (side: PlateSide, dir: ResizeDir) => void
+  /** Paints the baseplate colour index `c` (undoable; no-op when it already shows that colour). */
+  setPlateColor: (c: number) => void
   undo: () => void
   redo: () => void
   newModel: (kind: BlueprintKind, baseplate: Baseplate) => void
@@ -208,6 +210,16 @@ export const useEditor = create<EditorState>()((set, get) => {
       syncHistory()
       if (dir === 'grow') sfx.snap()
       else sfx.pop()
+    },
+
+    setPlateColor: (c) => {
+      cancelCarry()
+      const { baseplate, kind } = workshop()
+      if (plateColor(baseplate, kind) === c) return
+      history.push(snapshot())
+      restore({ ...snapshot(), baseplate: { ...baseplate, c } })
+      syncHistory()
+      sfx.paint()
     },
 
     undo: () => {

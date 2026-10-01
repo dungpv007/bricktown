@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { PLATE_MAX, PLATE_MIN, PLATE_STEP, canShrink, plateShift, resizeBaseplate, type PlateSide } from './baseplate'
+import {
+  BASEPLATE_COLORS, DEFAULT_PLATE_COLOR, PLATE_MAX, PLATE_MIN, PLATE_STEP, canShrink, plateColor, plateShift, resizeBaseplate,
+  type PlateSide,
+} from './baseplate'
+import { COLORS } from './colors'
 import type { Baseplate, Brick, Rot } from './types'
 
 const b = (id: string, x: number, y: number, z: number, p = 'brick_2x4', r: Rot = 0): Brick => ({
@@ -172,6 +176,44 @@ describe('canShrink', () => {
         const ok = !('error' in resizeBaseplate(bricks, plate, s, 'shrink'))
         expect(canShrink(bricks, plate, s)).toBe(ok)
       }
+    }
+  })
+})
+
+describe('baseplate colour', () => {
+  it('offers gray, green, blue, tan and white', () => {
+    expect(BASEPLATE_COLORS).toEqual([24, 5, 3, 10, 0])
+    expect(BASEPLATE_COLORS.map((c) => COLORS[c].name.en)).toEqual(['Light bluish gray', 'Green', 'Blue', 'Tan', 'White'])
+  })
+
+  it('defaults to green', () => {
+    expect(DEFAULT_PLATE_COLOR).toBe(5)
+    expect(plateColor(bp(16, 16), 'building')).toBe(5)
+  })
+
+  it('without a stored colour, vehicle and prop plates keep their Phase 1 look', () => {
+    expect(plateColor(bp(8, 16), 'vehicle')).toBe(8)
+    expect(plateColor(bp(8, 8), 'prop')).toBe(10)
+  })
+
+  it('a stored colour wins for every kind', () => {
+    expect(plateColor({ w: 8, d: 16, c: 24 }, 'vehicle')).toBe(24)
+    expect(plateColor({ w: 16, d: 16, c: 0 }, 'building')).toBe(0)
+  })
+
+  it('ignores a stored index that is not a colour', () => {
+    expect(plateColor({ w: 16, d: 16, c: 99 }, 'building')).toBe(5)
+    expect(plateColor({ w: 16, d: 16, c: 1.5 }, 'vehicle')).toBe(8)
+  })
+
+  it('resizing keeps the colour', () => {
+    for (const side of ['N', 'E', 'S', 'W'] as const) {
+      const grown = resizeBaseplate([], { w: 16, d: 16, c: 24 }, side, 'grow')
+      if ('error' in grown) throw new Error('unexpected error')
+      expect(grown.baseplate.c).toBe(24)
+      const shrunk = resizeBaseplate([], { w: 16, d: 16, c: 3 }, side, 'shrink')
+      if ('error' in shrunk) throw new Error('unexpected error')
+      expect(shrunk.baseplate.c).toBe(3)
     }
   })
 })

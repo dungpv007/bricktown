@@ -8,6 +8,7 @@ import { clampCell, planPlacement, pointToCell, type Cell, type PlacementPlan } 
 import { paintRoadLine } from '../../core/roads'
 import type { Blueprint, CityState } from '../../core/types'
 import { createGestureTracker, sampleOf } from '../../input/tapGesture'
+import BakedMeshes from '../../render/BakedMeshes'
 import { createGhostMaterial } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
@@ -189,8 +190,7 @@ function PlacementGhost({ source, plan, blueprints }: { source: string; plan: Pl
     <>
       <FootprintMarker cx={plan.cx} cz={plan.cz} cw={cw} cd={cd} color={valid ? VALID : INVALID} opacity={0.35} />
       <group ref={group}>
-        <mesh geometry={baked.opaque} material={material} dispose={null} />
-        {baked.glass && <mesh geometry={baked.glass} material={material} dispose={null} />}
+        <BakedMeshes baked={baked} material={material} />
       </group>
     </>
   )

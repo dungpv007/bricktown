@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { bakeBricks, bakeCacheSize, bakeKey, evictBakes } from './bake'
+import { bakeBricks, bakeCacheSize, bakeKey, bakedGeometries, evictBakes } from './bake'
 import { COLORS } from './colors'
 import { bounds } from './model'
 import { getPartGeometry } from './parts/geometry'
@@ -9,6 +9,9 @@ import { platesToWorld } from './units'
 import type { Brick } from './types'
 
 const GLASS = 15
+const TRANS_RED = 16
+const SILVER = 28
+const GOLD = 29
 const STUD_HEIGHT = 0.17
 const EPS = 0.02 // body inset (0.01 per side) plus float noise
 
@@ -22,8 +25,9 @@ const partVertices = (p: string) => vertexCount(getPartGeometry(p))
 describe('bakeBricks', () => {
   it('merges all opaque bricks into one geometry with the summed vertex count', () => {
     const bricks = [b('a', 'brick_2x4', 0, 0, 0), b('b', 'plate_2x2', 0, 3, 0, 1), b('c', 'slope_2x2', 4, 0, 0, 2)]
-    const { opaque, glass } = bakeBricks(bricks)
-    expect(glass).toBeNull()
+    const { opaque, trans, metal } = bakeBricks(bricks)
+    expect(trans).toBeNull()
+    expect(metal).toBeNull()
     expect(vertexCount(opaque)).toBe(
       partVertices('brick_2x4') + partVertices('plate_2x2') + partVertices('slope_2x2'),
     )
@@ -40,22 +44,38 @@ describe('bakeBricks', () => {
     expect(color.getZ(0)).toBeCloseTo(expected.b, 5)
   })
 
-  it('puts glass-colour bricks in a separate geometry', () => {
+  it('puts transparent-colour bricks (glass and the trans colours) in a separate geometry', () => {
     const bricks = [
       b('a', 'brick_2x4', 0, 0, 0),
       b('w', 'window_1x2x2', 0, 3, 0, 0, GLASS),
-      b('x', 'brick_1x1', 3, 0, 0, 0, GLASS),
+      b('x', 'brick_1x1', 3, 0, 0, 0, TRANS_RED),
     ]
-    const { opaque, glass } = bakeBricks(bricks)
+    const { opaque, trans, metal } = bakeBricks(bricks)
     expect(vertexCount(opaque)).toBe(partVertices('brick_2x4'))
-    expect(glass).not.toBeNull()
-    expect(vertexCount(glass!)).toBe(partVertices('window_1x2x2') + partVertices('brick_1x1'))
+    expect(trans).not.toBeNull()
+    expect(vertexCount(trans!)).toBe(partVertices('window_1x2x2') + partVertices('brick_1x1'))
+    expect(metal).toBeNull()
+    // The tint is the colour's own hex, like any other brick.
+    const expected = new THREE.Color(COLORS[TRANS_RED].hex)
+    const color = trans!.getAttribute('color')
+    expect(color.getX(color.count - 1)).toBeCloseTo(expected.r, 5)
+    expect(color.getY(color.count - 1)).toBeCloseTo(expected.g, 5)
+    expect(color.getZ(color.count - 1)).toBeCloseTo(expected.b, 5)
   })
 
-  it('returns an empty opaque geometry and no glass for an empty model', () => {
-    const { opaque, glass } = bakeBricks([])
+  it('puts metallic-colour bricks in their own geometry', () => {
+    const bricks = [b('a', 'brick_2x4', 0, 0, 0), b('s', 'brick_1x1', 3, 0, 0, 0, SILVER), b('g', 'plate_2x2', 0, 3, 0, 0, GOLD)]
+    const { opaque, trans, metal } = bakeBricks(bricks)
+    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4'))
+    expect(trans).toBeNull()
+    expect(vertexCount(metal!)).toBe(partVertices('brick_1x1') + partVertices('plate_2x2'))
+  })
+
+  it('returns an empty opaque geometry and no other groups for an empty model', () => {
+    const { opaque, trans, metal } = bakeBricks([])
     expect(vertexCount(opaque)).toBe(0)
-    expect(glass).toBeNull()
+    expect(trans).toBeNull()
+    expect(metal).toBeNull()
   })
 
   it('bounding box matches bounds() in world units (studs poke above the top)', () => {
@@ -125,14 +145,14 @@ describe('evictBakes', () => {
     const keep = bakeBricks(live)
     const old = bakeBricks(stale)
     const opaqueGone = disposed(old.opaque)
-    const glassGone = disposed(old.glass!)
+    const transGone = disposed(old.trans!)
     const keptGone = disposed(keep.opaque)
     expect(bakeCacheSize()).toBe(2)
 
     expect(evictBakes(new Set([bakeKey(live)]))).toBe(1)
     expect(bakeCacheSize()).toBe(1)
     expect(opaqueGone.value).toBe(true)
-    expect(glassGone.value).toBe(true)
+    expect(transGone.value).toBe(true)
     expect(keptGone.value).toBe(false)
     expect(bakeBricks(live)).toBe(keep)
     // The evicted model is baked afresh next time it is needed.
@@ -143,6 +163,35 @@ describe('evictBakes', () => {
     bakeBricks([b('a', 'brick_1x1', 0, 0, 0)])
     evictBakes(new Set())
     expect(bakeCacheSize()).toBe(0)
+  })
+})
+
+describe('bakedGeometries', () => {
+  it('lists the non-empty geometries with their material kind, opaque first', () => {
+    const all = bakeBricks([
+      b('m', 'brick_1x1', 0, 0, 0, 0, GOLD),
+      b('t', 'brick_1x1', 1, 0, 0, 0, GLASS),
+      b('o', 'brick_1x1', 2, 0, 0, 0, 2),
+    ])
+    expect(bakedGeometries(all)).toEqual([
+      ['opaque', all.opaque],
+      ['trans', all.trans],
+      ['metal', all.metal],
+    ])
+    const onlyMetal = bakeBricks([b('m', 'brick_1x1', 0, 0, 0, 0, SILVER)])
+    expect(bakedGeometries(onlyMetal)).toEqual([['metal', onlyMetal.metal]])
+    expect(bakedGeometries(bakeBricks([]))).toEqual([])
+  })
+})
+
+describe('evictBakes metal', () => {
+  it('disposes metal geometries too', () => {
+    evictBakes(new Set())
+    const baked = bakeBricks([b('m', 'brick_1x1', 0, 0, 0, 0, SILVER)])
+    const seen = { value: false }
+    baked.metal!.addEventListener('dispose', () => (seen.value = true))
+    evictBakes(new Set())
+    expect(seen.value).toBe(true)
   })
 })
 

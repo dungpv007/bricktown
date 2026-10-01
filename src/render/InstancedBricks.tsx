@@ -1,12 +1,12 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
-import { COLORS } from '../core/colors'
+import { COLORS, colorMaterialKind, type MaterialKind } from '../core/colors'
 import { getPartGeometry } from '../core/parts/geometry'
 import { brickCenter } from '../core/rotation'
 import type { Brick } from '../core/types'
 import { useInstanceCapacity } from './instanceCapacity'
-import { brickMaterial, glassMaterial } from './materials'
+import { brickMaterials, castsShadow } from './materials'
 
 export type BrickPointerHandler = (e: ThreeEvent<PointerEvent>, brick: Brick) => void
 
@@ -19,7 +19,7 @@ interface Props {
 interface BrickGroupData {
   key: string
   partId: string
-  glass: boolean
+  kind: MaterialKind
   bricks: Brick[]
 }
 
@@ -28,11 +28,11 @@ const MIN_CAPACITY = 16
 function groupBricks(bricks: Brick[]): BrickGroupData[] {
   const groups = new Map<string, BrickGroupData>()
   for (const b of bricks) {
-    const glass = COLORS[b.c]?.glass === true
-    const key = `${b.p}|${glass ? 'glass' : 'solid'}`
+    const kind = colorMaterialKind(b.c)
+    const key = `${b.p}|${kind}`
     let g = groups.get(key)
     if (!g) {
-      g = { key, partId: b.p, glass, bricks: [] }
+      g = { key, partId: b.p, kind, bricks: [] }
       groups.set(key, g)
     }
     g.bricks.push(b)
@@ -47,7 +47,7 @@ const tmpScale = new THREE.Vector3(1, 1, 1)
 const tmpColor = new THREE.Color()
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
 
-function BrickGroup({ partId, glass, bricks, onBrickPointer }: Omit<BrickGroupData, 'key'> & Pick<Props, 'onBrickPointer'>) {
+function BrickGroup({ partId, kind, bricks, onBrickPointer }: Omit<BrickGroupData, 'key'> & Pick<Props, 'onBrickPointer'>) {
   const ref = useRef<THREE.InstancedMesh>(null)
   const capacity = useInstanceCapacity(bricks.length, MIN_CAPACITY)
   const geometry = getPartGeometry(partId)
@@ -80,8 +80,8 @@ function BrickGroup({ partId, glass, bricks, onBrickPointer }: Omit<BrickGroupDa
     <instancedMesh
       key={capacity}
       ref={ref}
-      args={[geometry, glass ? glassMaterial : brickMaterial, capacity]}
-      castShadow={!glass}
+      args={[geometry, brickMaterials[kind], capacity]}
+      castShadow={castsShadow(kind)}
       receiveShadow
       onPointerDown={handle}
       onPointerMove={handle}
@@ -90,13 +90,13 @@ function BrickGroup({ partId, glass, bricks, onBrickPointer }: Omit<BrickGroupDa
   )
 }
 
-/** All bricks of a model, one InstancedMesh per (part, glass/solid) group. */
+/** All bricks of a model, one InstancedMesh per (part, material kind) group. */
 export default function InstancedBricks({ bricks, onBrickPointer }: Props) {
   const groups = useMemo(() => groupBricks(bricks), [bricks])
   return (
     <group>
       {groups.map((g) => (
-        <BrickGroup key={g.key} partId={g.partId} glass={g.glass} bricks={g.bricks} onBrickPointer={onBrickPointer} />
+        <BrickGroup key={g.key} partId={g.partId} kind={g.kind} bricks={g.bricks} onBrickPointer={onBrickPointer} />
       ))}
     </group>
   )

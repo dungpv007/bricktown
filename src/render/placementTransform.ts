@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { BakedModel } from '../core/bake'
+import { bakedGeometries, type BakedModel } from '../core/bake'
 import { placementCenter } from '../core/cityPlan'
 import type { Box } from '../core/drive'
 import type { Baseplate, CityPlacement } from '../core/types'
@@ -31,8 +31,7 @@ export function placementMatrix(
  */
 export function bakedModelBox(baked: BakedModel): Box | null {
   const box = new THREE.Box3()
-  for (const g of [baked.opaque, baked.glass]) {
-    if (!g || g.getAttribute('position').count === 0) continue
+  for (const [, g] of bakedGeometries(baked)) {
     if (!g.boundingBox) g.computeBoundingBox()
     if (g.boundingBox) box.union(g.boundingBox)
   }
