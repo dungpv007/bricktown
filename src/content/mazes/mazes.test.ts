@@ -141,6 +141,25 @@ describe('maze templates', () => {
       }
     })
 
+    it('keeps coins more than 2 cells (path distance) from the entry spawn', () => {
+      const toEntry = (k: string) => {
+        // BFS distance over floor from the entry
+        const seen = new Map([[cellKey(m.entry!), 0]])
+        const queue = [m.entry!]
+        for (let i = 0; i < queue.length; i++) {
+          for (const n of neighbors4(m, queue[i])) {
+            const nk = cellKey(n)
+            if (!walls.has(nk) && !seen.has(nk)) {
+              seen.set(nk, seen.get(cellKey(queue[i]))! + 1)
+              queue.push(n)
+            }
+          }
+        }
+        return seen.get(k)!
+      }
+      for (const k of m.coins) expect(toEntry(k)).toBeGreaterThan(2)
+    })
+
     it('has a solution that is not a straight shot', () => {
       expect(solve(maze)!.length).toBeGreaterThan(m.w)
     })
@@ -167,5 +186,9 @@ describe('maze templates', () => {
     expect(floor(7, 13)).toBe(true) // tip
     expect(floor(2, 13)).toBe(false) // nothing beside the tip
     expect(m.exit).toEqual({ cx: 7, cz: 14 })
+    expect(solve(asMaze(m))!.length).toBeGreaterThanOrEqual(30)
+    // the middle row is not one open corridor from side to side
+    const openInRow3 = [...Array(m.w).keys()].filter((cx) => floor(cx, 3)).length
+    expect(openInRow3).toBeLessThan(m.w - 2)
   })
 })

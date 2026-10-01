@@ -23,6 +23,23 @@ function edgeCount(m: Maze): number {
   return edges / 2
 }
 
+/** Floor cells within 2 steps (path distance) of the entry. */
+function nearEntry(m: Maze): Set<string> {
+  const walls = new Set(m.walls)
+  const dist = new Map([[cellKey(m.entry!), 0]])
+  const queue = [m.entry!]
+  for (let i = 0; i < queue.length; i++) {
+    for (const n of neighbors4(m, queue[i])) {
+      const k = cellKey(n)
+      if (!walls.has(k) && !dist.has(k)) {
+        dist.set(k, dist.get(cellKey(queue[i]))! + 1)
+        queue.push(n)
+      }
+    }
+  }
+  return new Set([...dist].filter(([, d]) => d <= 2).map(([k]) => k))
+}
+
 /** The comparable part of a maze (id and timestamps are not deterministic). */
 function shape(m: Maze) {
   return { w: m.w, h: m.h, walls: m.walls, entry: m.entry, exit: m.exit, coins: m.coins }
@@ -143,6 +160,16 @@ describe('generateMaze', () => {
     }
   })
 
+  it('keeps coins more than 2 cells (path distance) away from the entry spawn', () => {
+    for (const d of DIFFICULTIES) {
+      for (const seed of SEEDS) {
+        const m = generateMaze(d, seed)
+        const near = nearEntry(m)
+        for (const k of m.coins) expect(near.has(k)).toBe(false)
+      }
+    }
+  })
+
   it('puts coins on dead ends first, spilling onto other floor cells only when there are too few', () => {
     for (const d of DIFFICULTIES) {
       for (const seed of SEEDS) {
@@ -150,8 +177,9 @@ describe('generateMaze', () => {
         const walls = new Set(m.walls)
         const isDeadEnd = (k: string) =>
           neighbors4(m, parseCellKey(k)).filter((n) => !walls.has(cellKey(n))).length === 1
+        const near = nearEntry(m)
         const deadEnds = pathCells(m).filter(
-          (k) => isDeadEnd(k) && k !== cellKey(m.entry!) && k !== cellKey(m.exit!),
+          (k) => isDeadEnd(k) && k !== cellKey(m.entry!) && k !== cellKey(m.exit!) && !near.has(k),
         )
         const onDeadEnds = m.coins.filter((k) => deadEnds.includes(k)).length
         expect(onDeadEnds).toBe(Math.min(m.coins.length, deadEnds.length))

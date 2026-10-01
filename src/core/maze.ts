@@ -128,10 +128,16 @@ export function createEmptyMaze(w: number, h: number, opts: CreateMazeOptions = 
   }
 }
 
-/** Make `cell` a wall (`wall` true) or open floor (false). No-op on the entry/exit cells and outside the grid. A coin on a cell that becomes wall is removed. */
+/**
+ * Make `cell` a wall (`wall` true) or open floor (false). No-op (same maze) on the entry/exit cells,
+ * outside the grid, and when removing a wall on the outer ring: the border only opens through
+ * setEntry/setExit, so an eraser stroke along the edge can never punch a hole.
+ * A coin on a cell that becomes wall is removed.
+ */
 export function toggleWall(maze: Maze, cell: Cell, wall: boolean): Maze {
   if (!inBounds(maze, cell) || sameCell(cell, maze.entry) || sameCell(cell, maze.exit)) return maze
   const key = cellKey(cell)
+  if (!wall && isBorder(maze, cell)) return maze
   const isWall = maze.walls.includes(key)
   if (wall === isWall) return maze
   if (wall) {
@@ -155,8 +161,8 @@ export function toggleCoin(maze: Maze, cell: Cell): Maze {
     : { ...maze, coins: [...maze.coins, key] }
 }
 
-export type DoorError = 'not_border' | 'corner' | 'is_wall' | 'same_cell'
-/** `is_wall` is reserved: a border wall is never an error, it is carved open (see setEntry). */
+/** A border wall is never an error: it is carved open (see setEntry). */
+export type DoorError = 'not_border' | 'corner' | 'same_cell'
 export type DoorResult = { maze: Maze } | { error: DoorError }
 
 function setDoor(maze: Maze, cell: Cell, which: 'entry' | 'exit'): DoorResult {
@@ -164,10 +170,11 @@ function setDoor(maze: Maze, cell: Cell, which: 'entry' | 'exit'): DoorResult {
   if (isCorner(maze, cell)) return { error: 'corner' }
   const other = which === 'entry' ? maze.exit : maze.entry
   if (sameCell(cell, other)) return { error: 'same_cell' }
-  const key = cellKey(cell)
   const previous = maze[which]
+  if (sameCell(previous, cell)) return { maze }
+  const key = cellKey(cell)
   let walls = maze.walls.filter((k) => k !== key) // tapping a border wall carves a door
-  if (previous && !sameCell(previous, cell)) {
+  if (previous) {
     // Moving a door closes the old one so no stray gap is left in the outer ring.
     walls = [...walls, cellKey(previous)]
   }
@@ -184,6 +191,13 @@ export function setEntry(maze: Maze, cell: Cell): DoorResult {
 /** Set the exit on a non-corner border cell; same rules as {@link setEntry}. */
 export function setExit(maze: Maze, cell: Cell): DoorResult {
   return setDoor(maze, cell, 'exit')
+}
+
+/** Remove the entry or exit: the door cell is walled up again. No-op (same maze) when it is not set. */
+export function clearDoor(maze: Maze, which: 'entry' | 'exit'): Maze {
+  const door = maze[which]
+  if (!door) return maze
+  return { ...maze, [which]: null, walls: [...maze.walls, cellKey(door)] }
 }
 
 /** Shortest 4-neighbour path over floor cells from `from` (default: the entry) to the exit, both ends included; null if none. */

@@ -1,4 +1,4 @@
-import { cellKey, createEmptyMaze, neighbors4, parseCellKey, type CreateMazeOptions, type Maze } from './maze'
+import { cellKey, createEmptyMaze, neighbors4, parseCellKey, type Cell, type CreateMazeOptions, type Maze } from './maze'
 
 export type MazeDifficulty = 1 | 2 | 3
 
@@ -27,6 +27,25 @@ export function mulberry32(seed: number): () => number {
   }
 }
 
+/** Coins stay more than this many cells (path distance) from the entry. */
+const COIN_SPAWN_CLEARANCE = 2
+
+function pathDistances(dims: Pick<Maze, 'w' | 'h'>, open: ReadonlySet<string>, from: Cell): Map<string, number> {
+  const dist = new Map([[cellKey(from), 0]])
+  const queue = [from]
+  for (let i = 0; i < queue.length; i++) {
+    const d = dist.get(cellKey(queue[i]))!
+    for (const n of neighbors4(dims, queue[i])) {
+      const k = cellKey(n)
+      if (open.has(k) && !dist.has(k)) {
+        dist.set(k, d + 1)
+        queue.push(n)
+      }
+    }
+  }
+  return dist
+}
+
 function shuffled<T>(items: readonly T[], rnd: () => number): T[] {
   const out = items.slice()
   for (let i = out.length - 1; i > 0; i--) {
@@ -40,7 +59,7 @@ function shuffled<T>(items: readonly T[], rnd: () => number): T[] {
  * A random maze: a perfect maze carved with an iterative recursive backtracker on the odd grid
  * (rooms at odd coordinates, walls between them), with the entry on the west border and the exit
  * on the east border at random rows. Medium and Hard also get a few loops, and coins sit on
- * dead ends. Deterministic for a given (difficulty, seed, size).
+ * dead ends (never right next to the entry). Deterministic for a given (difficulty, seed, size).
  */
 export function generateMaze(difficulty: MazeDifficulty, seed: number, opts: GenerateMazeOptions = {}): Maze {
   const size = MAZE_GEN_SIZE[difficulty]
@@ -108,7 +127,9 @@ export function generateMaze(difficulty: MazeDifficulty, seed: number, opts: Gen
 
   // Coins: dead ends first (shuffled), then any other floor cell if there are too few.
   const doors = new Set([cellKey(entry), cellKey(exit)])
-  const floor = [...open].filter((k) => !doors.has(k))
+  // Never within COIN_SPAWN_CLEARANCE cells of the entry, where the car spawns.
+  const fromEntry = pathDistances(base, open, entry)
+  const floor = [...open].filter((k) => !doors.has(k) && (fromEntry.get(k) ?? 0) > COIN_SPAWN_CLEARANCE)
   const isDeadEnd = (k: string) => neighbors4(base, parseCellKey(k)).filter((n) => open.has(cellKey(n))).length === 1
   const deadEnds = shuffled(floor.filter(isDeadEnd), rnd)
   const others = shuffled(floor.filter((k) => !isDeadEnd(k)), rnd)

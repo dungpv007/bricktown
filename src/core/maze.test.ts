@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cellKey,
+  clearDoor,
   createEmptyMaze,
   isBorder,
   isCorner,
@@ -110,6 +111,16 @@ describe('toggleWall / paintWalls', () => {
     expect(toggleWall(m, c(9, 9), true)).toEqual(m)
     expect(toggleWall(m, c(-1, 2), true)).toEqual(m)
   })
+  it('never removes outer-ring walls, so an eraser stroke cannot punch holes in the border', () => {
+    const m = openRoom()
+    const edge = [c(0, 1), c(0, 2), c(3, 0), c(6, 5), c(3, 6), c(0, 0)]
+    expect(toggleWall(m, c(0, 1), false)).toBe(m)
+    const erased = paintWalls(m, edge, false)
+    expect(erased).toBe(m)
+    for (const cell of edge) expect(erased.walls).toContain(cellKey(cell))
+    // the doors are still the only gaps
+    expect(playabilityError(erased)).toBeNull()
+  })
   it('paintWalls applies a whole stroke', () => {
     const m = paintWalls(createEmptyMaze(7, 7), [c(2, 2), c(3, 2), c(4, 2)], true)
     expect(m.walls).toEqual(expect.arrayContaining(['2,2', '3,2', '4,2']))
@@ -155,7 +166,39 @@ describe('setEntry / setExit', () => {
   })
   it('setting the current entry again is harmless', () => {
     const m = ok(setEntry(createEmptyMaze(7, 7), c(0, 3)))
-    expect(ok(setEntry(m, c(0, 3)))).toEqual(m)
+    expect(ok(setEntry(m, c(0, 3)))).toBe(m)
+    const e = ok(setExit(m, c(6, 3)))
+    expect(ok(setExit(e, c(6, 3)))).toBe(e)
+  })
+  it('does not report is_wall: a wall border cell is simply carved', () => {
+    const m = createEmptyMaze(7, 7)
+    expect('error' in setEntry(m, c(0, 5))).toBe(false)
+  })
+})
+
+describe('clearDoor', () => {
+  it('re-walls the door cell and unsets it', () => {
+    const m = openRoom()
+    const noEntry = clearDoor(m, 'entry')
+    expect(noEntry.entry).toBeNull()
+    expect(noEntry.walls).toContain('0,3')
+    expect(noEntry.exit).toEqual(c(6, 3))
+    const noExit = clearDoor(m, 'exit')
+    expect(noExit.exit).toBeNull()
+    expect(noExit.walls).toContain('6,3')
+    expect(playabilityError(noEntry)).toBe('no_entry')
+    expect(playabilityError(noExit)).toBe('no_exit')
+  })
+  it('is a no-op (same reference) when the door is not set', () => {
+    const m = createEmptyMaze(7, 7)
+    expect(clearDoor(m, 'entry')).toBe(m)
+    expect(clearDoor(m, 'exit')).toBe(m)
+  })
+  it('does not mutate its input', () => {
+    const m = openRoom()
+    clearDoor(m, 'entry')
+    expect(m.entry).toEqual(c(0, 3))
+    expect(m.walls).not.toContain('0,3')
   })
 })
 
