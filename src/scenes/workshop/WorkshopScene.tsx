@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
@@ -9,9 +9,10 @@ import type { Baseplate as BaseplateSize, Brick } from '../../core/types'
 import { useTap } from '../../input/useTap'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks from '../../render/InstancedBricks'
-import { useEditor } from '../../state/useEditor'
+import { useEditor, type ViewShift } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
+import PlateEdgeButtons, { PlateEdgeTracker, type EdgeElements } from './PlateEdgeButtons'
 import DevStats from '../../ui/DevStats'
 
 export const SKY = '#87ceeb'
@@ -60,17 +61,42 @@ export function Lights({ size }: { size: BaseplateSize }) {
   )
 }
 
-/** Camera + orbit controls framing the baseplate; remounted (reset) when the plate size changes. */
-export function CameraRig({ size }: { size: BaseplateSize }) {
-  const span = Math.max(size.w, size.d)
-  const dist = span * 1.5 + 8
+function frameView(size: BaseplateSize): { target: Vec3; position: Vec3 } {
+  const dist = Math.max(size.w, size.d) * 1.5 + 8
   const target: Vec3 = [size.w / 2, 0, size.d / 2]
   // Looking from the front-right, a bit above.
-  const position: Vec3 = [target[0] + dist * 0.45, dist * 0.7, target[2] + dist * 0.75]
+  return { target, position: [target[0] + dist * 0.45, dist * 0.7, target[2] + dist * 0.75] }
+}
+
+/**
+ * Camera + orbit controls framing the baseplate as it was at mount; remount (via `key`) to re-frame.
+ * Each new `shift` moves the camera by that much, following bricks that moved after a resize.
+ */
+export function CameraRig({ size, shift }: { size: BaseplateSize; shift?: ViewShift }) {
+  const span = Math.max(size.w, size.d)
+  // Fixed at mount: later size changes must not snap the view back to the plate centre.
+  const [{ target, position }] = useState(() => frameView(size))
+  const camera = useRef<THREE.PerspectiveCamera>(null)
+  const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
+  const seenShift = useRef(shift?.seq)
+  useLayoutEffect(() => {
+    if (!shift || shift.seq === seenShift.current) return
+    seenShift.current = shift.seq
+    const cam = camera.current
+    const ctl = controls.current
+    if (!cam || !ctl) return
+    cam.position.x += shift.dx
+    cam.position.z += shift.dz
+    ctl.target.x += shift.dx
+    ctl.target.z += shift.dz
+    ctl.update()
+  }, [shift])
+
   return (
     <>
-      <PerspectiveCamera makeDefault position={position} fov={45} near={0.1} far={500} />
+      <PerspectiveCamera ref={camera} makeDefault position={position} fov={45} near={0.1} far={500} />
       <OrbitControls
+        ref={controls}
         makeDefault
         target={target}
         enableDamping
@@ -104,6 +130,8 @@ function WorkshopWorld() {
   const rot = useEditor((s) => s.rot)
   const carried = useEditor((s) => s.carried)
   const errorSeq = useEditor((s) => s.errorSeq)
+  const viewShift = useEditor((s) => s.viewShift)
+  const frameSeq = useEditor((s) => s.frameSeq)
   const consumeTap = useTap()
 
   // The last pointer hit is kept (not just the anchor) so the anchor re-centres right away when
@@ -188,7 +216,8 @@ function WorkshopWorld() {
 
   return (
     <>
-      <CameraRig key={`${baseplate.w}x${baseplate.d}`} size={baseplate} />
+      {/* Re-framed for each loaded model; resizing the plate only shifts the view (see CameraRig). */}
+      <CameraRig key={frameSeq} size={baseplate} shift={viewShift} />
       <Lights size={baseplate} />
       <Ground size={baseplate} />
       <Baseplate size={baseplate} kind={kind} onPointer={onBaseplatePointer} />
@@ -200,12 +229,17 @@ function WorkshopWorld() {
 }
 
 export default function WorkshopScene() {
+  const edges = useRef<EdgeElements>({})
   return (
-    <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="workshop-canvas">
-      <color attach="background" args={[SKY]} />
-      <fog attach="fog" args={[SKY, 80, 220]} />
-      <WorkshopWorld />
-      <DevStats />
-    </Canvas>
+    <>
+      <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="workshop-canvas">
+        <color attach="background" args={[SKY]} />
+        <fog attach="fog" args={[SKY, 80, 220]} />
+        <WorkshopWorld />
+        <PlateEdgeTracker edges={edges} />
+        <DevStats />
+      </Canvas>
+      <PlateEdgeButtons edges={edges} />
+    </>
   )
 }

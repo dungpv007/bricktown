@@ -328,6 +328,31 @@
   transition: transform 0.2s;
 }
 
+/* ➕ / ➖ beside each baseplate edge: a layer over the workshop canvas, under the HUD. */
+.bt-plate-edges {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Moved to its edge on screen every frame (PlateEdgeTracker); hidden until then. */
+.bt-plate-edge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 10px;
+  visibility: hidden;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.bt-plate-btn {
+  background: rgba(255, 255, 255, 0.85);
+}
+
 .bt-topright {
   position: absolute;
   top: 8px;

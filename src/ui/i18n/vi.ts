@@ -27,6 +27,8 @@ export const vi = {
   newModel: 'Mô hình mới',
   rotatePart: 'Xoay gạch',
   cantPlace: 'Không đặt được',
+  plateGrow: 'Mở rộng đế',
+  plateShrink: 'Thu nhỏ đế',
   close: 'Đóng',
   catBrick: 'Gạch',
   catPlate: 'Tấm',

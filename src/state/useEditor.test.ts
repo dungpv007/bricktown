@@ -278,3 +278,129 @@ describe('useEditor model loading', () => {
     expect(ed().canUndo).toBe(false)
   })
 })
+
+describe('useEditor resizePlate', () => {
+  const plate = () => useGame.getState().data.workshop.baseplate
+
+  it('growing W widens the plate and shifts bricks +8 on X; undo/redo restore both', () => {
+    ed().place(0, 0, 0)
+    ed().resizePlate('W', 'grow')
+    expect(plate()).toEqual({ w: 24, d: 16 })
+    expect(bricks()[0]).toMatchObject({ x: 8, z: 0 })
+    expect(ed().lastError).toBeNull()
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    expect(bricks()[0]).toMatchObject({ x: 0, z: 0 })
+    ed().redo()
+    expect(plate()).toEqual({ w: 24, d: 16 })
+    expect(bricks()[0]).toMatchObject({ x: 8, z: 0 })
+  })
+
+  it('growing E or S leaves bricks where they are', () => {
+    ed().place(1, 0, 2)
+    const before = bricks()
+    ed().resizePlate('E', 'grow')
+    ed().resizePlate('S', 'grow')
+    expect(plate()).toEqual({ w: 24, d: 24 })
+    expect(bricks()).toEqual(before)
+  })
+
+  it('shrinking N shifts bricks -8 on Z and is undoable', () => {
+    useGame.getState().setWorkshop({ ...useGame.getState().data.workshop, baseplate: { w: 16, d: 24 } })
+    ed().place(0, 0, 10)
+    ed().resizePlate('N', 'shrink')
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    expect(bricks()[0]).toMatchObject({ x: 0, z: 2 })
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 24 })
+    expect(bricks()[0]).toMatchObject({ x: 0, z: 10 })
+  })
+
+  it('undo steps through edits made before and after a resize', () => {
+    ed().place(0, 0, 0)
+    ed().resizePlate('W', 'grow')
+    ed().place(20, 0, 0) // only fits on the wider plate
+    expect(bricks()).toHaveLength(2)
+    ed().undo()
+    expect(bricks()).toHaveLength(1)
+    expect(plate()).toEqual({ w: 24, d: 16 })
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    expect(bricks()[0]).toMatchObject({ x: 0 })
+    ed().undo()
+    expect(bricks()).toHaveLength(0)
+    expect(ed().canUndo).toBe(false)
+  })
+
+  it('a rejected resize reports the error and adds no undo step', () => {
+    const start = ed().errorSeq
+    ed().resizePlate('W', 'shrink') // empty strip: 16 -> 8 is fine
+    expect(plate()).toEqual({ w: 8, d: 16 })
+    ed().resizePlate('W', 'shrink')
+    expect(ed().lastError).toBe('min')
+    expect(ed().errorSeq).toBe(start + 1)
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    expect(ed().canUndo).toBe(false)
+
+    ed().place(0, 0, 0)
+    ed().resizePlate('W', 'shrink')
+    expect(ed().lastError).toBe('not_empty')
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    expect(bricks()[0]).toMatchObject({ x: 0 })
+
+    for (let i = 0; i < 4; i++) ed().resizePlate('E', 'grow')
+    expect(plate()).toEqual({ w: 48, d: 16 })
+    ed().resizePlate('W', 'grow')
+    expect(ed().lastError).toBe('max')
+    expect(ed().errorSeq).toBe(start + 3)
+  })
+
+  it('a successful resize clears redo', () => {
+    ed().place(0, 0, 0)
+    ed().undo()
+    ed().resizePlate('E', 'grow')
+    expect(ed().canRedo).toBe(false)
+  })
+
+  it('puts a carried brick back before resizing', () => {
+    ed().place(0, 0, 0)
+    const id = bricks()[0].id
+    ed().setTool('move')
+    ed().tapBrick(id)
+    ed().resizePlate('W', 'grow')
+    expect(ed().carried).toBeNull()
+    expect(bricks()).toHaveLength(1)
+    expect(bricks()[0]).toMatchObject({ id, x: 8, z: 0 })
+    ed().undo()
+    expect(bricks()[0]).toMatchObject({ id, x: 0, z: 0 })
+    expect(plate()).toEqual({ w: 16, d: 16 })
+  })
+
+  it('reports the view shift so the camera can follow the bricks', () => {
+    const seq = ed().viewShift.seq
+    ed().resizePlate('E', 'grow') // bricks do not move: no shift
+    expect(ed().viewShift.seq).toBe(seq)
+    ed().resizePlate('W', 'grow')
+    expect(ed().viewShift).toEqual({ seq: seq + 1, dx: 8, dz: 0 })
+    ed().resizePlate('N', 'grow')
+    expect(ed().viewShift).toEqual({ seq: seq + 2, dx: 0, dz: 8 })
+    ed().undo()
+    expect(ed().viewShift).toEqual({ seq: seq + 3, dx: 0, dz: -8 })
+    ed().redo()
+    expect(ed().viewShift).toEqual({ seq: seq + 4, dx: 0, dz: 8 })
+    ed().undo()
+    ed().undo()
+    expect(ed().viewShift).toEqual({ seq: seq + 6, dx: -8, dz: 0 })
+    ed().undo() // the E grow: no shift
+    expect(ed().viewShift.seq).toBe(seq + 6)
+  })
+
+  it('newModel and loadBricks ask the camera to re-frame', () => {
+    const frame = ed().frameSeq
+    ed().newModel('building', { w: 16, d: 16 })
+    expect(ed().frameSeq).toBe(frame + 1)
+    ed().loadBricks([], 'prop', { w: 8, d: 8 })
+    expect(ed().frameSeq).toBe(frame + 2)
+  })
+})

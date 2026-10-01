@@ -54,6 +54,17 @@ describe('workshop sounds', () => {
     ed().tapBrick(id)
     expect(sfx.pop).toHaveBeenCalledTimes(1)
   })
+  it('snap on plate grow, pop on shrink, error on a rejected resize', () => {
+    ed().resizePlate('E', 'grow')
+    expect(sfx.snap).toHaveBeenCalledTimes(1)
+    ed().resizePlate('E', 'shrink')
+    expect(sfx.pop).toHaveBeenCalledTimes(1)
+    ed().place(0, 0, 0)
+    vi.clearAllMocks()
+    ed().resizePlate('W', 'shrink') // a brick sits in the W strip
+    expect(sfx.error).toHaveBeenCalledTimes(1)
+    expect(sfx.pop).not.toHaveBeenCalled()
+  })
 })
 
 describe('guided sounds', () => {
