@@ -1,6 +1,5 @@
 import type { SaveData } from '../core/types'
 import { useApp } from '../state/useApp'
-import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
 import { saveSlot } from './saves'
 import { usePersistStatus } from './status'
@@ -74,10 +73,9 @@ export function startAutosave(): () => void {
     }, AUTOSAVE_DELAY_MS)
   })
 
-  // Leaving the app (app switch, tab kill): put a carried brick back first, so the saved
-  // workshop never misses the brick that was in hand mid-move.
+  // Leaving the app (app switch, tab kill): write now instead of waiting for the debounce. A brick
+  // being dragged is still in the model at its old spot, so it is never lost.
   const flushOnLeave = () => {
-    useEditor.getState().cancelCarry()
     void flushAutosave()
   }
   const onVisibility = () => {

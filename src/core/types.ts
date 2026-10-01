@@ -123,19 +123,19 @@ export interface GuidedState {
   placed: string[] // brick ids of the template already placed
 }
 
-/** The time a friend set on a shared maze, for the kid to beat. */
-export interface MazeChallenge {
-  timeMs: number
-  /** Who set it, when known. */
-  from?: string
-}
-
 /** Best run through a maze. */
 export interface MazeRecord {
   timeMs: number
   stars: 1 | 2 | 3
   /** Coins collected on that run. */
   coins: number
+}
+
+/** The time a friend set on a shared maze, for the kid to beat. */
+export interface MazeChallenge {
+  timeMs: number
+  /** Who set it, when known. */
+  from?: string
 }
 
 export interface SaveData {
@@ -147,7 +147,7 @@ export interface SaveData {
   completedTemplates: string[]
   /** Models shared "with build instructions": built step by step in Guided mode. */
   sharedTemplates: Template[]
-  /** The kid's own and imported mazes (shared mazes are added here). */
+  /** The kid's own and imported mazes (owned by Maze mode; shared mazes are added here). */
   mazes: Maze[]
   /** Best runs by maze id (`tpl:<templateId>` for an unchanged ready-made maze). */
   mazeRecords: Record<string, MazeRecord>

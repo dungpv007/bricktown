@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { frameMaze, mazeCorners, safeRect, type NdcRect } from './mazeView'
+import { frameMaze, mazeCorners, type NdcRect } from './mazeView'
 
 /** Screen bounds of the maze seen by a real three.js camera placed by `frameMaze`. */
 function projected(w: number, h: number, aspect: number, safe: NdcRect) {
@@ -22,7 +22,8 @@ function projected(w: number, h: number, aspect: number, safe: NdcRect) {
 }
 
 describe('frameMaze', () => {
-  const safe = safeRect(1080, 810, { left: 100, right: 100, top: 90, bottom: 80 })
+  // A 1080 x 810 canvas with HUD columns of 100 px left and right, 90 px on top and 80 px below.
+  const safe: NdcRect = { x0: -1 + 200 / 1080, x1: 1 - 200 / 1080, y0: -1 + 160 / 810, y1: 1 - 180 / 810 }
 
   for (const [w, h] of [
     [7, 7],
@@ -52,12 +53,5 @@ describe('frameMaze', () => {
     expect(big.distance).toBeGreaterThan(small.distance)
     expect(small.position[1]).toBeGreaterThan(0)
     expect(small.position[2]).toBeGreaterThan(small.target[2])
-  })
-})
-
-describe('safeRect', () => {
-  it('turns pixel margins into NDC, and falls back to the full screen when the HUD leaves no room', () => {
-    expect(safeRect(1000, 500, { left: 100, right: 0, top: 50, bottom: 0 })).toEqual({ x0: -0.8, x1: 1, y0: -1, y1: 0.8 })
-    expect(safeRect(100, 100, { left: 60, right: 60, top: 0, bottom: 0 })).toEqual({ x0: -1, y0: -1, x1: 1, y1: 1 })
   })
 })

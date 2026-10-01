@@ -158,7 +158,7 @@ export default function CityUI() {
   const onEdit = (bp: Blueprint) => {
     const { workshop } = useGame.getState().data
     if (workshop.editingBlueprintId === bp.id) setMode('workshop') // already open there: keep unsaved edits
-    else if (workshopHasBricks()) setPendingEdit(bp) // opening replaces the model in progress (a carried brick counts)
+    else if (workshopHasBricks()) setPendingEdit(bp) // opening replaces the model in progress
     else openInWorkshop(bp)
   }
 

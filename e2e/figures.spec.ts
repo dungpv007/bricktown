@@ -9,9 +9,8 @@ interface BtWindow {
         partId: string
         fig: Fig
         place(x: number, y: number, z: number): void
-        setTool(tool: string): void
         setColor(c: number): void
-        tapBrick(id: string): void
+        selectedId: string | null
       }
     }
     useGame: { getState(): { data: { workshop: { bricks: Brick[] } } } }
@@ -73,14 +72,14 @@ test('figures: ✏️ customises the figure to place, with a live preview', asyn
   expect((await bricks(page))[0].fig).toMatchObject({ hat: 'crown', face: 'wink', torso: 2, print: 'suit' })
 })
 
-test('figures: painting a placed figure recolours it and opens the editor; edits undo', async ({ page }) => {
+test('figures: recolouring a selected figure paints its torso and opens the editor; edits undo', async ({ page }) => {
   await page.getByTestId('category-figure').click()
   await page.getByTestId('fig-preset-police').click()
   await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().place(2, 0, 2))
   const id = (await bricks(page))[0].id
-  await page.getByTestId('tool-paint').click()
+  // Placing selects the new figure; a colour swatch then recolours it.
+  expect(await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().selectedId)).toBe(id)
   await page.getByTestId('color-2').click()
-  await page.evaluate((brickId) => (window as unknown as BtWindow).__bt.useEditor.getState().tapBrick(brickId), id)
   await expect(page.getByTestId('fig-editor')).toBeVisible()
   expect((await bricks(page))[0].fig?.torso).toBe(2)
 

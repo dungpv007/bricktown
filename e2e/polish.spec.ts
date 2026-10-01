@@ -21,13 +21,15 @@ interface BtWindow {
 test.describe('first launch', () => {
   useFlags('bricktown-install-hint-dismissed')
 
-  test('onboarding walks through three cards and does not return', async ({ page }) => {
+  test('onboarding walks through five cards and does not return', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByTestId('onboarding-card-0')).toBeVisible()
-    await page.getByTestId('onboarding-next').click()
-    await expect(page.getByTestId('onboarding-card-1')).toBeVisible()
-    await page.getByTestId('onboarding-next').click()
-    await expect(page.getByTestId('onboarding-card-2')).toBeVisible()
+    for (let i = 1; i < 5; i++) {
+      await page.screenshot({ path: `test-results/w1-onboarding-${i - 1}.png` })
+      await page.getByTestId('onboarding-next').click()
+      await expect(page.getByTestId(`onboarding-card-${i}`)).toBeVisible()
+    }
+    await page.screenshot({ path: 'test-results/w1-onboarding-4.png' })
     await page.getByTestId('onboarding-done').click()
     await expect(page.getByTestId('onboarding')).toBeHidden()
     await page.reload()
@@ -128,7 +130,7 @@ test('controls stay inside the safe area (notch, rounded corners, home indicator
 
   await page.getByTestId('menu-workshop').click()
   await expect(page.getByTestId('workshop-canvas')).toBeVisible()
-  for (const id of ['back', 'tool-place', 'new-model', 'undo']) await inside(id)
+  for (const id of ['back', 'redo', 'new-model', 'undo']) await inside(id)
   const palette = (await page.locator('.bt-palette').boundingBox())!
   expect(palette.x).toBeGreaterThanOrEqual(insets.left)
   expect(palette.y + palette.height).toBeLessThanOrEqual(view.height - insets.bottom)

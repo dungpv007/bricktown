@@ -17,7 +17,7 @@ export interface GameState {
   markTemplateCompleted: (id: string) => void
   /** Adds the kid's maze, or replaces the one with the same id (keeping its place in the list). */
   upsertMaze: (maze: Maze) => void
-  /** Also forgets the maze's best run. */
+  /** Also forgets the maze's best run and a friend's challenge on it. */
   deleteMaze: (id: string) => void
   /** Stores a run as the maze's record (`key`: maze id, or `tpl:<id>`); deciding what is "best" is the caller's job. */
   setMazeRecord: (key: string, record: MazeRecord) => void
@@ -57,9 +57,11 @@ export const useGame = create<GameState>()((set) => {
       })),
     deleteMaze: (id) =>
       update((d) => {
-        const { [id]: _gone, ...mazeRecords } = d.mazeRecords
-        void _gone
-        return { ...d, mazes: d.mazes.filter((m) => m.id !== id), mazeRecords }
+        const { [id]: _record, ...mazeRecords } = d.mazeRecords
+        const { [id]: _challenge, ...mazeChallenges } = d.mazeChallenges
+        void _record
+        void _challenge
+        return { ...d, mazes: d.mazes.filter((m) => m.id !== id), mazeRecords, mazeChallenges }
       }),
     setMazeRecord: (key, record) => update((d) => ({ ...d, mazeRecords: { ...d.mazeRecords, [key]: record } })),
   }

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_FIG, figPreset } from '../core/figures'
 import { createEmptySave } from '../core/serialize'
 import type { Brick } from '../core/types'
-import { useApp } from './useApp'
 import { useEditor, workshopHasBricks } from './useEditor'
 import { useGame } from './useGame'
 
@@ -12,7 +11,6 @@ const ed = () => useEditor.getState()
 beforeEach(() => {
   useGame.setState({ data: createEmptySave() })
   ed().newModel('building', { w: 16, d: 16 })
-  ed().setTool('place')
   ed().setPart('brick_2x4')
   ed().setColor(5)
   useEditor.setState({ rot: 0 })
@@ -86,184 +84,191 @@ describe('useEditor errors', () => {
     ed().place(1, 0, 1)
     expect(ed().lastError).toBe('collision')
     expect(ed().errorSeq).toBe(start + 2)
-    ed().setTool('move')
-    ed().tapBrick(bricks()[0].id)
-    ed().place(15, 0, 0) // carried 2x4 -> out of bounds
+    ed().moveBrick(bricks()[0].id, { x: 15, y: 0, z: 0 }) // 2x4 -> out of bounds
     expect(ed().errorSeq).toBe(start + 3)
   })
 })
 
-describe('useEditor tapBrick', () => {
+describe('useEditor selection', () => {
   let id: string
   beforeEach(() => {
     ed().place(0, 0, 0)
     id = bricks()[0].id
+    ed().deselect()
   })
 
-  it('paint recolours with the current color and is undoable', () => {
-    ed().setTool('paint')
-    ed().setColor(9)
-    ed().tapBrick(id)
+  it('select / deselect; selecting a brick that does not exist does nothing', () => {
+    expect(ed().selectedId).toBeNull()
+    ed().select(id)
+    expect(ed().selectedId).toBe(id)
+    ed().select(id) // tapping the selected brick again keeps it selected
+    expect(ed().selectedId).toBe(id)
+    ed().select('nope')
+    expect(ed().selectedId).toBe(id)
+    ed().deselect()
+    expect(ed().selectedId).toBeNull()
+  })
+
+  it('placing a brick selects it', () => {
+    ed().place(8, 0, 8)
+    expect(ed().selectedId).toBe(bricks()[1].id)
+    ed().place(8, 0, 8) // rejected: the selection stays
+    expect(ed().selectedId).toBe(bricks()[1].id)
+  })
+
+  it('actions without a selection do nothing', () => {
+    const before = bricks()
+    ed().rotateSelected()
+    ed().deleteSelected()
+    ed().duplicateSelected()
+    ed().paintSelected(9)
+    expect(bricks()).toBe(before)
+    expect(ed().lastError).toBeNull()
+  })
+
+  it('rotateSelected turns the brick (undoable); a blocked turn reports an error', () => {
+    ed().select(id)
+    ed().rotateSelected()
+    expect(bricks()[0].r).toBe(1)
+    ed().undo()
+    expect(bricks()[0].r).toBe(0)
+    expect(ed().selectedId).toBe(id)
+    useGame.getState().setWorkshop({ ...useGame.getState().data.workshop, bricks: [
+      { id: 'edge', p: 'brick_2x4', x: 14, y: 0, z: 0, r: 0, c: 1 } as Brick,
+    ] })
+    ed().select('edge')
+    const seq = ed().errorSeq
+    ed().rotateSelected()
+    expect(ed().lastError).toBe('out_of_bounds')
+    expect(ed().errorSeq).toBe(seq + 1)
+    expect(bricks()[0].r).toBe(0)
+    expect(ed().selectedId).toBe('edge')
+  })
+
+  it('deleteSelected removes the brick and clears the selection; undo brings the brick back', () => {
+    ed().select(id)
+    ed().deleteSelected()
+    expect(bricks()).toHaveLength(0)
+    expect(ed().selectedId).toBeNull()
+    ed().undo()
+    expect(bricks()).toHaveLength(1)
+  })
+
+  it('paintSelected recolours the selected brick (undoable) and makes it the colour for new bricks', () => {
+    ed().select(id)
+    ed().paintSelected(9)
     expect(bricks()[0].c).toBe(9)
+    expect(ed().color).toBe(9)
     ed().undo()
     expect(bricks()[0].c).toBe(5)
   })
 
+  it('hintColors asks the colour column to draw attention to itself', () => {
+    const seq = ed().colorHintSeq
+    ed().hintColors()
+    expect(ed().colorHintSeq).toBe(seq + 1)
+  })
+
   it('painting a brick with its own colour changes nothing and leaves no undo step', () => {
-    ed().setTool('paint')
-    ed().setColor(5)
+    ed().select(id)
     const before = bricks()
-    ed().tapBrick(id)
+    ed().paintSelected(5)
     expect(bricks()).toBe(before)
-    expect(ed().lastError).toBeNull()
     ed().undo() // undoes the placement from beforeEach, not a phantom paint
     expect(bricks()).toHaveLength(0)
   })
 
-  it('delete removes the brick and is undoable', () => {
-    ed().setTool('delete')
-    ed().tapBrick(id)
-    expect(bricks()).toHaveLength(0)
+  it('duplicateSelected copies the brick on top first, then beside it, and selects the copy', () => {
+    ed().select(id)
+    ed().duplicateSelected()
+    expect(bricks()).toHaveLength(2)
+    const copy = bricks()[1]
+    expect(copy).toMatchObject({ p: 'brick_2x4', x: 0, y: 3, z: 0, r: 0, c: 5 })
+    expect(copy.id).not.toBe(id)
+    expect(ed().selectedId).toBe(copy.id)
+    ed().select(id)
+    ed().duplicateSelected() // on top is taken now: +X
+    expect(bricks()[2]).toMatchObject({ x: 2, y: 0, z: 0 })
+    ed().undo()
     ed().undo()
     expect(bricks()).toHaveLength(1)
   })
 
-  it('rotate turns the brick; an invalid rotation sets lastError', () => {
-    ed().setTool('rotate')
-    ed().tapBrick(id)
-    expect(bricks()[0].r).toBe(1)
-    ed().undo()
-    expect(bricks()[0].r).toBe(0)
-    useGame.getState().setWorkshop({ ...useGame.getState().data.workshop, bricks: [
-      { id: 'edge', p: 'brick_2x4', x: 14, y: 0, z: 0, r: 0, c: 1 } as Brick,
+  it('duplicating a figure keeps its look', () => {
+    ed().setPart('minifig')
+    ed().setFig(figPreset('robber'))
+    ed().place(8, 0, 8)
+    ed().duplicateSelected()
+    expect(bricks()[2]).toMatchObject({ p: 'minifig', fig: figPreset('robber') })
+    ed().setFig(DEFAULT_FIG) // the figures tests below start from the default look
+  })
+
+  it('duplicateSelected reports an error when no spot fits', () => {
+    useGame.getState().setWorkshop({ kind: 'prop', baseplate: { w: 2, d: 4 }, bricks: [
+      { id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0, c: 1 } as Brick,
+      { id: 'b', p: 'brick_2x4', x: 0, y: 3, z: 0, r: 0, c: 1 } as Brick,
     ] })
-    ed().tapBrick('edge')
-    expect(ed().lastError).toBe('out_of_bounds')
-    expect(bricks()[0].r).toBe(0)
+    ed().select('a')
+    const seq = ed().errorSeq
+    ed().duplicateSelected()
+    expect(bricks()).toHaveLength(2)
+    expect(ed().errorSeq).toBe(seq + 1)
+    expect(ed().selectedId).toBe('a')
   })
 
-  it('place tool ignores taps on bricks', () => {
-    const before = bricks()
-    ed().setTool('place')
-    ed().tapBrick(id)
-    expect(bricks()).toBe(before)
-  })
-})
-
-describe('useEditor move tool', () => {
-  it('picks up a brick, carries its attributes, and places it elsewhere', () => {
-    ed().setPart('brick_1x2')
-    ed().setColor(7)
-    ed().place(0, 0, 0)
-    const id = bricks()[0].id
-    ed().setPart('brick_2x4')
-    ed().setColor(1)
-    ed().setTool('move')
-    ed().tapBrick(id)
-    expect(bricks()).toHaveLength(0)
-    expect(ed().carried?.id).toBe(id)
-    expect(ed().partId).toBe('brick_1x2')
-    expect(ed().color).toBe(7)
-
-    ed().place(6, 0, 6)
-    expect(ed().carried).toBeNull()
-    expect(bricks()).toHaveLength(1)
-    expect(bricks()[0]).toMatchObject({ id, p: 'brick_1x2', c: 7, x: 6, z: 6 })
-
-    // the whole move is one undo step
+  it('moveBrick moves a brick as one undo step and selects it', () => {
+    ed().moveBrick(id, { x: 6, y: 0, z: 6 })
+    expect(bricks()[0]).toMatchObject({ id, x: 6, y: 0, z: 6 })
+    expect(ed().selectedId).toBe(id)
     ed().undo()
-    expect(bricks()[0]).toMatchObject({ id, x: 0, z: 0 })
-    expect(ed().canUndo).toBe(true)
+    expect(bricks()[0]).toMatchObject({ id, x: 0, y: 0, z: 0 })
+    ed().undo()
+    expect(bricks()).toHaveLength(0)
   })
 
-  it('a failed placement keeps the brick carried', () => {
-    ed().place(0, 0, 0)
+  it('moveBrick to an invalid spot keeps the brick where it was and reports an error', () => {
     ed().place(8, 0, 0)
-    const id = bricks()[0].id
-    ed().setTool('move')
-    ed().tapBrick(id)
-    ed().place(8, 0, 0)
+    const seq = ed().errorSeq
+    ed().moveBrick(id, { x: 8, y: 0, z: 1 })
     expect(ed().lastError).toBe('collision')
-    expect(ed().carried?.id).toBe(id)
-    expect(bricks()).toHaveLength(1)
-  })
-
-  it('undo while carrying cancels the pickup', () => {
-    ed().place(0, 0, 0)
-    const id = bricks()[0].id
-    ed().setTool('move')
-    ed().tapBrick(id)
-    ed().undo()
-    expect(ed().carried).toBeNull()
-    expect(bricks()).toHaveLength(1)
-    expect(bricks()[0].id).toBe(id)
-  })
-})
-
-describe('useEditor carry cancel', () => {
-  const pickUp = () => {
-    ed().place(0, 0, 0)
-    const id = bricks()[0].id
-    ed().setTool('move')
-    ed().tapBrick(id)
-    return id
-  }
-
-  it('cancelCarry puts the brick back where it was and keeps history intact', () => {
-    const id = pickUp()
-    expect(bricks()).toHaveLength(0)
-    ed().cancelCarry()
-    expect(ed().carried).toBeNull()
-    expect(bricks()).toHaveLength(1)
+    expect(ed().errorSeq).toBe(seq + 1)
     expect(bricks()[0]).toMatchObject({ id, x: 0, z: 0 })
-    ed().undo() // undoes the original placement, not the cancelled pickup
-    expect(bricks()).toHaveLength(0)
   })
 
-  it('cancelCarry without a carried brick does nothing', () => {
-    ed().place(0, 0, 0)
-    const before = bricks()
-    ed().cancelCarry()
-    expect(bricks()).toBe(before)
-  })
-
-  it('switching away from the move tool cancels the carry', () => {
-    const id = pickUp()
-    ed().setTool('paint')
-    expect(ed().carried).toBeNull()
-    expect(ed().tool).toBe('paint')
-    expect(bricks().map((b) => b.id)).toEqual([id])
-  })
-
-  it('re-selecting the move tool while carrying keeps carrying', () => {
-    const id = pickUp()
-    ed().setTool('move')
-    expect(ed().carried?.id).toBe(id)
-    expect(bricks()).toHaveLength(0)
-  })
-
-  it('leaving the workshop cancels the carry', () => {
-    useApp.setState({ mode: 'workshop' })
-    const id = pickUp()
-    useApp.setState({ mode: 'menu' })
-    expect(ed().carried).toBeNull()
-    expect(bricks().map((b) => b.id)).toEqual([id])
-  })
-
-  it('workshopHasBricks counts a carried brick', () => {
-    expect(workshopHasBricks()).toBe(false)
-    pickUp()
-    expect(bricks()).toHaveLength(0)
-    expect(workshopHasBricks()).toBe(true)
-    ed().cancelCarry()
-    expect(workshopHasBricks()).toBe(true)
+  it('moveBrick to where the brick already is records nothing', () => {
+    ed().moveBrick(id, { x: 0, y: 0, z: 0 })
     ed().undo()
+    expect(bricks()).toHaveLength(0)
+  })
+
+  it('the selection clears when its brick disappears through undo, redo or loading', () => {
+    ed().place(8, 0, 8)
+    expect(ed().selectedId).toBe(bricks()[1].id)
+    ed().undo() // the selected brick is gone
+    expect(ed().selectedId).toBeNull()
+    ed().redo()
+    ed().select(bricks()[1].id)
+    ed().select(id)
+    ed().undo() // brick 2 goes, the selected brick 1 stays
+    expect(ed().selectedId).toBe(id)
+
+    ed().newModel('building', { w: 16, d: 16 })
+    expect(ed().selectedId).toBeNull()
+    ed().place(0, 0, 0)
+    ed().loadBricks([], 'prop', { w: 8, d: 8 })
+    expect(ed().selectedId).toBeNull()
+  })
+
+  it('workshopHasBricks follows the model', () => {
+    expect(workshopHasBricks()).toBe(true)
+    ed().select(id)
+    ed().deleteSelected()
     expect(workshopHasBricks()).toBe(false)
   })
 })
 
 describe('useEditor model loading', () => {
-  it('newModel resets bricks, history and carried', () => {
+  it('newModel resets bricks and history', () => {
     ed().place(0, 0, 0)
     ed().newModel('vehicle', { w: 8, d: 8 })
     expect(useGame.getState().data.workshop).toEqual({ kind: 'vehicle', baseplate: { w: 8, d: 8 }, bricks: [] })
@@ -364,20 +369,6 @@ describe('useEditor resizePlate', () => {
     expect(ed().canRedo).toBe(false)
   })
 
-  it('puts a carried brick back before resizing', () => {
-    ed().place(0, 0, 0)
-    const id = bricks()[0].id
-    ed().setTool('move')
-    ed().tapBrick(id)
-    ed().resizePlate('W', 'grow')
-    expect(ed().carried).toBeNull()
-    expect(bricks()).toHaveLength(1)
-    expect(bricks()[0]).toMatchObject({ id, x: 8, z: 0 })
-    ed().undo()
-    expect(bricks()[0]).toMatchObject({ id, x: 0, z: 0 })
-    expect(plate()).toEqual({ w: 16, d: 16 })
-  })
-
   it('reports the view shift so the camera can follow the bricks', () => {
     const seq = ed().viewShift.seq
     ed().resizePlate('E', 'grow') // bricks do not move: no shift
@@ -443,17 +434,6 @@ describe('useEditor setPlateColor', () => {
     ed().undo()
     expect(plate()).toEqual({ w: 16, d: 16 })
   })
-
-  it('puts a carried brick back first', () => {
-    ed().place(0, 0, 0)
-    ed().setTool('move')
-    ed().tapBrick(bricks()[0].id)
-    expect(ed().carried).not.toBeNull()
-    ed().setPlateColor(0)
-    expect(ed().carried).toBeNull()
-    expect(bricks()).toHaveLength(1)
-    expect(plate().c).toBe(0)
-  })
 })
 
 describe('useEditor figures', () => {
@@ -495,11 +475,10 @@ describe('useEditor figures', () => {
     expect(bricks()[0].fig).toEqual(figPreset('chef'))
   })
 
-  it('painting a figure recolours its torso (undoable) and opens the figure editor for it', () => {
+  it('painting a selected figure recolours its torso (undoable) and opens the figure editor for it', () => {
     const f = placeFig('chef')
-    ed().setTool('paint')
-    ed().setColor(2)
-    ed().tapBrick(f.id)
+    ed().select(f.id)
+    ed().paintSelected(2)
     expect(bricks()[0].fig).toEqual({ ...figPreset('chef'), torso: 2 })
     expect(ed().figEditor).toEqual({ brickId: f.id })
     ed().closeFigEditor()
@@ -507,8 +486,7 @@ describe('useEditor figures', () => {
     ed().undo()
     expect(bricks()[0].fig).toEqual(figPreset('chef'))
     // Its torso already has the colour: nothing to paint, the editor still opens.
-    ed().setColor(figPreset('chef').torso)
-    ed().tapBrick(f.id)
+    ed().paintSelected(figPreset('chef').torso)
     expect(ed().canRedo).toBe(true)
     expect(ed().figEditor).toEqual({ brickId: f.id })
   })
@@ -518,20 +496,17 @@ describe('useEditor figures', () => {
     expect(ed().figEditor).toEqual({ brickId: null })
   })
 
-  it('carrying a figure keeps its style and shows it as the current figure', () => {
+  it('moving a figure keeps its style', () => {
     const f = placeFig('robber')
     ed().setFig(figPreset('chef'))
-    ed().setTool('move')
-    ed().tapBrick(f.id)
-    expect(ed().fig).toEqual(figPreset('robber'))
-    ed().place(6, 0, 6)
+    ed().moveBrick(f.id, { x: 6, y: 0, z: 6 })
     expect(bricks()[0]).toMatchObject({ x: 6, z: 6, fig: figPreset('robber') })
   })
 
   it('a new model or a loaded one closes the figure editor', () => {
     const f = placeFig('robber')
-    ed().setTool('paint')
-    ed().tapBrick(f.id)
+    ed().select(f.id)
+    ed().paintSelected(2)
     ed().newModel('building', { w: 16, d: 16 })
     expect(ed().figEditor).toBeNull()
   })

@@ -22,14 +22,16 @@ describe('useGame mazes', () => {
     ])
   })
 
-  it('deleteMaze removes the maze and its best run', () => {
+  it('deleteMaze removes the maze, its best run and its challenge', () => {
     game().upsertMaze(createEmptyMaze(7, 7, { id: 'a' }))
     game().upsertMaze(createEmptyMaze(7, 7, { id: 'b' }))
     game().setMazeRecord('a', { timeMs: 1, stars: 3, coins: 0 })
     game().setMazeRecord('b', { timeMs: 2, stars: 2, coins: 1 })
+    game().update((d) => ({ ...d, mazeChallenges: { a: { timeMs: 5 }, b: { timeMs: 6, from: 'An' } } }))
     game().deleteMaze('a')
     expect(game().data.mazes.map((m) => m.id)).toEqual(['b'])
     expect(game().data.mazeRecords).toEqual({ b: { timeMs: 2, stars: 2, coins: 1 } })
+    expect(game().data.mazeChallenges).toEqual({ b: { timeMs: 6, from: 'An' } })
   })
 
   it('setMazeRecord stores the run under its key, replacing an older one', () => {
