@@ -174,7 +174,7 @@ function WheelVisual({ brick }: { brick: Brick }) {
 
 interface Props {
   setup: DrivableSetup
-  /** Start position of the body origin (ground level under the model centre). */
+  /** Start position of the body origin (the wheel bottoms, under the model centre). */
   spawn: [number, number, number]
   /** Follows the (interpolated) chassis; read by the chase camera. */
   chassisRef: RefObject<THREE.Group | null>
@@ -287,7 +287,8 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
     })
   })
 
-  const [ox, , oz] = config.origin
+  // Model space -> body space: the origin is under the model centre, at the wheel bottoms.
+  const [ox, oy, oz] = config.origin
   return (
     <RigidBody
       ref={body}
@@ -306,9 +307,9 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
         friction={CHASSIS_FRICTION}
       />
       <group ref={chassisRef}>
-        <mesh geometry={bakedBody.opaque} material={bakedMaterial} position={[-ox, 0, -oz]} castShadow receiveShadow dispose={null} />
+        <mesh geometry={bakedBody.opaque} material={bakedMaterial} position={[-ox, -oy, -oz]} castShadow receiveShadow dispose={null} />
         {bakedBody.glass && (
-          <mesh geometry={bakedBody.glass} material={bakedGlassMaterial} position={[-ox, 0, -oz]} dispose={null} />
+          <mesh geometry={bakedBody.glass} material={bakedGlassMaterial} position={[-ox, -oy, -oz]} dispose={null} />
         )}
         {config.wheels.map((w, i) => (
           <group

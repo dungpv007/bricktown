@@ -49,7 +49,7 @@ describe('analyzeDrive', () => {
     expect(res.config.wheels).toHaveLength(2)
   })
 
-  it('is not drivable when only odd-rotation wheels make the second axle', () => {
+  it('asks to turn the wheels when only odd-rotation wheels make the second axle', () => {
     const bricks = [
       b('w1', 'wheel_small', 0, 0, 0),
       b('w2', 'wheel_small', 3, 0, 0),
@@ -57,12 +57,50 @@ describe('analyzeDrive', () => {
       b('w4', 'wheel_small', 3, 0, 6, 3),
       b('body', 'plate_4x8', 0, 5, 0),
     ]
+    expect(analyzeDrive(bricks)).toEqual({ ok: false, reason: 'wheels_sideways' })
+  })
+
+  it('asks to turn the wheels when every wheel is sideways', () => {
+    const bricks = [
+      b('w1', 'wheel_small', 0, 0, 0, 1),
+      b('w2', 'wheel_small', 0, 0, 6, 1),
+      b('body', 'plate_4x8', 0, 5, 0),
+    ]
+    expect(analyzeDrive(bricks)).toEqual({ ok: false, reason: 'wheels_sideways' })
+  })
+
+  it('keeps the plain reason when turning the wheels would not help', () => {
+    // One axle whichever way the wheels point.
+    const bricks = [b('w1', 'wheel_small', 0, 0, 0), b('w2', 'wheel_small', 3, 0, 0, 1), b('body', 'plate_4x8', 0, 5, 0)]
     expect(analyzeDrive(bricks)).toEqual({ ok: false, reason: 'one_axle' })
   })
 
   it('is not drivable without wheels', () => {
     expect(analyzeDrive([b('body', 'brick_2x4', 0, 0, 0)])).toEqual({ ok: false, reason: 'no_wheels' })
+    // A single sideways wheel is still one axle when turned: no special hint.
     expect(analyzeDrive([b('w', 'wheel_small', 0, 0, 0, 1)])).toEqual({ ok: false, reason: 'no_wheels' })
+  })
+
+  it('drives wheels standing on a chassis plate, and rejects wheels on top of a tall body', () => {
+    const onPlate = [
+      b('plate', 'plate_4x8', 0, 0, 0),
+      b('w1', 'wheel_small', 0, 1, 0),
+      b('w2', 'wheel_small', 3, 1, 0),
+      b('w3', 'wheel_small', 0, 1, 6),
+      b('w4', 'wheel_small', 3, 1, 6),
+    ]
+    const res = analyzeDrive(onPlate)
+    if (!res.ok) throw new Error(`expected ok, got ${res.reason}`)
+    expect(res.config.origin[1]).toBeCloseTo(0.4)
+    expect(res.bodyBricks.map((x) => x.id)).toEqual(['plate'])
+
+    const onBrick = [b('base', 'brick_2x4', 0, 0, 0, 1), b('base2', 'brick_2x4', 0, 0, 4, 1), ...onPlate.slice(1).map((w) => ({ ...w, y: 3 }))]
+    expect(analyzeDrive(onBrick)).toEqual({ ok: false, reason: 'wheels_not_lowest' })
+  })
+
+  it('treats a build with a part this version does not know as not drivable (no crash)', () => {
+    const bricks = [...getTemplate('car')!.bricks, b('x', 'jetpack_9000', 0, 20, 0)]
+    expect(analyzeDrive(bricks)).toEqual({ ok: false, reason: 'unknown_part' })
   })
 
   it('accepts every vehicle template', () => {

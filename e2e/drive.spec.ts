@@ -271,3 +271,58 @@ test('drive: a vehicle blueprint without wheels cannot be picked', async ({ page
   await expect(card.getByTestId('veh-needs-wheels')).toBeVisible()
   await expect(page.getByTestId('veh-tpl:car')).toBeEnabled()
 })
+
+const blueprint = (id: string, bricks: unknown[]) => {
+  const now = Date.now()
+  return { id, name: id, kind: 'vehicle', tags: [], baseplate: { w: 8, d: 16 }, bricks, createdAt: now, updatedAt: now }
+}
+
+test("drive: a kid's car with the wheels standing on its chassis plate drives", async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.evaluate(
+    (bp) => (window as unknown as BtWindow).__bt.useGame.getState().upsertBlueprint(bp),
+    blueprint('e2e-onplate', [
+      { id: 'plate', p: 'plate_4x8', x: 0, y: 0, z: 0, r: 0, c: 8 },
+      { id: 'w1', p: 'wheel_small', x: 0, y: 1, z: 0, r: 0, c: 1 },
+      { id: 'w2', p: 'wheel_small', x: 3, y: 1, z: 0, r: 0, c: 1 },
+      { id: 'w3', p: 'wheel_small', x: 0, y: 1, z: 6, r: 0, c: 1 },
+      { id: 'w4', p: 'wheel_small', x: 3, y: 1, z: 6, r: 0, c: 1 },
+      { id: 'seat', p: 'brick_2x4', x: 1, y: 1, z: 2, r: 0, c: 2 },
+    ]),
+  )
+  await setUpCity(page)
+  await startDriving(page, 'e2e-onplate')
+  const start = (await carState(page))!
+  await hold(page, 'drive-gas', 1000)
+  const after = (await carState(page))!
+  expect(after.z).toBeLessThan(start.z - 3) // drove forward (-Z)
+  expect(after.upY).toBeGreaterThan(0.95)
+  expect(errors).toEqual([])
+})
+
+test('drive: sideways wheels and wheels on top of a tall body get their own hints', async ({ page }) => {
+  await page.evaluate(
+    (bps) => bps.forEach((bp) => (window as unknown as BtWindow).__bt.useGame.getState().upsertBlueprint(bp)),
+    [
+      blueprint('e2e-sideways', [
+        { id: 'w1', p: 'wheel_small', x: 0, y: 0, z: 0, r: 1, c: 1 },
+        { id: 'w2', p: 'wheel_small', x: 0, y: 0, z: 6, r: 1, c: 1 },
+        { id: 'plate', p: 'plate_4x8', x: 0, y: 5, z: 0, r: 0, c: 8 },
+      ]),
+      blueprint('e2e-ontop', [
+        { id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 1, c: 2 },
+        { id: 'b', p: 'brick_2x4', x: 0, y: 0, z: 6, r: 1, c: 2 },
+        { id: 'w1', p: 'wheel_small', x: 0, y: 3, z: 0, r: 0, c: 1 },
+        { id: 'w2', p: 'wheel_small', x: 0, y: 3, z: 6, r: 0, c: 1 },
+      ]),
+    ],
+  )
+  await page.getByTestId('menu-drive').click()
+  const sideways = page.getByTestId('veh-e2e-sideways')
+  await expect(sideways).toBeDisabled()
+  await expect(sideways.getByTestId('veh-turn-wheels')).toBeVisible()
+  const onTop = page.getByTestId('veh-e2e-ontop')
+  await expect(onTop).toBeDisabled()
+  await expect(onTop.getByTestId('veh-wheels-low')).toBeVisible()
+})

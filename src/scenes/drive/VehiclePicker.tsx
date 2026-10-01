@@ -1,16 +1,25 @@
 import { useMemo } from 'react'
 import { TEMPLATES } from '../../content/templates'
-import { analyzeDrive } from '../../core/drive'
+import { analyzeDrive, type DriveProblem } from '../../core/drive'
 import type { Brick } from '../../core/types'
 import { getThumbnail } from '../../render/thumbnails'
 import { templateSource } from '../../render/sources'
 import { useApp } from '../../state/useApp'
 import { useGame } from '../../state/useGame'
 import { KIND_ICON } from '../../ui/blueprintKinds'
-import { useT } from '../../ui/i18n'
+import { useT, type TKey } from '../../ui/i18n'
 import { useThumbnail } from '../../ui/useThumbnail'
 
 const CARD_COLORS = ['var(--bt-orange)', 'var(--bt-blue)', 'var(--bt-red)', 'var(--bt-green)']
+
+/** The badge on a greyed-out card: what to fix, as an icon (the words are for screen readers). */
+const HINTS: Record<DriveProblem, { icon: string; key: TKey; testId: string }> = {
+  no_wheels: { icon: '🛞', key: 'driveNeedsWheels', testId: 'veh-needs-wheels' },
+  one_axle: { icon: '🛞', key: 'driveNeedsWheels', testId: 'veh-needs-wheels' },
+  wheels_sideways: { icon: '🛞🔄', key: 'driveTurnWheels', testId: 'veh-turn-wheels' },
+  wheels_not_lowest: { icon: '🛞⬇️', key: 'driveWheelsLow', testId: 'veh-wheels-low' },
+  unknown_part: { icon: '❓', key: 'driveUnknownPart', testId: 'veh-unknown-part' },
+}
 
 interface Entry {
   source: string
@@ -23,19 +32,20 @@ interface Entry {
 function VehicleCard({ entry, color, onPick }: { entry: Entry; color: string; onPick: (source: string) => void }) {
   const t = useT()
   const url = useThumbnail(entry.thumbKey, () => getThumbnail(entry.thumbKey, entry.bricks))
-  const drivable = useMemo(() => analyzeDrive(entry.bricks).ok, [entry.bricks])
+  const analysis = useMemo(() => analyzeDrive(entry.bricks), [entry.bricks])
+  const hint = analysis.ok ? null : HINTS[analysis.reason]
   return (
     <button
       className="bt-card bt-veh-card"
-      style={{ background: drivable ? color : undefined }}
+      style={{ background: hint ? undefined : color }}
       data-testid={`veh-${entry.source}`}
-      aria-label={drivable ? entry.name : `${entry.name}: ${t('driveNeedsWheels')}`}
-      disabled={!drivable}
+      aria-label={hint ? `${entry.name}: ${t(hint.key)}` : entry.name}
+      disabled={hint !== null}
       onClick={() => onPick(entry.source)}
     >
-      {!drivable && (
-        <span className="bt-veh-hint" data-testid="veh-needs-wheels" title={t('driveNeedsWheels')} aria-hidden="true">
-          🛞
+      {hint && (
+        <span className="bt-veh-hint" data-testid={hint.testId} title={t(hint.key)} aria-hidden="true">
+          {hint.icon}
         </span>
       )}
       {url ? (
@@ -50,7 +60,7 @@ function VehicleCard({ entry, color, onPick }: { entry: Entry; color: string; on
 
 /**
  * Pick what to drive: the ready-made vehicles first, then the kid's own vehicle blueprints.
- * Builds that cannot drive (no wheels, or one axle) are shown greyed out with a wheel hint.
+ * Builds that cannot drive are shown greyed out with a hint badge saying what to fix.
  */
 export default function VehiclePicker({ onPick }: { onPick: (source: string) => void }) {
   const t = useT()

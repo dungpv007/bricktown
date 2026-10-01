@@ -1182,12 +1182,14 @@ form.bt-dialog,
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 44px;
+  min-width: 44px;
   height: 44px;
+  padding: 0 6px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 22px;
   background: var(--bt-yellow);
   font-size: 28px;
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.2);

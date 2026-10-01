@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getTemplate } from '../content/templates'
 import { bounds } from './model'
 import type { Brick } from './types'
+import { addBrick } from './model'
 import { analyzeVehicle } from './vehicle'
 
 const b = (id: string, p: string, x: number, y: number, z: number, r: 0 | 1 | 2 | 3 = 0): Brick => ({
@@ -77,8 +78,9 @@ describe('analyzeVehicle', () => {
     ])
     if (!res.ok) throw new Error('expected ok')
     expect(res.config.mass).toBe(2)
-    expect(res.config.chassis.halfExtents[1]).toBeCloseTo(1) // 5 plates = 2.0 tall
-    expect(res.config.chassis.center[1]).toBeCloseTo(1)
+    // The wheels span 0..2.0; the box starts just above the wheel bottoms (clearance 0.2).
+    expect(res.config.chassis.halfExtents[1]).toBeCloseTo(0.9)
+    expect(res.config.chassis.center[1]).toBeCloseTo(1.1)
   })
 
   it('uses the footprint along X as wheel width when rotated', () => {
@@ -88,5 +90,72 @@ describe('analyzeVehicle', () => {
     ])
     if (!res.ok) throw new Error('expected ok')
     expect(res.config.wheels.map((w) => w.width)).toEqual([2, 2])
+  })
+
+  describe('wheels standing on a chassis plate', () => {
+    // A kid car: 4x8 plate on the baseplate, wheels standing on its corners, a brick on top.
+    const plateFirst = [
+      b('plate', 'plate_4x8', 0, 0, 0),
+      b('w1', 'wheel_small', 0, 1, 0),
+      b('w2', 'wheel_small', 3, 1, 0),
+      b('w3', 'wheel_small', 0, 1, 6),
+      b('w4', 'wheel_small', 3, 1, 6),
+      b('seat', 'brick_2x4', 1, 1, 2),
+    ]
+
+    it('can be built with the support rule (plate first, then wheels and body)', () => {
+      let bricks: Brick[] = []
+      for (const brick of plateFirst) {
+        const res = addBrick(bricks, brick, { w: 8, d: 16 })
+        expect(res.error, brick.id).toBeNull()
+        bricks = res.bricks
+      }
+    })
+
+    it('puts the rigid-body origin at the wheel bottoms so the wheels reach the ground', () => {
+      const res = analyzeVehicle(plateFirst)
+      if (!res.ok) throw new Error(`expected ok, got ${res.reason}`)
+      const { origin, wheels, chassis } = res.config
+      expect(origin[1]).toBeCloseTo(0.4) // wheel bottoms sit on the plate top
+      for (const w of wheels) expect(w.position[1] - w.radius).toBeCloseTo(0)
+      // The chassis box starts above the wheel bottoms: the sunken plate never drags on the ground.
+      expect(chassis.center[1] - chassis.halfExtents[1]).toBeCloseTo(0.2)
+      expect(chassis.center[1] + chassis.halfExtents[1]).toBeCloseTo(1.2) // seat top (plates 1..4 = 1.6) above the origin
+    })
+
+    it('gives the same result whatever order the bricks are stored in', () => {
+      const a = analyzeVehicle(plateFirst)
+      const reversed = analyzeVehicle([...plateFirst].reverse())
+      if (!a.ok || !reversed.ok) throw new Error('expected ok')
+      expect(reversed.config.origin).toEqual(a.config.origin)
+      expect(reversed.config.chassis).toEqual(a.config.chassis)
+      const byPos = (ws: typeof a.config.wheels) => [...ws].sort((p, q) => p.position[0] - q.position[0] || p.position[2] - q.position[2])
+      expect(byPos(reversed.config.wheels)).toEqual(byPos(a.config.wheels))
+    })
+
+    it('keeps wheels-under-the-chassis builds (wheels first) at ground level', () => {
+      const wheelsFirst = [
+        b('w1', 'wheel_small', 0, 0, 0),
+        b('w2', 'wheel_small', 3, 0, 0),
+        b('w3', 'wheel_small', 0, 0, 6),
+        b('w4', 'wheel_small', 3, 0, 6),
+        b('plate', 'plate_4x8', 0, 5, 0),
+      ]
+      const res = analyzeVehicle(wheelsFirst)
+      if (!res.ok) throw new Error('expected ok')
+      expect(res.config.origin[1]).toBe(0)
+      expect(res.config.chassis.center[1] - res.config.chassis.halfExtents[1]).toBeCloseTo(2.0)
+    })
+
+    it('rejects a body that reaches far below the wheel bottoms', () => {
+      // A full brick (3 plates) under the wheels would be buried in the road.
+      const deep = [
+        b('base', 'brick_2x4', 0, 0, 0, 1),
+        b('base2', 'brick_2x4', 0, 0, 2, 1),
+        b('w1', 'wheel_small', 0, 3, 0),
+        b('w2', 'wheel_small', 3, 3, 2),
+      ]
+      expect(analyzeVehicle(deep)).toEqual({ ok: false, reason: 'wheels_not_lowest' })
+    })
   })
 })

@@ -2,7 +2,8 @@ import { CELL, footprintCells } from './city'
 import { placementCenter } from './cityPlan'
 import { roadKey } from './roads'
 import type { Baseplate, Brick, CityPlacement, CityState } from './types'
-import { analyzeVehicle, isWheel, type VehicleConfig } from './vehicle'
+import { PART_BY_ID } from './parts/catalog'
+import { analyzeVehicle, isWheel, type VehicleConfig, type VehicleProblem } from './vehicle'
 
 /**
  * Pure helpers for Drive mode: which bricks drive, where the car starts, the city's collision
@@ -25,6 +26,12 @@ export const DRIVE = {
 /** A wheel brick turned 0 or 2 quarter turns: its axle runs along X, so it can roll forward. */
 export const isDriveWheel = (brick: Brick): boolean => isWheel(brick) && brick.r % 2 === 0
 
+/**
+ * Why a build cannot drive. On top of the `analyzeVehicle` problems: `wheels_sideways` when turning
+ * the odd-rotation wheels would fix it, `unknown_part` when it uses a part this version lacks.
+ */
+export type DriveProblem = VehicleProblem | 'wheels_sideways' | 'unknown_part'
+
 export type DriveAnalysis =
   | {
       ok: true
@@ -34,13 +41,21 @@ export type DriveAnalysis =
       /** Everything else, drawn as one piece with the chassis (sideways wheels are decoration). */
       bodyBricks: Brick[]
     }
-  | { ok: false; reason: 'no_wheels' | 'one_axle' }
+  | { ok: false; reason: DriveProblem }
 
-/** `analyzeVehicle` on the drivable wheels only: sideways (odd-rotation) wheels are decoration. */
+/**
+ * `analyzeVehicle` on the drivable wheels only: sideways (odd-rotation) wheels are decoration.
+ * Never throws: a build with an unknown part id is simply not drivable.
+ */
 export function analyzeDrive(bricks: Brick[]): DriveAnalysis {
+  if (!bricks.every((b) => Object.hasOwn(PART_BY_ID, b.p))) return { ok: false, reason: 'unknown_part' }
   const physical = bricks.filter((b) => !isWheel(b) || isDriveWheel(b))
   const res = analyzeVehicle(physical)
-  if (!res.ok) return res
+  if (!res.ok) {
+    // Only the sideways wheels are in the way: the kid just needs to turn them.
+    const sideways = physical.length < bricks.length
+    return sideways && analyzeVehicle(bricks).ok ? { ok: false, reason: 'wheels_sideways' } : res
+  }
   return {
     ok: true,
     config: res.config,
