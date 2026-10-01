@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { getTemplate } from '../content/templates'
-import { bakeBricksUncached } from '../core/bake'
+import { bakeBricksUncached, bakedGeometries } from '../core/bake'
 import { isSolidBox, placementWorldBox } from '../core/drive'
 import type { Baseplate, Brick, Rot } from '../core/types'
 import { bakedModelBox, placementMatrix } from './placementTransform'
@@ -59,8 +59,7 @@ describe('placementMatrix agrees with placementWorldBox', () => {
 
             // Every vertex of the baked model through the render matrix.
             const world = new THREE.Box3()
-            for (const g of [baked.opaque, baked.glass]) {
-              if (!g || g.getAttribute('position').count === 0) continue
+            for (const [, g] of bakedGeometries(baked)) {
               const moved = g.clone().applyMatrix4(matrix)
               moved.computeBoundingBox()
               world.union(moved.boundingBox!)

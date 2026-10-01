@@ -43,6 +43,11 @@ describe('composeBlueprint', () => {
     expect(bp.bricks).toEqual([brick])
   })
 
+  it('saves the plate colour with the blueprint', () => {
+    const grey: WorkshopState = { ...workshop, baseplate: { w: 16, d: 16, c: 24 } }
+    expect(composeBlueprint({ name: 'x', workshop: grey, id: 'bp1', now: 1 }).baseplate).toEqual({ w: 16, d: 16, c: 24 })
+  })
+
   it('does not alias the workshop bricks array', () => {
     const bp = composeBlueprint({ name: 'x', workshop, id: 'bp1', now: 1 })
     expect(bp.bricks).not.toBe(workshop.bricks)

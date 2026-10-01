@@ -71,4 +71,45 @@ describe('serialize', () => {
     const save = createEmptySave()
     expect(migrate(save)).toEqual(save)
   })
+  it('is schema version 2', () => {
+    expect(SCHEMA_VERSION).toBe(2)
+  })
+  it('loads a v1 save unchanged apart from the version', () => {
+    const brick = { id: 'a', p: 'brick_2x4', x: 1, y: 0, z: 2, r: 1 as const, c: 15 }
+    const v1 = {
+      schemaVersion: 1,
+      blueprints: [
+        {
+          id: 'bp1', name: 'Nhà', kind: 'building', tags: [], baseplate: { w: 16, d: 16 },
+          bricks: [brick], createdAt: 1, updatedAt: 2,
+        },
+      ],
+      city: { size: 48, roads: ['1,2'], placements: [{ id: 'p', source: 'bp1', cx: 0, cz: 0, rot: 0 }] },
+      workshop: { kind: 'vehicle', baseplate: { w: 8, d: 16 }, bricks: [brick], editingBlueprintId: 'bp1' },
+      guided: { templateId: 'tree', step: 1, placed: ['t1'] },
+      completedTemplates: ['tree'],
+    }
+    const json = JSON.stringify({ app: 'bricktown', ...v1 })
+    expect(importSave(json)).toEqual({ ...v1, schemaVersion: 2 })
+    expect(migrate(structuredClone(v1))).toEqual({ ...v1, schemaVersion: 2 })
+  })
+  it('round-trips a v2 save with plate colours and the new colours', () => {
+    const save = createEmptySave()
+    save.workshop.baseplate = { w: 24, d: 16, c: 24 }
+    save.workshop.bricks.push(
+      { id: 'a', p: 'brick_1x1', x: 0, y: 0, z: 0, r: 0, c: 16 },
+      { id: 'b', p: 'brick_1x1', x: 1, y: 0, z: 0, r: 0, c: 29 },
+    )
+    save.blueprints.push({
+      id: 'bp', name: 'x', kind: 'prop', tags: [], baseplate: { w: 8, d: 8, c: 3 },
+      bricks: [{ id: 'c', p: 'plate_2x2', x: 0, y: 0, z: 0, r: 0, c: 28 }], createdAt: 1, updatedAt: 1,
+    })
+    expect(importSave(exportSave(save))).toEqual(save)
+  })
+  it('keeps a valid workshop plate colour and drops one that is not a colour', () => {
+    const base = { schemaVersion: SCHEMA_VERSION, blueprints: [], city: {} }
+    expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 10 } } }).workshop.baseplate).toEqual({ w: 8, d: 8, c: 10 })
+    expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 99 } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
+    expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 'red' } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
+  })
 })

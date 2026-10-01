@@ -1,18 +1,36 @@
 import * as THREE from 'three'
-import { COLORS } from './colors'
+import { COLORS, colorMaterialKind, type MaterialKind } from './colors'
 import { getPartGeometry } from './parts/geometry'
 import { brickCenter, QUARTER_COS, QUARTER_SIN } from './rotation'
 import type { Brick, Rot } from './types'
 
 /**
- * Baking merges a whole brick model into one geometry per material (opaque / glass), so the City
- * can draw hundreds of buildings with a handful of draw calls. Each baked vertex carries its
- * brick's colour in a linear-space `color` attribute (render with `vertexColors` materials).
+ * Baking merges a whole brick model into one geometry per material kind (see `MaterialKind`), so
+ * the City can draw hundreds of buildings with a handful of draw calls. Each baked vertex carries
+ * its brick's colour in a linear-space `color` attribute (render with `vertexColors` materials).
  */
 export interface BakedModel {
   opaque: THREE.BufferGeometry
-  /** Bricks painted with a glass colour; null when the model has none. */
-  glass: THREE.BufferGeometry | null
+  /** Bricks painted with a transparent colour; null when the model has none. */
+  trans: THREE.BufferGeometry | null
+  /** Bricks painted with a metallic colour; null when the model has none. */
+  metal: THREE.BufferGeometry | null
+}
+
+/** The model's non-empty geometries with the material kind each renders with, opaque first. */
+export function bakedGeometries(baked: BakedModel): Array<[MaterialKind, THREE.BufferGeometry]> {
+  const out: Array<[MaterialKind, THREE.BufferGeometry]> = []
+  if (baked.opaque.getAttribute('position').count > 0) out.push(['opaque', baked.opaque])
+  if (baked.trans) out.push(['trans', baked.trans])
+  if (baked.metal) out.push(['metal', baked.metal])
+  return out
+}
+
+/** Disposes every geometry of a bake the caller owns (never one from the shared cache). */
+export function disposeBaked(baked: BakedModel): void {
+  baked.opaque.dispose()
+  baked.trans?.dispose()
+  baked.metal?.dispose()
 }
 
 const FALLBACK_HEX = '#ffffff'
@@ -73,12 +91,10 @@ function mergeBricks(bricks: Brick[]): THREE.BufferGeometry {
  * Prefer `bakeBricks` unless the result is short-lived (e.g. thumbnails).
  */
 export function bakeBricksUncached(bricks: Brick[]): BakedModel {
-  const isGlass = (b: Brick) => COLORS[b.c]?.glass === true
-  const glassBricks = bricks.filter(isGlass)
-  return {
-    opaque: mergeBricks(bricks.filter((b) => !isGlass(b))),
-    glass: glassBricks.length > 0 ? mergeBricks(glassBricks) : null,
-  }
+  const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
+  for (const b of bricks) byKind[colorMaterialKind(b.c)].push(b)
+  const optional = (list: Brick[]) => (list.length > 0 ? mergeBricks(list) : null)
+  return { opaque: mergeBricks(byKind.opaque), trans: optional(byKind.trans), metal: optional(byKind.metal) }
 }
 
 const cache = new Map<string, BakedModel>()
@@ -114,8 +130,7 @@ export function evictBakes(keep: ReadonlySet<string>): number {
   for (const [key, baked] of cache) {
     if (keep.has(key)) continue
     cache.delete(key)
-    baked.opaque.dispose()
-    baked.glass?.dispose()
+    disposeBaked(baked)
     dropped++
   }
   return dropped

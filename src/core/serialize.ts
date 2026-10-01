@@ -1,6 +1,7 @@
-import type { SaveData } from './types'
+import { COLORS } from './colors'
+import type { Baseplate, SaveData } from './types'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 export function createEmptySave(): SaveData {
   return {
@@ -16,7 +17,14 @@ export function createEmptySave(): SaveData {
 export type Migration = (data: Record<string, unknown>) => Record<string, unknown>
 
 /** Key N migrates a save from schema version N to N + 1. */
-export const MIGRATIONS: Record<number, Migration> = {}
+export const MIGRATIONS: Record<number, Migration> = {
+  /**
+   * v2 appended colours 16-29 and the optional `Baseplate.c`; ids 0-15 kept their meaning. Saves
+   * only ever stored colour indices (the old `glass` flag lived in the COLORS table, now `trans`),
+   * so there is nothing to rewrite: a missing plate colour means the kind's default.
+   */
+  1: (data) => data,
+}
 
 const UNSUPPORTED = 'unsupported save'
 
@@ -45,6 +53,7 @@ export function migrate(raw: unknown): SaveData {
 
 const KINDS: readonly string[] = ['building', 'vehicle', 'prop']
 const isPositiveInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0
+const isColor = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && COLORS[v] !== undefined
 const arrayOr = <T>(v: unknown, fallback: T[]): T[] => (Array.isArray(v) ? (v as T[]) : fallback)
 
 /**
@@ -67,7 +76,7 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
       kind: typeof workshop.kind === 'string' && KINDS.includes(workshop.kind) ? (workshop.kind as SaveData['workshop']['kind']) : empty.workshop.kind,
       baseplate:
         isRecord(baseplate) && isPositiveInt(baseplate.w) && isPositiveInt(baseplate.d)
-          ? { w: baseplate.w, d: baseplate.d }
+          ? normalizePlate(baseplate.w, baseplate.d, baseplate.c)
           : empty.workshop.baseplate,
       bricks: arrayOr(workshop.bricks, []),
       ...(typeof workshop.editingBlueprintId === 'string' ? { editingBlueprintId: workshop.editingBlueprintId } : {}),
@@ -78,6 +87,10 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
         : null,
     completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
   }
+}
+
+function normalizePlate(w: number, d: number, c: unknown): Baseplate {
+  return isColor(c) ? { w, d, c } : { w, d }
 }
 
 export function exportSave(data: SaveData): string {

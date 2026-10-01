@@ -92,6 +92,10 @@ export function templateToBlueprint(template: Template, lang: keyof LocalizedTex
 /** Returns a list of problems; an empty list means the template is sound. */
 export function validateTemplate(t: Template): string[] {
   const problems: string[] = []
+  const plateC = t.baseplate.c
+  if (plateC !== undefined && (!Number.isInteger(plateC) || plateC < 0 || plateC >= COLORS.length)) {
+    problems.push(`baseplate: color ${plateC} out of range`)
+  }
 
   const ids = new Set<string>()
   t.bricks.forEach((b, i) => {

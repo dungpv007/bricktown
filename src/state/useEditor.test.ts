@@ -404,3 +404,53 @@ describe('useEditor resizePlate', () => {
     expect(ed().frameSeq).toBe(frame + 2)
   })
 })
+
+describe('useEditor setPlateColor', () => {
+  const plate = () => useGame.getState().data.workshop.baseplate
+
+  it('colours the plate as one undoable step, keeping its size and bricks', () => {
+    ed().place(0, 0, 0)
+    const placed = bricks()
+    ed().setPlateColor(24)
+    expect(plate()).toEqual({ w: 16, d: 16, c: 24 })
+    expect(bricks()).toEqual(placed)
+    expect(ed().canUndo).toBe(true)
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    expect(bricks()).toEqual(placed)
+    ed().redo()
+    expect(plate()).toEqual({ w: 16, d: 16, c: 24 })
+  })
+
+  it('picking the colour the plate already shows records nothing', () => {
+    ed().setPlateColor(5) // a building plate is green by default
+    expect(ed().canUndo).toBe(false)
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    ed().setPlateColor(3)
+    ed().setPlateColor(3)
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 16 })
+    expect(ed().canUndo).toBe(false)
+  })
+
+  it('survives resizing and is undone in order with it', () => {
+    ed().setPlateColor(10)
+    ed().resizePlate('E', 'grow')
+    expect(plate()).toEqual({ w: 24, d: 16, c: 10 })
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 16, c: 10 })
+    ed().undo()
+    expect(plate()).toEqual({ w: 16, d: 16 })
+  })
+
+  it('puts a carried brick back first', () => {
+    ed().place(0, 0, 0)
+    ed().setTool('move')
+    ed().tapBrick(bricks()[0].id)
+    expect(ed().carried).not.toBeNull()
+    ed().setPlateColor(0)
+    expect(ed().carried).toBeNull()
+    expect(bricks()).toHaveLength(1)
+    expect(plate().c).toBe(0)
+  })
+})

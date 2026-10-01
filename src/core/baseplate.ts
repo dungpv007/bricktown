@@ -1,10 +1,26 @@
+import { COLORS } from './colors'
 import { cellsOf } from './rotation'
-import type { Baseplate, Brick } from './types'
+import type { Baseplate, BlueprintKind, Brick } from './types'
 
 /** Studs added or removed per ➕/➖ tap; also one city cell. */
 export const PLATE_STEP = 8
 export const PLATE_MIN = 8
 export const PLATE_MAX = 48
+
+/** Colours a baseplate can be painted, in picker order: light bluish gray, green, blue, tan, white. */
+export const BASEPLATE_COLORS: readonly number[] = [24, 5, 3, 10, 0]
+
+/** A building plate is green unless painted. */
+export const DEFAULT_PLATE_COLOR = 5
+
+/** Plate colour per kind when none is stored (the Phase 1 look: vehicles dark gray, props tan). */
+const KIND_PLATE_COLOR: Record<BlueprintKind, number> = { building: DEFAULT_PLATE_COLOR, vehicle: 8, prop: 10 }
+
+/** Colour index the plate shows: its own `c` when that is a colour, else the kind's default. */
+export function plateColor(baseplate: Baseplate, kind: BlueprintKind): number {
+  const { c } = baseplate
+  return c !== undefined && Number.isInteger(c) && COLORS[c] ? c : KIND_PLATE_COLOR[kind]
+}
 
 /** Baseplate edge: N = -Z, E = +X, S = +Z, W = -X (same as roads). */
 export type PlateSide = 'N' | 'E' | 'S' | 'W'
@@ -72,6 +88,6 @@ export function resizeBaseplate(
   const { dx, dz } = plateShift(side, dir)
   return {
     bricks: dx === 0 && dz === 0 ? bricks : bricks.map((b) => ({ ...b, x: b.x + dx, z: b.z + dz })),
-    baseplate: x ? { w: baseplate.w + delta, d: baseplate.d } : { w: baseplate.w, d: baseplate.d + delta },
+    baseplate: x ? { ...baseplate, w: baseplate.w + delta } : { ...baseplate, d: baseplate.d + delta },
   }
 }

@@ -31,7 +31,12 @@ export interface PartDef {
   tags?: string[] // e.g. ['wheel']
 }
 
-export interface Baseplate { w: number; d: number }
+export interface Baseplate {
+  w: number
+  d: number
+  /** Colour index into COLORS; absent = the kind's default (see `plateColor` in core/baseplate). */
+  c?: number
+}
 
 export type BlueprintKind = 'building' | 'vehicle' | 'prop'
 

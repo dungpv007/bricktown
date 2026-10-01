@@ -30,6 +30,7 @@ export const vi = {
   plateGrow: 'Mở rộng đế',
   plateShrink: 'Thu nhỏ đế',
   cantResize: 'Không đổi được cỡ đế',
+  plateColor: 'Màu đế',
   close: 'Đóng',
   catBrick: 'Gạch',
   catPlate: 'Tấm',
