@@ -1,7 +1,20 @@
 import { create } from 'zustand'
 import { sameLayout, type Maze } from '../core/maze'
 import { createEmptySave } from '../core/serialize'
-import type { Blueprint, CityState, GuidedState, MazeRecord, SaveData, WorkshopState } from '../core/types'
+import type { Blueprint, CityState, GuidedState, MazeChallenge, MazeRecord, SaveData, WorkshopState } from '../core/types'
+
+/** What a maze's layout earned: the kid's best run and a friend's time to beat. */
+export interface MazeRuns {
+  record?: MazeRecord
+  challenge?: MazeChallenge
+}
+
+/** The best run and the challenge kept for maze `id`. */
+export function mazeRunsOf(d: SaveData, id: string): MazeRuns {
+  const record = d.mazeRecords[id]
+  const challenge = d.mazeChallenges[id]
+  return { ...(record ? { record } : {}), ...(challenge ? { challenge } : {}) }
+}
 
 export interface GameState {
   data: SaveData
@@ -26,6 +39,8 @@ export interface GameState {
   deleteMaze: (id: string) => void
   /** Stores a run as the maze's record (`key`: maze id, or `tpl:<id>`); deciding what is "best" is the caller's job. */
   setMazeRecord: (key: string, record: MazeRecord) => void
+  /** Sets maze `id`'s best run and challenge to exactly `runs` (undo of an edit that forgot them). */
+  restoreRuns: (id: string, runs: MazeRuns) => void
 }
 
 /** The save without the best run and the challenge kept for maze `id`. */
@@ -73,5 +88,14 @@ export const useGame = create<GameState>()((set) => {
       }),
     deleteMaze: (id) => update((d) => ({ ...forgetRuns(d, id), mazes: d.mazes.filter((m) => m.id !== id) })),
     setMazeRecord: (key, record) => update((d) => ({ ...d, mazeRecords: { ...d.mazeRecords, [key]: record } })),
+    restoreRuns: (id, { record, challenge }) =>
+      update((d) => {
+        const rest = forgetRuns(d, id)
+        return {
+          ...rest,
+          mazeRecords: record ? { ...rest.mazeRecords, [id]: record } : rest.mazeRecords,
+          mazeChallenges: challenge ? { ...rest.mazeChallenges, [id]: challenge } : rest.mazeChallenges,
+        }
+      }),
   }
 })
