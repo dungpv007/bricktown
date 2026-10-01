@@ -29,7 +29,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,wasm,json}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,wasm,json,m4a}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // The first install controls the open page right away (offline after one visit); later versions
         // only take over through the update flow, which reloads.

@@ -89,7 +89,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     const step = firstIncomplete(t, g.step, placed)
     if (step >= t.steps.length) {
       finish(t)
-      sfx.success()
+      sfx.fanfare()
       return
     }
     useGame.getState().setGuided({ ...g, step, placed })

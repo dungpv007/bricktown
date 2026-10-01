@@ -106,7 +106,7 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
           return
         }
         const placement = { id: newId('pl'), source: selectedSource, cx: plan.cx, cz: plan.cz, rot: plan.rot }
-        commit(before, addPlacement(before, placement, sizes), 'overlap', sfx.snap)
+        commit(before, addPlacement(before, placement, sizes), 'overlap', sfx.thunk)
       } else if (tool === 'erase') {
         const { cx, cz } = pointToCell(x, z)
         commit(before, removeRoad(before, cx, cz), 'nothing', sfx.pop)

@@ -17,6 +17,8 @@ export default defineConfig({
           localStorage: [
             { name: 'bricktown-onboarded', value: '1' },
             { name: 'bricktown-install-hint-dismissed', value: '1' },
+            // Music and sound effects off: nothing to hear in CI, and no 1.8 MB music decode per test.
+            { name: 'bricktown-prefs', value: JSON.stringify({ state: { musicOn: false, sfxOn: false }, version: 0 }) },
           ],
         },
       ],

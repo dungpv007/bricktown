@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { HornKind } from '../audio/horns'
 import { horn } from '../audio/sfx'
 
 /** What the car reads every physics step. */
@@ -75,6 +76,9 @@ export interface DriveInputState extends DriveControls {
   /** Incremented by `requestPlace`; the car is then set down at `placeTarget`. */
   placeSeq: number
   placeTarget: VehiclePlacement | null
+  /** The horn `honk` plays: set from the vehicle being driven. */
+  hornKind: HornKind
+  setHornKind: (kind: HornKind) => void
   setStick: (stick: number) => void
   pressPedal: (pedal: Pedal, pointerId: number) => void
   releasePedal: (pedal: Pedal, pointerId: number) => void
@@ -129,6 +133,8 @@ export const useDriveInput = create<DriveInputState>()((set, get) => ({
   flipSeq: 0,
   placeSeq: 0,
   placeTarget: null,
+  hornKind: 'car',
+  setHornKind: (hornKind) => set({ hornKind }),
   setStick: (stick) => set({ stick: clamp1(stick) }),
   pressPedal: (pedal, pointerId) => {
     const held = get().pedalPointers[pedal]
@@ -154,7 +160,7 @@ export const useDriveInput = create<DriveInputState>()((set, get) => ({
   },
   requestFlip: () => set({ flipSeq: get().flipSeq + 1 }),
   requestPlace: (place) => set({ placeSeq: get().placeSeq + 1, placeTarget: place }),
-  honk: () => horn(),
+  honk: () => horn(get().hornKind),
   reset: () => set({ stick: 0, gas: false, reverse: false, keys: NO_KEYS, pedalPointers: NO_PEDALS }),
   read: () => combineDriveInput(get()),
 }))
