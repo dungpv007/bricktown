@@ -75,6 +75,20 @@ describe('useEditor errors', () => {
     expect(ed().lastError).toBe('out_of_bounds')
     expect(ed().canUndo).toBe(false)
   })
+
+  it('errorSeq counts every rejected action, even a repeat of the same error', () => {
+    const start = ed().errorSeq
+    ed().place(0, 0, 0)
+    expect(ed().errorSeq).toBe(start)
+    ed().place(1, 0, 1)
+    ed().place(1, 0, 1)
+    expect(ed().lastError).toBe('collision')
+    expect(ed().errorSeq).toBe(start + 2)
+    ed().setTool('move')
+    ed().tapBrick(bricks()[0].id)
+    ed().place(15, 0, 0) // carried 2x4 -> out of bounds
+    expect(ed().errorSeq).toBe(start + 3)
+  })
 })
 
 describe('useEditor tapBrick', () => {

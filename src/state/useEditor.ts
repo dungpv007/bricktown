@@ -16,6 +16,8 @@ export interface EditorState {
   rot: Rot
   category: PartCategory
   lastError: PlaceError | null
+  /** Incremented on every rejected action, so UI can react to repeats of the same error. */
+  errorSeq: number
   /** Brick picked up by the move tool, waiting to be placed. */
   carried: Brick | null
   canUndo: boolean
@@ -47,11 +49,12 @@ const setBricks = (bricks: Brick[]) => useGame.getState().setWorkshop({ ...works
 
 export const useEditor = create<EditorState>()((set, get) => {
   const syncHistory = () => set({ canUndo: history.canUndo(), canRedo: history.canRedo() })
+  const reject = (error: PlaceError) => set((s) => ({ lastError: error, errorSeq: s.errorSeq + 1 }))
 
   /** Applies a model-function result: records history on success, reports the error otherwise. */
   const commit = (before: Brick[], result: PlaceResult): boolean => {
     if (result.error) {
-      set({ lastError: result.error })
+      reject(result.error)
       return false
     }
     history.push(before)
@@ -74,6 +77,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     rot: 0,
     category: 'brick',
     lastError: null,
+    errorSeq: 0,
     carried: null,
     canUndo: false,
     canRedo: false,
@@ -93,7 +97,7 @@ export const useEditor = create<EditorState>()((set, get) => {
         // Completing a move: the pre-pickup bricks form the single undo step.
         const result = addBrick(workshop().bricks, brick, workshop().baseplate)
         if (result.error) {
-          set({ lastError: result.error })
+          reject(result.error)
           return
         }
         history.push(pickupOrigin)

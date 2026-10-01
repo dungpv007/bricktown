@@ -1,43 +1,33 @@
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
-import { platesToWorld, PLATES_PER_BRICK } from './core/units'
 import { useApp, type Mode } from './state/useApp'
+import WorkshopScene from './scenes/workshop/WorkshopScene'
+import WorkshopUI from './scenes/workshop/WorkshopUI'
 import MainMenu from './ui/MainMenu'
 import TopBar from './ui/TopBar'
 import { useT, type TKey } from './ui/i18n'
 
-const TITLE_KEYS: Record<Exclude<Mode, 'menu'>, TKey> = {
+type PlayMode = Exclude<Mode, 'menu'>
+
+const TITLE_KEYS: Record<PlayMode, TKey> = {
   workshop: 'menuWorkshop',
   guided: 'menuGuided',
   city: 'menuCity',
   drive: 'menuDrive',
 }
 
-function WorkshopPlaceholder() {
-  const h = platesToWorld(PLATES_PER_BRICK)
-  return (
-    <Canvas shadows dpr={[1, 2]} camera={{ position: [8, 8, 8], fov: 45 }}>
-      <color attach="background" args={['#87ceeb']} />
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 10, 5]} intensity={1.2} castShadow />
-      <mesh position={[0, h / 2, 0]} castShadow>
-        <boxGeometry args={[4, h, 2]} />
-        <meshStandardMaterial color="#e3000b" roughness={0.4} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[32, 32]} />
-        <meshStandardMaterial color="#4caf50" />
-      </mesh>
-      <OrbitControls makeDefault />
-    </Canvas>
-  )
-}
-
-function ModePlaceholder({ mode }: { mode: Exclude<Mode, 'menu'> }) {
+function ModePlaceholder({ mode }: { mode: PlayMode }) {
   const t = useT()
   return (
     <div className="bt-screen bt-placeholder" data-testid={`mode-${mode}`}>
-      {mode === 'workshop' ? <WorkshopPlaceholder /> : t('comingSoon')}
+      {t('comingSoon')}
+    </div>
+  )
+}
+
+function Workshop() {
+  return (
+    <div className="bt-screen" data-testid="mode-workshop">
+      <WorkshopScene />
+      <WorkshopUI />
     </div>
   )
 }
@@ -47,7 +37,7 @@ export default function App() {
   if (mode === 'menu') return <MainMenu />
   return (
     <>
-      <ModePlaceholder mode={mode} />
+      {mode === 'workshop' ? <Workshop /> : <ModePlaceholder mode={mode} />}
       <TopBar titleKey={TITLE_KEYS[mode]} />
     </>
   )
