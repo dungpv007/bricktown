@@ -90,4 +90,13 @@ export const en: Record<keyof typeof vi, string> = {
   cityToolPlace: 'Place',
   cityDrawer: 'Library',
   cityEdit: 'Edit in workshop',
+  drivePick: 'Pick a car to drive',
+  driveNeedsWheels: 'Needs wheels',
+  driveLoading: 'Getting the car ready...',
+  driveGas: 'Go',
+  driveReverse: 'Reverse',
+  driveFlip: 'Flip the car back',
+  driveHorn: 'Horn',
+  driveChange: 'Change car',
+  driveSteer: 'Steer',
 }

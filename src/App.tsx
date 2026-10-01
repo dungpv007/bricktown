@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
@@ -9,9 +9,14 @@ import WorkshopScene from './scenes/workshop/WorkshopScene'
 import WorkshopUI from './scenes/workshop/WorkshopUI'
 import CityScene from './scenes/city/CityScene'
 import CityUI from './scenes/city/CityUI'
+import { DriveLoading } from './scenes/drive/DriveUI'
+import VehiclePicker from './scenes/drive/VehiclePicker'
 import MainMenu from './ui/MainMenu'
 import TopBar from './ui/TopBar'
-import { useT, type TKey } from './ui/i18n'
+import type { TKey } from './ui/i18n'
+
+// Lazy: only Drive mode downloads the physics engine (Rapier WASM).
+const DriveScene = lazy(() => import('./scenes/drive/DriveScene'))
 
 type PlayMode = Exclude<Mode, 'menu'>
 
@@ -20,15 +25,6 @@ const TITLE_KEYS: Record<PlayMode, TKey> = {
   guided: 'menuGuided',
   city: 'menuCity',
   drive: 'menuDrive',
-}
-
-function ModePlaceholder({ mode }: { mode: PlayMode }) {
-  const t = useT()
-  return (
-    <div className="bt-screen bt-placeholder" data-testid={`mode-${mode}`}>
-      {t('comingSoon')}
-    </div>
-  )
 }
 
 function Workshop() {
@@ -74,11 +70,28 @@ function City() {
   )
 }
 
+/** Vehicle picker, then the chosen vehicle driving around the city. */
+function Drive() {
+  const [source, setSource] = useState<string | null>(null)
+  const pickAgain = useCallback(() => setSource(null), [])
+  return (
+    <div className="bt-screen" data-testid="mode-drive">
+      {source === null ? (
+        <VehiclePicker onPick={setSource} />
+      ) : (
+        <Suspense fallback={<DriveLoading />}>
+          <DriveScene source={source} onChangeVehicle={pickAgain} />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+
 function Play({ mode }: { mode: PlayMode }) {
   if (mode === 'workshop') return <Workshop />
   if (mode === 'guided') return <Guided />
   if (mode === 'city') return <City />
-  return <ModePlaceholder mode={mode} />
+  return <Drive />
 }
 
 export default function App() {
