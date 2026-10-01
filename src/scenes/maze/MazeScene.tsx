@@ -18,12 +18,16 @@ import { frameMaze, WALL_HEIGHT } from './mazeView'
 const SKY = '#87ceeb'
 const SHADOW_MAP_SIZE = 2048
 const FOV = 45
-/** The maze editor's HUD panels, by the screen edge they cover (see `hudFreeRect`). */
+/**
+ * The maze editor's HUD panels, by the screen edge they cover (see `hudFreeRect`). The side column
+ * is a row under the top bar on portrait phones.
+ */
 const MAZE_HUD: HudEdges = {
   left: ['.bt-maze-tools'],
-  right: ['.bt-maze-side'],
+  right: [],
   top: ['.bt-topbar-title', '.bt-topright'],
   bottom: ['.bt-maze-name'],
+  auto: ['.bt-maze-side'],
 }
 /** Seconds after a size change during which the HUD is measured again every frame. */
 const HUD_SETTLE_S = 1.5

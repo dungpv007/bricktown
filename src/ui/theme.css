@@ -8,9 +8,16 @@
   --bt-purple: #7b3fb8;
   --bt-white: #ffffff;
   --bt-ink: #1b2a41;
-  --bt-radius: 24px;
-  --bt-touch: 64px;
-  --bt-shadow: 0 6px 0 rgba(0, 0, 0, 0.2);
+  /*
+   * Size class (set by the media queries below): 1 on tablets, smaller on phones. Touch targets,
+   * fonts, radii, gaps and paddings written as calc(Npx * var(--bt-s)) follow it, so a phone gets
+   * the tablet layout at 3/4 size and the tablet look stays exactly as it was.
+   */
+  --bt-s: 1;
+  --bt-radius: calc(24px * var(--bt-s));
+  --bt-touch: calc(64px * var(--bt-s));
+  --bt-gap: calc(12px * var(--bt-s));
+  --bt-shadow: 0 calc(6px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
   /* Notch / rounded corners / home indicator (index.html sets viewport-fit=cover). 0 elsewhere. */
   --bt-safe-top: env(safe-area-inset-top, 0px);
   --bt-safe-right: env(safe-area-inset-right, 0px);
@@ -18,6 +25,19 @@
   --bt-safe-left: env(safe-area-inset-left, 0px);
   /* Shorthand for `inset` / `padding`: the part of the screen nothing important may leave. */
   --bt-safe-inset: var(--bt-safe-top) var(--bt-safe-right) var(--bt-safe-bottom) var(--bt-safe-left);
+}
+
+/* Phones (shortest side under 600px): 48px touch targets; very small ones (under 380px): 44px. */
+@media (max-width: 599.98px), (max-height: 599.98px) {
+  :root {
+    --bt-s: 0.75;
+  }
+}
+
+@media (max-width: 379.98px), (max-height: 379.98px) {
+  :root {
+    --bt-s: 0.6875;
+  }
 }
 
 .bt-screen {
@@ -31,13 +51,13 @@
 .bt-btn {
   min-width: var(--bt-touch);
   min-height: var(--bt-touch);
-  padding: 0 20px;
+  padding: 0 calc(20px * var(--bt-s));
   border: 0;
   border-radius: var(--bt-radius);
   background: var(--bt-white);
   color: var(--bt-ink);
   font: inherit;
-  font-size: 22px;
+  font-size: calc(22px * var(--bt-s));
   font-weight: 700;
   box-shadow: var(--bt-shadow);
   cursor: pointer;
@@ -56,16 +76,16 @@
 .bt-menu {
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  padding: calc(16px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(16px + var(--bt-safe-bottom))
-    calc(16px + var(--bt-safe-left));
+  gap: calc(20px * var(--bt-s));
+  padding: calc(16px * var(--bt-s) + var(--bt-safe-top)) calc(16px * var(--bt-s) + var(--bt-safe-right)) calc(16px * var(--bt-s) + var(--bt-safe-bottom))
+    calc(16px * var(--bt-s) + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: auto;
 }
 
 .bt-title {
   margin: 0;
-  font-size: clamp(32px, 7vw, 56px);
+  font-size: clamp(calc(32px * var(--bt-s)), min(7vw, 9vh), 56px);
   color: var(--bt-white);
   text-shadow: 0 4px 0 var(--bt-red);
   letter-spacing: 2px;
@@ -73,8 +93,8 @@
 
 .bt-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(calc(150px * var(--bt-s)), 1fr));
+  gap: calc(16px * var(--bt-s));
   width: min(100%, 760px);
 }
 
@@ -83,14 +103,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 140px;
-  padding: 12px;
+  gap: calc(8px * var(--bt-s));
+  min-height: calc(140px * var(--bt-s));
+  padding: calc(12px * var(--bt-s));
   border: 0;
   border-radius: var(--bt-radius);
   color: var(--bt-white);
   font: inherit;
-  font-size: 20px;
+  font-size: calc(20px * var(--bt-s));
   font-weight: 800;
   text-align: center;
   box-shadow: var(--bt-shadow);
@@ -103,7 +123,7 @@
 }
 
 .bt-card-icon {
-  font-size: 52px;
+  font-size: calc(52px * var(--bt-s));
   line-height: 1;
 }
 
@@ -112,7 +132,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
 }
 
 .bt-topbar {
@@ -123,8 +143,9 @@
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: calc(8px + var(--bt-safe-top)) calc(12px + var(--bt-safe-right)) 8px calc(12px + var(--bt-safe-left));
+  gap: calc(12px * var(--bt-s));
+  padding: calc(8px * var(--bt-s) + var(--bt-safe-top)) calc(12px * var(--bt-s) + var(--bt-safe-right))
+    calc(8px * var(--bt-s)) calc(12px * var(--bt-s) + var(--bt-safe-left));
   pointer-events: none;
 }
 
@@ -133,13 +154,24 @@
 }
 
 .bt-topbar-title {
-  padding: 8px 20px;
+  padding: calc(8px * var(--bt-s)) calc(20px * var(--bt-s));
   border-radius: var(--bt-radius);
   background: var(--bt-white);
-  font-size: 22px;
+  font-size: calc(22px * var(--bt-s));
   font-weight: 800;
   color: var(--bt-ink);
   box-shadow: var(--bt-shadow);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No room beside the screen's own top-right controls (TopBar measures): hidden, still measurable. */
+.bt-topbar-title[data-squeezed='true'] {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .bt-save-warning {
@@ -148,24 +180,26 @@
 
 .bt-save-help {
   margin: 0;
-  font-size: 20px;
+  font-size: calc(20px * var(--bt-s));
   text-align: center;
 }
 
 .bt-placeholder {
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  font-size: 28px;
+  gap: calc(16px * var(--bt-s));
+  font-size: calc(28px * var(--bt-s));
   font-weight: 800;
 }
 
 /* ---------- Workshop ---------- */
 
 .bt-workshop-ui {
-  --bt-edge: 12px;
-  --bt-top: 84px;
-  --bt-palette-h: 156px;
+  --bt-edge: calc(12px * var(--bt-s));
+  /* Under the top bar: its padding, a button and a gap. */
+  --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
+  /* Two rows (categories, parts) with their gaps and the panel padding. */
+  --bt-palette-h: calc(2 * var(--bt-touch) + 28px * var(--bt-s));
   /* 30 colours: swatches a little smaller than other buttons so more show before the column scrolls. */
   --bt-swatch: 56px;
   position: absolute;
@@ -180,7 +214,7 @@
 /* Translucent HUD panel; not .bt-panel, which is the slot menu dialog. */
 .bt-hud-panel {
   box-sizing: border-box;
-  padding: 6px;
+  padding: calc(6px * var(--bt-s));
   border-radius: var(--bt-radius);
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(6px);
@@ -191,7 +225,7 @@
   width: var(--bt-touch);
   height: var(--bt-touch);
   padding: 0;
-  font-size: 32px;
+  font-size: calc(32px * var(--bt-s));
   line-height: 1;
   flex: none;
 }
@@ -209,7 +243,7 @@
   max-height: calc(100% - var(--bt-top) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -219,11 +253,11 @@
   position: absolute;
   left: var(--bt-edge);
   /* Below the undo / redo panel: two buttons, their gap and the panel padding, then a gap. */
-  top: calc(var(--bt-top) + 2 * var(--bt-touch) + 8px + 12px + 12px);
-  max-height: calc(100% - var(--bt-top) - 2 * var(--bt-touch) - 32px - var(--bt-palette-h) - 2 * var(--bt-edge));
+  top: calc(var(--bt-top) + 2 * var(--bt-touch) + 32px * var(--bt-s));
+  max-height: calc(100% - var(--bt-top) - 2 * var(--bt-touch) - 32px * var(--bt-s) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   overflow-y: auto;
   scrollbar-width: none;
   background: rgba(255, 213, 0, 0.8);
@@ -236,6 +270,11 @@
 
 @keyframes bt-actionbar-in {
   from { transform: translateX(-24px); opacity: 0; }
+}
+
+/* Phones: the action bar is a row that rises from the palette. */
+@keyframes bt-actionbar-up {
+  from { transform: translateY(24px); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -254,6 +293,72 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bt-colors.bt-colors-hint { animation: none; outline: 6px solid var(--bt-yellow); }
+}
+
+/*
+ * Top of the colour column: the current colour, a tap folds the column into this one round button
+ * and back. It stays put while the swatches scroll under it.
+ */
+.bt-colors-toggle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6px * var(--bt-s));
+  width: 100%;
+  min-width: var(--bt-touch);
+  height: var(--bt-touch);
+  padding: 0 calc(6px * var(--bt-s));
+}
+
+.bt-colors[data-collapsed='true'] {
+  grid-template-columns: var(--bt-touch);
+  padding: 0;
+  overflow: visible;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.bt-colors[data-collapsed='true'] .bt-colors-toggle {
+  position: relative;
+  width: var(--bt-touch);
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* The current colour (solid, see-through or metal, like its swatch). */
+.bt-colors-dot {
+  --bt-swatch-color: #ffffff;
+  display: block;
+  flex: none;
+  width: calc(40px * var(--bt-s));
+  height: calc(40px * var(--bt-s));
+  border-radius: 50%;
+  background-color: var(--bt-swatch-color);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
+}
+
+.bt-colors-caret {
+  font-size: calc(18px * var(--bt-s));
+  line-height: 1;
+}
+
+.bt-colors[data-collapsed='true'] .bt-colors-caret {
+  position: absolute;
+  right: calc(-4px * var(--bt-s));
+  bottom: calc(-4px * var(--bt-s));
+  display: grid;
+  place-items: center;
+  width: calc(24px * var(--bt-s));
+  height: calc(24px * var(--bt-s));
+  border-radius: 50%;
+  background: var(--bt-yellow);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+  font-size: calc(14px * var(--bt-s));
 }
 
 /* Workshop palette parts drag up onto the view; sideways still scrolls the row. */
@@ -289,7 +394,7 @@
   padding: 0;
   background: var(--bt-swatch-color);
   border: 4px solid rgba(255, 255, 255, 0.9);
-  border-radius: 18px;
+  border-radius: calc(18px * var(--bt-s));
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
   cursor: pointer;
   touch-action: manipulation;
@@ -342,18 +447,18 @@
  */
 .bt-colors-more {
   position: sticky;
-  bottom: -6px; /* over the panel's bottom padding too */
+  bottom: calc(-6px * var(--bt-s)); /* over the panel's bottom padding too */
   grid-column: 1 / -1;
-  height: 44px;
-  margin: -44px -6px -6px;
+  height: calc(44px * var(--bt-s));
+  margin: calc(-44px * var(--bt-s)) calc(-6px * var(--bt-s)) calc(-6px * var(--bt-s));
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding-bottom: 2px;
+  padding-bottom: calc(2px * var(--bt-s));
   border-radius: 0 0 var(--bt-radius) var(--bt-radius);
   background: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.95));
   color: var(--bt-ink);
-  font-size: 22px;
+  font-size: calc(22px * var(--bt-s));
   line-height: 1;
   pointer-events: none;
 }
@@ -378,15 +483,15 @@
   height: var(--bt-palette-h);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
 }
 
 .bt-palette-row {
   display: flex;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 6px;
+  padding-bottom: calc(6px * var(--bt-s));
   flex: none;
 }
 
@@ -400,21 +505,21 @@
   align-items: center;
   justify-content: center;
   gap: 0;
-  min-width: 72px;
+  min-width: calc(72px * var(--bt-s));
   height: var(--bt-touch);
-  padding: 0 6px;
-  font-size: 13px;
+  padding: 0 calc(6px * var(--bt-s));
+  font-size: max(11px, calc(13px * var(--bt-s)));
 }
 
 .bt-part-btn svg {
   display: block;
-  width: 36px;
-  height: 36px;
+  width: calc(36px * var(--bt-s));
+  height: calc(36px * var(--bt-s));
 }
 
 .bt-part-emoji {
-  font-size: 28px;
-  line-height: 36px;
+  font-size: calc(28px * var(--bt-s));
+  line-height: calc(36px * var(--bt-s));
 }
 
 .bt-part-label {
@@ -431,7 +536,7 @@
   position: absolute;
   top: 2px;
   right: 6px;
-  font-size: 22px;
+  font-size: calc(22px * var(--bt-s));
 }
 
 .bt-rotate-preview {
@@ -495,18 +600,59 @@
 
 .bt-topright {
   position: absolute;
-  top: 8px;
+  top: calc(8px * var(--bt-s));
   right: var(--bt-edge);
   display: flex;
-  gap: 12px;
+  gap: var(--bt-gap);
+}
+
+.bt-topright-items {
+  display: flex;
+  gap: var(--bt-gap);
+  width: max-content;
+}
+
+/* Folded (TopRight: the row does not fit): only ⋯ shows; the row stays laid out, unseen, to be measured. */
+.bt-topright[data-folded='true'] .bt-topright-items {
+  position: absolute;
+  top: 0;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ⋯ opened: the controls in a column under it. */
+.bt-topright[data-open='true'] .bt-topright-items {
+  top: calc(100% + var(--bt-gap));
+  z-index: 2;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: calc(6px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--bt-shadow);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* A folded control's own dialog (e.g. the plate colours) shows while the column is closed. */
+.bt-topright-items .bt-modal-backdrop {
+  visibility: visible;
+}
+
+/* Taps beside the open column close it. */
+.bt-topright-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
 }
 
 /* A little studded square in a baseplate colour (the plate colour button and its choices). */
 .bt-plate-chip {
   --bt-plate-color: #237841;
   display: block;
-  width: 40px;
-  height: 40px;
+  width: calc(40px * var(--bt-s));
+  height: calc(40px * var(--bt-s));
   margin: auto;
   border-radius: 8px;
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
@@ -516,14 +662,14 @@
 }
 
 .bt-plate-choice {
-  width: 88px;
-  height: 88px;
+  width: calc(88px * var(--bt-s));
+  height: calc(88px * var(--bt-s));
   padding: 0;
 }
 
 .bt-plate-choice .bt-plate-chip {
-  width: 60px;
-  height: 60px;
+  width: calc(60px * var(--bt-s));
+  height: calc(60px * var(--bt-s));
   background-size: 15px 15px, auto;
 }
 
@@ -535,17 +681,17 @@
 
 .bt-error-badge {
   position: absolute;
-  top: 16px;
+  top: calc(16px * var(--bt-s));
   left: 50%;
-  margin-left: -36px;
-  width: 72px;
-  height: 72px;
+  margin-left: calc(-36px * var(--bt-s));
+  width: calc(72px * var(--bt-s));
+  height: calc(72px * var(--bt-s));
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: var(--bt-red);
-  font-size: 40px;
+  font-size: calc(40px * var(--bt-s));
   box-shadow: var(--bt-shadow);
   pointer-events: none;
   animation: bt-pop 0.9s ease-out both;
@@ -569,7 +715,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: calc(16px * var(--bt-s));
   background: rgba(27, 42, 65, 0.45);
 }
 
@@ -577,9 +723,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: calc(16px * var(--bt-s));
   width: min(100%, 760px);
-  padding: 20px;
+  max-height: 100%;
+  overflow-y: auto;
+  padding: calc(20px * var(--bt-s));
   box-sizing: border-box;
   border-radius: var(--bt-radius);
   background: var(--bt-white);
@@ -587,7 +735,7 @@
 }
 
 .bt-card-size {
-  font-size: 16px;
+  font-size: calc(16px * var(--bt-s));
   opacity: 0.85;
 }
 
@@ -606,8 +754,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(16px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(16px + var(--bt-safe-bottom))
-    calc(16px + var(--bt-safe-left));
+  padding: calc(16px * var(--bt-s) + var(--bt-safe-top)) calc(16px * var(--bt-s) + var(--bt-safe-right)) calc(16px * var(--bt-s) + var(--bt-safe-bottom))
+    calc(16px * var(--bt-s) + var(--bt-safe-left));
   box-sizing: border-box;
   background: rgba(27, 42, 65, 0.6);
 }
@@ -616,11 +764,11 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: calc(14px * var(--bt-s));
   width: min(100%, 520px);
   max-height: 100%;
   overflow: auto;
-  padding: 20px;
+  padding: calc(20px * var(--bt-s));
   box-sizing: border-box;
   border-radius: var(--bt-radius);
   background: var(--bt-sky);
@@ -633,25 +781,25 @@
 
 .bt-panel-title {
   margin: 0;
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
 }
 
 .bt-slot-row {
   display: flex;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
 }
 
 .bt-slot-card {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 16px;
-  min-height: 80px;
+  gap: calc(16px * var(--bt-s));
+  min-height: calc(80px * var(--bt-s));
   text-align: left;
 }
 
 .bt-slot-num {
-  font-size: 36px;
+  font-size: calc(36px * var(--bt-s));
 }
 
 .bt-slot-info {
@@ -673,17 +821,17 @@
 .bt-yes {
   background: var(--bt-green);
   color: var(--bt-white);
-  font-size: 36px;
+  font-size: calc(36px * var(--bt-s));
 }
 
 .bt-no {
   background: var(--bt-red);
   color: var(--bt-white);
-  font-size: 36px;
+  font-size: calc(36px * var(--bt-s));
 }
 
 .bt-warning {
-  font-size: 40px;
+  font-size: calc(40px * var(--bt-s));
   line-height: 1;
 }
 
@@ -691,19 +839,19 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: calc(24px * var(--bt-s));
   padding: 8px 0;
 }
 
 .bt-ws-confirm-icon {
-  font-size: 64px;
+  font-size: calc(64px * var(--bt-s));
   line-height: 1;
 }
 
 .bt-ws-confirm-btn {
-  width: 120px;
-  height: 96px;
-  font-size: 48px;
+  width: calc(120px * var(--bt-s));
+  height: calc(96px * var(--bt-s));
+  font-size: calc(48px * var(--bt-s));
   color: var(--bt-white);
 }
 
@@ -723,16 +871,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: calc(88px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(24px + var(--bt-safe-bottom))
-    calc(16px + var(--bt-safe-left));
+  gap: calc(16px * var(--bt-s));
+  padding: calc(var(--bt-touch) + 24px * var(--bt-s) + var(--bt-safe-top)) calc(16px * var(--bt-s) + var(--bt-safe-right)) calc(24px * var(--bt-s) + var(--bt-safe-bottom))
+    calc(16px * var(--bt-s) + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: auto;
 }
 
 .bt-picker-title {
   margin: 0;
-  font-size: 32px;
+  font-size: calc(32px * var(--bt-s));
   color: var(--bt-white);
   text-shadow: 0 3px 0 var(--bt-blue);
 }
@@ -742,21 +890,21 @@
 }
 
 .bt-tpl-stars {
-  font-size: 18px;
+  font-size: calc(18px * var(--bt-s));
   letter-spacing: 2px;
 }
 
 .bt-tpl-badge {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 40px;
-  height: 40px;
+  top: calc(8px * var(--bt-s));
+  right: calc(8px * var(--bt-s));
+  width: calc(40px * var(--bt-s));
+  height: calc(40px * var(--bt-s));
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 24px;
+  font-size: calc(24px * var(--bt-s));
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.2);
 }
 
@@ -766,33 +914,33 @@
 }
 
 .bt-tpl-progress {
-  left: 8px;
+  left: calc(8px * var(--bt-s));
   right: auto;
   background: var(--bt-yellow);
   color: var(--bt-ink);
 }
 
 .bt-guided-ui {
-  --bt-palette-h: 88px;
+  --bt-palette-h: calc(var(--bt-touch) + 24px * var(--bt-s));
 }
 
 .bt-stepnav {
   position: absolute;
-  top: 8px;
+  top: calc(8px * var(--bt-s));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
 }
 
 .bt-step-counter {
-  min-width: 96px;
-  padding: 10px 18px;
+  min-width: calc(96px * var(--bt-s));
+  padding: calc(10px * var(--bt-s)) calc(18px * var(--bt-s));
   border-radius: var(--bt-radius);
   background: var(--bt-white);
   box-shadow: var(--bt-shadow);
-  font-size: 32px;
+  font-size: calc(32px * var(--bt-s));
   font-weight: 800;
   text-align: center;
 }
@@ -808,8 +956,8 @@
   max-height: calc(100% - var(--bt-top) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
+  gap: calc(8px * var(--bt-s));
+  padding: calc(10px * var(--bt-s));
   box-sizing: border-box;
   border-radius: var(--bt-radius);
   background: rgba(255, 255, 255, 0.75);
@@ -822,7 +970,7 @@
 }
 
 .bt-needed-title {
-  font-size: 18px;
+  font-size: calc(18px * var(--bt-s));
   font-weight: 800;
   text-align: center;
 }
@@ -830,27 +978,27 @@
 .bt-needed-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  border-radius: 18px;
+  gap: calc(8px * var(--bt-s));
+  padding: calc(4px * var(--bt-s)) calc(12px * var(--bt-s));
+  border-radius: calc(18px * var(--bt-s));
   background: var(--bt-white);
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
 }
 
 .bt-needed-item svg {
   display: block;
-  width: 48px;
-  height: 48px;
+  width: calc(48px * var(--bt-s));
+  height: calc(48px * var(--bt-s));
 }
 
 .bt-needed-item .bt-part-emoji {
-  font-size: 36px;
-  line-height: 48px;
+  font-size: calc(36px * var(--bt-s));
+  line-height: calc(48px * var(--bt-s));
 }
 
 .bt-needed-count {
-  min-width: 40px;
-  font-size: 26px;
+  min-width: calc(40px * var(--bt-s));
+  font-size: calc(26px * var(--bt-s));
   font-weight: 800;
 }
 
@@ -861,8 +1009,8 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: calc(24px + var(--bt-safe-top)) calc(24px + var(--bt-safe-right)) calc(24px + var(--bt-safe-bottom))
-    calc(24px + var(--bt-safe-left));
+  padding: calc(24px * var(--bt-s) + var(--bt-safe-top)) calc(24px * var(--bt-s) + var(--bt-safe-right)) calc(24px * var(--bt-s) + var(--bt-safe-bottom))
+    calc(24px * var(--bt-s) + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: hidden;
   pointer-events: none;
@@ -873,8 +1021,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 20px 24px;
+  gap: calc(12px * var(--bt-s));
+  padding: calc(20px * var(--bt-s)) calc(24px * var(--bt-s));
   border-radius: var(--bt-radius);
   background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--bt-shadow);
@@ -883,18 +1031,18 @@
 }
 
 .bt-celebrate-title {
-  font-size: 40px;
+  font-size: calc(40px * var(--bt-s));
   font-weight: 800;
   color: var(--bt-red);
 }
 
 .bt-celebrate-name {
-  font-size: 24px;
+  font-size: calc(24px * var(--bt-s));
   font-weight: 800;
 }
 
 .bt-celebrate-btn {
-  font-size: 24px;
+  font-size: calc(24px * var(--bt-s));
 }
 
 .bt-confetti {
@@ -933,8 +1081,8 @@
 /* ---------- Blueprints: thumbnails, save dialog, library ---------- */
 .bt-part-btn .bt-part-thumb {
   display: block;
-  width: 40px;
-  height: 40px;
+  width: calc(40px * var(--bt-s));
+  height: calc(40px * var(--bt-s));
   object-fit: contain;
   pointer-events: none;
 }
@@ -943,10 +1091,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: calc(16px * var(--bt-s));
   width: min(100%, 720px);
   max-height: 100%;
-  padding: 20px;
+  padding: calc(20px * var(--bt-s));
   box-sizing: border-box;
   overflow: auto;
   border-radius: var(--bt-radius);
@@ -966,13 +1114,13 @@ form.bt-dialog,
 
 .bt-ask-text {
   margin: 0;
-  font-size: 24px;
+  font-size: calc(24px * var(--bt-s));
   font-weight: 800;
   text-align: center;
 }
 
 .bt-dialog-kind {
-  font-size: 64px;
+  font-size: calc(64px * var(--bt-s));
   line-height: 1;
 }
 
@@ -980,13 +1128,13 @@ form.bt-dialog,
   box-sizing: border-box;
   width: 100%;
   min-height: var(--bt-touch);
-  padding: 0 16px;
+  padding: 0 calc(16px * var(--bt-s));
   border: 4px solid var(--bt-sky);
   border-radius: var(--bt-radius);
   background: var(--bt-white);
   color: var(--bt-ink);
   font: inherit;
-  font-size: 24px;
+  font-size: calc(24px * var(--bt-s));
   font-weight: 700;
   text-align: center;
 }
@@ -1002,11 +1150,11 @@ form.bt-dialog,
 
 .bt-library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(calc(168px * var(--bt-s)), 1fr));
+  gap: calc(14px * var(--bt-s));
   width: 100%;
   overflow-y: auto;
-  padding: 4px 4px 8px;
+  padding: calc(4px * var(--bt-s)) calc(4px * var(--bt-s)) calc(8px * var(--bt-s));
 }
 
 .bt-library-item {
@@ -1017,10 +1165,10 @@ form.bt-dialog,
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: calc(6px * var(--bt-s));
   width: 100%;
-  padding: 8px;
-  font-size: 18px;
+  padding: calc(8px * var(--bt-s));
+  font-size: calc(18px * var(--bt-s));
 }
 
 .bt-thumb,
@@ -1037,7 +1185,7 @@ form.bt-dialog,
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 56px;
+  font-size: calc(56px * var(--bt-s));
 }
 
 .bt-library-name {
@@ -1051,12 +1199,12 @@ form.bt-dialog,
   position: absolute;
   top: 4px;
   right: 4px;
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
 }
 
 .bt-library-empty {
   margin: 24px 0;
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
   font-weight: 800;
 }
 
@@ -1064,8 +1212,8 @@ form.bt-dialog,
 
 .bt-tpl-thumb {
   display: block;
-  width: 104px;
-  height: 104px;
+  width: calc(104px * var(--bt-s));
+  height: calc(104px * var(--bt-s));
   object-fit: contain;
   border-radius: 16px;
   background: linear-gradient(#cfeaf7, #eaf6e4);
@@ -1075,14 +1223,14 @@ form.bt-dialog,
 .bt-install-hint {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
   width: min(100%, 560px);
-  padding: 8px 8px 8px 20px;
+  padding: calc(8px * var(--bt-s)) calc(8px * var(--bt-s)) calc(8px * var(--bt-s)) calc(20px * var(--bt-s));
   box-sizing: border-box;
   border-radius: var(--bt-radius);
   background: var(--bt-yellow);
   color: var(--bt-ink);
-  font-size: 18px;
+  font-size: calc(18px * var(--bt-s));
   font-weight: 800;
   box-shadow: var(--bt-shadow);
 }
@@ -1101,8 +1249,8 @@ form.bt-dialog,
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(16px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(16px + var(--bt-safe-bottom))
-    calc(16px + var(--bt-safe-left));
+  padding: calc(16px * var(--bt-s) + var(--bt-safe-top)) calc(16px * var(--bt-s) + var(--bt-safe-right)) calc(16px * var(--bt-s) + var(--bt-safe-bottom))
+    calc(16px * var(--bt-s) + var(--bt-safe-left));
   box-sizing: border-box;
   background: rgba(27, 42, 65, 0.6);
 }
@@ -1111,10 +1259,10 @@ form.bt-dialog,
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: calc(14px * var(--bt-s));
   width: min(100%, 460px);
   max-height: 100%;
-  padding: 20px 24px 24px;
+  padding: calc(20px * var(--bt-s)) calc(24px * var(--bt-s)) calc(24px * var(--bt-s));
   box-sizing: border-box;
   overflow: hidden;
   border-radius: var(--bt-radius);
@@ -1140,7 +1288,7 @@ form.bt-dialog,
 
 .bt-onboarding-text {
   margin: 0;
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
   font-weight: 800;
   text-align: center;
 }
@@ -1263,9 +1411,9 @@ form.bt-dialog,
 
 /* ---------- City ---------- */
 .bt-city-ui {
-  --bt-edge: 12px;
-  --bt-top: 84px;
-  --bt-palette-h: 150px;
+  --bt-edge: calc(12px * var(--bt-s));
+  --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
+  --bt-palette-h: calc(150px * var(--bt-s));
   position: absolute;
   inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
@@ -1278,19 +1426,19 @@ form.bt-dialog,
 .bt-city-drive {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   background: var(--bt-orange);
   color: var(--bt-white);
 }
 
 .bt-city-drawer {
   position: absolute;
-  left: calc(var(--bt-edge) + var(--bt-touch) + 24px);
+  left: calc(var(--bt-edge) + var(--bt-touch) + 24px * var(--bt-s));
   right: var(--bt-edge);
   bottom: var(--bt-edge);
   display: flex;
   align-items: stretch;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   height: var(--bt-palette-h);
 }
 
@@ -1308,13 +1456,13 @@ form.bt-dialog,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 0 12px;
-  font-size: 18px;
+  gap: calc(2px * var(--bt-s));
+  padding: 0 calc(12px * var(--bt-s));
+  font-size: calc(18px * var(--bt-s));
 }
 
 .bt-city-drawer-toggle > span:first-child {
-  font-size: 34px;
+  font-size: calc(34px * var(--bt-s));
   line-height: 1;
 }
 
@@ -1322,10 +1470,10 @@ form.bt-dialog,
   flex: 1;
   min-width: 0;
   display: flex;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 6px;
+  padding-bottom: calc(6px * var(--bt-s));
 }
 
 .bt-city-sources-sep {
@@ -1343,15 +1491,15 @@ form.bt-dialog,
   align-items: center;
   justify-content: center;
   gap: 2px;
-  width: 112px;
-  padding: 4px;
-  font-size: 13px;
+  width: calc(112px * var(--bt-s));
+  padding: calc(4px * var(--bt-s));
+  font-size: max(11px, calc(13px * var(--bt-s)));
 }
 
 .bt-source-thumb {
   display: block;
-  width: 96px;
-  height: 96px;
+  width: calc(96px * var(--bt-s));
+  height: calc(96px * var(--bt-s));
   object-fit: contain;
   border-radius: 14px;
   background: linear-gradient(#cfeaf7, #eaf6e4);
@@ -1362,7 +1510,7 @@ form.bt-dialog,
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 48px;
+  font-size: calc(48px * var(--bt-s));
 }
 
 .bt-source-name {
@@ -1381,9 +1529,9 @@ form.bt-dialog,
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: calc(88px + var(--bt-safe-top)) calc(16px + var(--bt-safe-right)) calc(24px + var(--bt-safe-bottom))
-    calc(16px + var(--bt-safe-left));
+  gap: calc(16px * var(--bt-s));
+  padding: calc(var(--bt-touch) + 24px * var(--bt-s) + var(--bt-safe-top)) calc(16px * var(--bt-s) + var(--bt-safe-right)) calc(24px * var(--bt-s) + var(--bt-safe-bottom))
+    calc(16px * var(--bt-s) + var(--bt-safe-left));
   box-sizing: border-box;
   overflow: auto;
 }
@@ -1404,18 +1552,18 @@ form.bt-dialog,
 
 .bt-veh-hint {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  min-width: 44px;
-  height: 44px;
-  padding: 0 6px;
+  top: calc(8px * var(--bt-s));
+  right: calc(8px * var(--bt-s));
+  min-width: calc(44px * var(--bt-s));
+  height: calc(44px * var(--bt-s));
+  padding: 0 calc(6px * var(--bt-s));
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 22px;
+  border-radius: calc(22px * var(--bt-s));
   background: var(--bt-yellow);
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.2);
 }
 
@@ -1450,7 +1598,8 @@ form.bt-dialog,
 }
 
 .bt-drive-ui {
-  --bt-edge: 20px;
+  --bt-edge: calc(20px * var(--bt-s));
+  --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
   position: absolute;
   inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
@@ -1462,8 +1611,8 @@ form.bt-dialog,
 
 .bt-drive-change {
   position: absolute;
-  top: 8px;
-  right: 12px;
+  top: calc(8px * var(--bt-s));
+  right: calc(12px * var(--bt-s));
 }
 
 .bt-drive-left {
@@ -1474,12 +1623,12 @@ form.bt-dialog,
 
 .bt-joystick {
   position: relative;
-  width: 240px;
-  height: 128px;
+  width: calc(240px * var(--bt-s));
+  height: calc(128px * var(--bt-s));
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 64px;
+  border-radius: calc(64px * var(--bt-s));
   background: rgba(255, 255, 255, 0.45);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -1491,22 +1640,22 @@ form.bt-dialog,
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 26px;
+  font-size: calc(26px * var(--bt-s));
   color: rgba(27, 42, 65, 0.55);
   pointer-events: none;
 }
 
 .bt-joystick-left {
-  left: 14px;
+  left: calc(14px * var(--bt-s));
 }
 
 .bt-joystick-right {
-  right: 14px;
+  right: calc(14px * var(--bt-s));
 }
 
 .bt-joystick-knob {
-  width: 96px;
-  height: 96px;
+  width: calc(96px * var(--bt-s));
+  height: calc(96px * var(--bt-s));
   border-radius: 50%;
   background: var(--bt-white);
   box-shadow: var(--bt-shadow);
@@ -1524,7 +1673,7 @@ form.bt-dialog,
     'reverse gas';
   align-items: end;
   justify-items: center;
-  gap: 16px;
+  gap: calc(16px * var(--bt-s));
 }
 
 .bt-drive-btn {
@@ -1536,9 +1685,9 @@ form.bt-dialog,
 }
 
 .bt-drive-small {
-  width: 72px;
-  height: 72px;
-  font-size: 34px;
+  width: calc(72px * var(--bt-s));
+  height: calc(72px * var(--bt-s));
+  font-size: calc(34px * var(--bt-s));
 }
 
 .bt-drive-horn {
@@ -1551,18 +1700,18 @@ form.bt-dialog,
 
 .bt-drive-reverse {
   grid-area: reverse;
-  width: 96px;
-  height: 96px;
-  font-size: 40px;
+  width: calc(96px * var(--bt-s));
+  height: calc(96px * var(--bt-s));
+  font-size: calc(40px * var(--bt-s));
   background: var(--bt-orange);
   color: var(--bt-white);
 }
 
 .bt-drive-gas {
   grid-area: gas;
-  width: 132px;
-  height: 132px;
-  font-size: 56px;
+  width: calc(132px * var(--bt-s));
+  height: calc(132px * var(--bt-s));
+  font-size: calc(56px * var(--bt-s));
   background: var(--bt-green);
   color: var(--bt-white);
 }
@@ -1591,15 +1740,15 @@ form.bt-dialog,
   position: absolute;
   right: 2px;
   bottom: 0;
-  font-size: 20px;
+  font-size: calc(20px * var(--bt-s));
   line-height: 1;
 }
 
 /* Figure buttons show a bust thumbnail, bigger than a brick's. */
 .bt-fig-btn .bt-part-thumb,
 .bt-fig-preset .bt-part-thumb {
-  width: 56px;
-  height: 56px;
+  width: calc(56px * var(--bt-s));
+  height: calc(56px * var(--bt-s));
 }
 
 /* Figure editor: a big live preview beside tabbed options (stacked on narrow screens). */
@@ -1607,10 +1756,10 @@ form.bt-dialog,
   position: relative;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 16px;
+  gap: calc(16px * var(--bt-s));
   width: min(100%, 920px);
   max-height: 100%;
-  padding: 16px;
+  padding: calc(16px * var(--bt-s));
   box-sizing: border-box;
   overflow-y: auto;
   border-radius: var(--bt-radius);
@@ -1622,8 +1771,8 @@ form.bt-dialog,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 240px;
-  height: 240px;
+  width: calc(240px * var(--bt-s));
+  height: calc(240px * var(--bt-s));
   border-radius: var(--bt-radius);
   background: radial-gradient(circle at 50% 40%, #ffffff, #dbeefb);
 }
@@ -1636,20 +1785,20 @@ form.bt-dialog,
 }
 
 .bt-fig-preview .bt-part-emoji {
-  font-size: 120px;
+  font-size: calc(120px * var(--bt-s));
   line-height: 1;
 }
 
 .bt-fig-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
   min-width: 0;
 }
 
 .bt-fig-tabs {
   display: flex;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   flex-wrap: wrap;
 }
 
@@ -1660,14 +1809,14 @@ form.bt-dialog,
 .bt-fig-tab-body {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-bottom: 72px; /* room for the ✓ button in the corner */
+  gap: calc(12px * var(--bt-s));
+  padding-bottom: calc(var(--bt-touch) + 8px * var(--bt-s)); /* room for the ✓ button in the corner */
 }
 
 .bt-fig-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
 }
 
 .bt-fig-swatch {
@@ -1683,8 +1832,8 @@ form.bt-dialog,
 
 .bt-fig-done {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
+  right: calc(16px * var(--bt-s));
+  bottom: calc(16px * var(--bt-s));
 }
 
 @media (max-width: 700px) {
@@ -1694,7 +1843,7 @@ form.bt-dialog,
 
   .bt-fig-preview {
     width: 100%;
-    height: 180px;
+    height: calc(180px * var(--bt-s));
   }
 }
 
@@ -1707,13 +1856,13 @@ form.bt-dialog,
 
 .bt-maze-section {
   margin: 8px 0 0;
-  font-size: 26px;
+  font-size: calc(26px * var(--bt-s));
   color: var(--bt-white);
   text-shadow: 0 3px 0 var(--bt-purple);
 }
 
 .bt-maze-make .bt-card-icon {
-  font-size: 64px;
+  font-size: calc(64px * var(--bt-s));
 }
 
 .bt-maze-make[data-testid='maze-new'] {
@@ -1721,10 +1870,10 @@ form.bt-dialog,
 }
 
 .bt-maze-best {
-  padding: 2px 10px;
+  padding: calc(2px * var(--bt-s)) calc(10px * var(--bt-s));
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.28);
-  font-size: 16px;
+  font-size: calc(16px * var(--bt-s));
   font-weight: 800;
 }
 
@@ -1735,7 +1884,7 @@ form.bt-dialog,
 
 /* Keeps the card width of the grid above even with one or two of the kid's mazes. */
 .bt-maze-own-grid {
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--bt-s)), 1fr));
 }
 
 .bt-maze-own {
@@ -1758,13 +1907,13 @@ form.bt-dialog,
 
 .bt-maze-del {
   position: absolute;
-  top: -10px;
-  right: -10px;
+  top: calc(-10px * var(--bt-s));
+  right: calc(-10px * var(--bt-s));
   width: var(--bt-touch);
   height: var(--bt-touch);
   padding: 0;
   border-radius: 50%;
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
 }
 
 .bt-maze-thumb {
@@ -1772,29 +1921,29 @@ form.bt-dialog,
 }
 
 .bt-maze-choose .bt-row {
-  gap: 16px;
+  gap: calc(16px * var(--bt-s));
 }
 
 .bt-maze-choice {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-width: 170px;
+  gap: calc(10px * var(--bt-s));
+  min-width: calc(170px * var(--bt-s));
   white-space: nowrap;
 }
 
 .bt-maze-choice-big {
   flex-direction: column;
-  gap: 6px;
-  min-height: 112px;
-  min-width: 150px;
-  font-size: 24px;
+  gap: calc(6px * var(--bt-s));
+  min-height: calc(112px * var(--bt-s));
+  min-width: calc(150px * var(--bt-s));
+  font-size: calc(24px * var(--bt-s));
 }
 
 .bt-maze-choice-big .bt-maze-size-icon {
-  width: 48px;
-  height: 48px;
+  width: calc(48px * var(--bt-s));
+  height: calc(48px * var(--bt-s));
 }
 
 /* A square grid with --bt-maze-grid cells per side: bigger mazes, more squares. */
@@ -1802,8 +1951,8 @@ form.bt-dialog,
   --bt-maze-grid: 3;
   display: inline-block;
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: calc(34px * var(--bt-s));
+  height: calc(34px * var(--bt-s));
   box-sizing: border-box;
   border: 3px solid var(--bt-purple);
   border-radius: 4px;
@@ -1814,8 +1963,8 @@ form.bt-dialog,
 }
 
 .bt-maze-ui {
-  --bt-edge: 12px;
-  --bt-top: 84px;
+  --bt-edge: calc(12px * var(--bt-s));
+  --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
   --bt-palette-h: 0px;
   --bt-swatch: 56px;
   position: absolute;
@@ -1830,12 +1979,12 @@ form.bt-dialog,
 .bt-maze-status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   min-height: var(--bt-touch);
-  padding: 0 16px;
+  padding: 0 calc(16px * var(--bt-s));
   box-sizing: border-box;
   border-radius: var(--bt-radius);
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
   font-weight: 800;
   box-shadow: var(--bt-shadow);
 }
@@ -1852,7 +2001,7 @@ form.bt-dialog,
 }
 
 .bt-maze-status-text {
-  font-size: 18px;
+  font-size: calc(18px * var(--bt-s));
 }
 
 .bt-maze-side {
@@ -1861,14 +2010,14 @@ form.bt-dialog,
   top: var(--bt-top);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
 }
 
 .bt-maze-color-chip {
   --bt-swatch-color: #fe8a18;
   display: block;
-  width: 40px;
-  height: 40px;
+  width: calc(40px * var(--bt-s));
+  height: calc(40px * var(--bt-s));
   margin: auto;
   border-radius: 8px;
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.2);
@@ -1885,11 +2034,11 @@ form.bt-dialog,
 .bt-maze-pop {
   position: absolute;
   top: var(--bt-top);
-  right: calc(var(--bt-edge) + var(--bt-touch) + 24px);
+  right: calc(var(--bt-edge) + var(--bt-touch) + 24px * var(--bt-s));
   max-height: calc(100% - var(--bt-top) - var(--bt-edge));
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   overflow-y: auto;
   scrollbar-width: none;
   background: rgba(255, 255, 255, 0.85);
@@ -1908,20 +2057,20 @@ form.bt-dialog,
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
   min-height: var(--bt-touch);
-  padding: 0 16px;
-  font-size: 24px;
+  padding: 0 calc(16px * var(--bt-s));
+  font-size: calc(24px * var(--bt-s));
 }
 
 .bt-maze-name input {
-  width: 260px;
+  width: calc(260px * var(--bt-s));
   min-width: 0;
   border: 0;
   background: transparent;
   color: var(--bt-ink);
   font: inherit;
-  font-size: 24px;
+  font-size: calc(24px * var(--bt-s));
   font-weight: 800;
   text-align: center;
   outline: none;
@@ -1934,7 +2083,8 @@ form.bt-dialog,
 /* ---------- Maze: driving out ---------- */
 
 .bt-maze-hud {
-  --bt-edge: 20px;
+  --bt-edge: calc(20px * var(--bt-s));
+  --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
   position: absolute;
   inset: var(--bt-safe-inset);
   pointer-events: none;
@@ -1942,25 +2092,25 @@ form.bt-dialog,
 
 .bt-maze-hud-top {
   position: absolute;
-  top: 8px;
+  top: calc(8px * var(--bt-s));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
 }
 
 .bt-maze-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 52px;
-  padding: 0 18px;
+  gap: calc(6px * var(--bt-s));
+  min-height: calc(52px * var(--bt-s));
+  padding: 0 calc(18px * var(--bt-s));
   box-sizing: border-box;
   border-radius: var(--bt-radius);
   background: var(--bt-white);
   box-shadow: var(--bt-shadow);
   color: var(--bt-ink);
-  font-size: 26px;
+  font-size: calc(26px * var(--bt-s));
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1969,11 +2119,11 @@ form.bt-dialog,
 /* Under the change-vehicle button of the drive controls. */
 .bt-maze-hud-side {
   position: absolute;
-  top: 88px;
-  right: 12px;
+  top: calc(var(--bt-touch) + 24px * var(--bt-s));
+  right: calc(12px * var(--bt-s));
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
   pointer-events: auto;
 }
 
@@ -1996,22 +2146,22 @@ form.bt-dialog,
 }
 
 .bt-maze-win-card {
-  gap: 16px;
-  padding: 24px 32px;
+  gap: calc(16px * var(--bt-s));
+  padding: calc(24px * var(--bt-s)) calc(32px * var(--bt-s));
 }
 
 .bt-maze-win-stats {
   display: flex;
-  gap: 12px;
+  gap: calc(12px * var(--bt-s));
 }
 
 .bt-maze-stars {
   display: flex;
-  gap: 8px;
+  gap: calc(8px * var(--bt-s));
 }
 
 .bt-maze-star {
-  font-size: 76px;
+  font-size: calc(76px * var(--bt-s));
   line-height: 1;
   color: rgba(27, 42, 65, 0.18);
   animation: bt-star-in 0.45s ease-out both;
@@ -2023,7 +2173,7 @@ form.bt-dialog,
 }
 
 .bt-maze-record {
-  font-size: 24px;
+  font-size: calc(24px * var(--bt-s));
   font-weight: 800;
   color: var(--bt-ink);
 }
@@ -2043,5 +2193,161 @@ form.bt-dialog,
   .bt-maze-star,
   .bt-maze-record-new {
     animation: none;
+  }
+}
+
+/* ---------- Drive: turn-sideways hint (portrait phones only) ---------- */
+
+.bt-rotate-hint {
+  position: absolute;
+  top: var(--bt-top);
+  left: var(--bt-edge);
+  max-width: calc(100% - 2 * var(--bt-edge) - 2 * var(--bt-touch) - 2 * var(--bt-gap));
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--bt-s));
+  padding: calc(6px * var(--bt-s)) calc(12px * var(--bt-s));
+  background: var(--bt-yellow);
+  font-size: calc(18px * var(--bt-s));
+  text-align: left;
+}
+
+/*
+ * ---------- Phones ----------
+ * The sizes above already shrink with --bt-s; these rearrange what has no room on a phone.
+ * Tablets (shortest side 600px and up) never match these queries.
+ */
+
+/* Any phone: shortest side under 600px. */
+@media (max-width: 599.98px), (max-height: 599.98px) {
+  .bt-workshop-ui,
+  .bt-maze-ui {
+    --bt-swatch: 40px;
+  }
+
+  .bt-swatch {
+    border-width: 3px;
+  }
+
+  /* Selected-brick actions: a row just above the palette (the left column has no room for five). */
+  .bt-actionbar {
+    top: auto;
+    bottom: calc(var(--bt-palette-h) + 2 * var(--bt-edge));
+    flex-direction: row;
+    max-width: calc(100% - 2 * var(--bt-edge));
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    animation-name: bt-actionbar-up;
+  }
+}
+
+/* Very small phones: shortest side under 380px. */
+@media (max-width: 379.98px), (max-height: 379.98px) {
+  .bt-workshop-ui,
+  .bt-maze-ui {
+    --bt-swatch: 36px;
+  }
+}
+
+/* Portrait phones. */
+@media (orientation: portrait) and (max-width: 599.98px) {
+  /* Workshop: undo / redo in a row under the back button, so the plate gets the full width. */
+  .bt-workshop-ui .bt-toolbar {
+    flex-direction: row;
+  }
+
+  /* Guided: the step counter in its own row under the top bar, the needed bricks under it. */
+  .bt-stepnav {
+    top: var(--bt-top);
+  }
+
+  .bt-guided-ui .bt-needed {
+    top: calc(var(--bt-top) + var(--bt-touch) + var(--bt-gap));
+    max-height: calc(100% - var(--bt-top) - var(--bt-touch) - var(--bt-gap) - var(--bt-palette-h) - 2 * var(--bt-edge));
+  }
+
+  .bt-guided-ui[data-easy='true'] .bt-needed {
+    max-height: calc(100% - var(--bt-top) - var(--bt-touch) - var(--bt-gap) - 2 * var(--bt-edge));
+  }
+
+  /* City and maze editor: the drive button and the maze status show their icons only (labels stay for screen readers). */
+  .bt-city-drive {
+    justify-content: center;
+    padding: 0 calc(10px * var(--bt-s));
+    font-size: 0;
+  }
+
+  .bt-city-drive > span {
+    font-size: calc(32px * var(--bt-s));
+  }
+
+  .bt-maze-status-text {
+    display: none;
+  }
+
+  /* Drive: horn and flip in a row under the top bar, gas over reverse in the bottom-right corner. */
+  .bt-drive-right {
+    display: contents;
+  }
+
+  .bt-drive-horn,
+  .bt-drive-flip {
+    position: absolute;
+    top: var(--bt-top);
+    width: var(--bt-touch);
+    height: var(--bt-touch);
+    font-size: calc(28px * var(--bt-s));
+  }
+
+  .bt-drive-flip {
+    right: calc(12px * var(--bt-s));
+  }
+
+  .bt-drive-horn {
+    right: calc(12px * var(--bt-s) + var(--bt-touch) + var(--bt-gap));
+  }
+
+  .bt-drive-gas {
+    position: absolute;
+    right: var(--bt-edge);
+    bottom: calc(var(--bt-edge) + 96px * var(--bt-s) + var(--bt-gap));
+  }
+
+  .bt-drive-reverse {
+    position: absolute;
+    right: calc(var(--bt-edge) + 18px * var(--bt-s)); /* centred under the gas pedal (132px vs 96px wide) */
+    bottom: var(--bt-edge);
+  }
+
+  /* Maze editor: wall colour, size and 🎲 in a row under the top bar; their choices open under it. */
+  .bt-maze-side {
+    flex-direction: row;
+  }
+
+  .bt-maze-pop {
+    top: calc(var(--bt-top) + var(--bt-touch) + 12px * var(--bt-s) + var(--bt-gap));
+    right: var(--bt-edge);
+    max-height: calc(100% - var(--bt-top) - var(--bt-touch) - 12px * var(--bt-s) - var(--bt-gap) - var(--bt-edge));
+  }
+
+  /* Maze drive: camera and hint under horn and flip. */
+  .bt-maze-hud-side {
+    top: calc(var(--bt-top) + var(--bt-touch) + var(--bt-gap));
+  }
+}
+
+/* Landscape phones. */
+@media (orientation: landscape) and (max-height: 599.98px) {
+  /* City and maze tools: two columns, so all of them fit the short screen. */
+  .bt-city-ui .bt-toolbar,
+  .bt-maze-tools {
+    display: grid;
+    grid-template-columns: repeat(2, var(--bt-touch));
+  }
+
+  .bt-city-ui .bt-toolbar-sep,
+  .bt-maze-tools .bt-toolbar-sep {
+    grid-column: 1 / -1;
   }
 }

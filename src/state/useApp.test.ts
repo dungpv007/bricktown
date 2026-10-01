@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizePrefs, useApp } from './useApp'
+import { colorsCollapsed, sanitizePrefs, useApp } from './useApp'
 
 describe('sanitizePrefs', () => {
   it('keeps valid persisted values including the slot', () => {
@@ -17,13 +17,38 @@ describe('sanitizePrefs', () => {
     expect(sanitizePrefs(null)).toEqual({})
     expect(sanitizePrefs('x')).toEqual({})
   })
+  it('keeps the colour picker state of known device classes only', () => {
+    expect(sanitizePrefs({ colorsCollapsed: { phonePortrait: false, tablet: true } })).toEqual({
+      colorsCollapsed: { phonePortrait: false, tablet: true },
+    })
+    expect(sanitizePrefs({ colorsCollapsed: { phoneLandscape: 'yes', watch: true, tablet: false } })).toEqual({
+      colorsCollapsed: { tablet: false },
+    })
+    expect(sanitizePrefs({ colorsCollapsed: [true] })).toEqual({ colorsCollapsed: {} })
+    expect(sanitizePrefs({ colorsCollapsed: 'collapsed' })).toEqual({})
+  })
+})
+
+describe('colour picker collapse', () => {
+  it('defaults to collapsed on portrait phones only, and remembers a choice per device class', () => {
+    const initial = useApp.getState().colorsCollapsed
+    expect(colorsCollapsed(useApp.getState(), 'phonePortrait')).toBe(true)
+    expect(colorsCollapsed(useApp.getState(), 'phoneLandscape')).toBe(false)
+    expect(colorsCollapsed(useApp.getState(), 'tablet')).toBe(false)
+    useApp.getState().setColorsCollapsed('tablet', true)
+    useApp.getState().setColorsCollapsed('phonePortrait', false)
+    expect(colorsCollapsed(useApp.getState(), 'tablet')).toBe(true)
+    expect(colorsCollapsed(useApp.getState(), 'phonePortrait')).toBe(false)
+    expect(colorsCollapsed(useApp.getState(), 'phoneLandscape')).toBe(false)
+    useApp.setState({ colorsCollapsed: initial })
+  })
 })
 
 describe('useApp persistence config', () => {
   const opts = useApp.persist.getOptions()
-  it('persists slotId, lang, difficulty and muted only', () => {
+  it('persists slotId, lang, difficulty, muted and the colour picker state only', () => {
     const state = useApp.getState()
-    expect(opts.partialize?.(state)).toEqual({ lang: 'vi', difficulty: 'easy', slotId: 1, muted: false })
+    expect(opts.partialize?.(state)).toEqual({ lang: 'vi', difficulty: 'easy', slotId: 1, muted: false, colorsCollapsed: {} })
   })
   it('merge falls back to defaults for bad persisted values', () => {
     const current = useApp.getState()

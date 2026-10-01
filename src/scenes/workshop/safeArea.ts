@@ -3,15 +3,46 @@ import type { NdcRect } from './viewFit'
 /** Pixel rectangle relative to the canvas' top-left corner. */
 export interface PxRect { left: number; top: number; right: number; bottom: number }
 
-/** HUD panels (CSS selectors), grouped by the screen edge they cover. */
-export interface HudEdges { left: readonly string[]; right: readonly string[]; top: readonly string[]; bottom: readonly string[] }
+type Edge = 'left' | 'right' | 'top' | 'bottom'
+
+/**
+ * HUD panels (CSS selectors), grouped by the screen edge they cover. `auto` panels move or fold
+ * with the screen size (a column on a tablet, a row or a single button on a phone): each covers
+ * whichever edge costs the free area least (see `cheapestEdge`).
+ */
+export interface HudEdges {
+  left: readonly string[]
+  right: readonly string[]
+  top: readonly string[]
+  bottom: readonly string[]
+  auto?: readonly string[]
+}
 
 /** The workshop HUD panels, grouped by the screen edge they cover. */
 const HUD_EDGES: HudEdges = {
-  left: ['.bt-toolbar'],
-  right: ['.bt-colors'],
+  left: [],
+  right: [],
   top: ['.bt-topbar', '.bt-topright'],
   bottom: ['.bt-palette'],
+  auto: ['.bt-toolbar', '.bt-colors'],
+}
+
+/**
+ * The edge a panel at `r` is counted against: the one whose cut (from that edge of `canvas` to the
+ * far side of the panel) takes the smallest share of the canvas' width or height. E.g. the colour
+ * column on a tablet covers the right edge; folded into one button under the top bar of a portrait
+ * phone it covers the top (losing height there costs less than losing width).
+ */
+export function cheapestEdge(r: PxRect, canvas: PxRect): Edge {
+  const w = canvas.right - canvas.left
+  const h = canvas.bottom - canvas.top
+  const share: Record<Edge, number> = {
+    left: (r.right - canvas.left) / w,
+    right: (canvas.right - r.left) / w,
+    top: (r.bottom - canvas.top) / h,
+    bottom: (canvas.bottom - r.top) / h,
+  }
+  return (Object.keys(share) as Edge[]).reduce((best, e) => (share[e] < share[best] ? e : best))
 }
 
 /**
@@ -21,9 +52,10 @@ const HUD_EDGES: HudEdges = {
  */
 export const GUIDED_HUD: HudEdges = {
   left: ['.bt-needed'],
-  right: ['.bt-colors'],
+  right: [],
   top: ['.bt-topbar-title', '.bt-stepnav', '.bt-topright'],
   bottom: ['.bt-palette', '.bt-celebrate-card'],
+  auto: ['.bt-colors'],
 }
 
 /** Kept between the HUD and anything placed in the safe rect. */
@@ -85,12 +117,13 @@ function measure(canvas: HTMLElement, hud: HudEdges): { rect: PxRect; box: Eleme
   const c = box.getBoundingClientRect()
   const rect: PxRect = { left: 0, top: 0, right: c.width, bottom: c.height }
   const found: Element[] = []
-  for (const [edge, selectors] of Object.entries(hud) as Array<[keyof HudEdges, readonly string[]]>) {
+  for (const [group, selectors] of Object.entries(hud) as Array<[keyof HudEdges, readonly string[]]>) {
     for (const sel of selectors) {
       const el = document.querySelector(sel)
       if (!el) continue
       found.push(el)
       const r = el.getBoundingClientRect()
+      const edge = group === 'auto' ? cheapestEdge(r, c) : group
       if (edge === 'left') rect.left = Math.max(rect.left, r.right - c.left)
       if (edge === 'right') rect.right = Math.min(rect.right, r.left - c.left)
       if (edge === 'top') rect.top = Math.max(rect.top, r.bottom - c.top)

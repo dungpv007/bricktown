@@ -12,6 +12,7 @@ import ConfirmDialog from '../../ui/ConfirmDialog'
 import Confetti from '../../ui/Confetti'
 import { useT } from '../../ui/i18n'
 import PartPalette, { PartIcon } from '../../ui/PartPalette'
+import TopRight from '../../ui/TopRight'
 
 /** Bricks the viewed step asks for: what is still missing now, or everything of an earlier step. */
 function viewedBricks(t: Template, g: GuidedState, viewStep: number): Brick[] {
@@ -179,12 +180,12 @@ export default function GuidedUI({ onBrowse }: { onBrowse: () => void }) {
   return (
     <div className="bt-workshop-ui bt-guided-ui" data-easy={easy}>
       <StepNav total={template.steps.length} />
-      <div className="bt-topright">
+      <TopRight>
         <DifficultyToggle />
         <button className="bt-btn bt-icon-btn" data-testid="guided-list" aria-label={t('guidedList')} onClick={onBrowse}>
           📋
         </button>
-      </div>
+      </TopRight>
       <NeededPanel template={template} guided={guided} />
       {!easy && (
         <>
