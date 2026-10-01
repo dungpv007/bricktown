@@ -131,12 +131,15 @@ describe('sfx', () => {
     expect(startEngine()).toBeNull()
   })
 
-  it('caps how many sounds play at once, and frees voices as they end', () => {
+  it('caps how many sounds play at once, keeps a slot for horns and fanfares, and frees voices as they end', () => {
     for (let i = 0; i < MAX_VOICES + 3; i++) pop()
-    expect(FakeAudioContext.started).toBe(MAX_VOICES * sources('pop'))
+    const clicks = (MAX_VOICES - 1) * sources('pop')
+    expect(FakeAudioContext.started).toBe(clicks)
+    fanfare() // the reserved slot
+    expect(FakeAudioContext.started).toBe(clicks + sources('fanfare'))
     ctxTime(soundLength(SOUNDS.pop) + 0.01)
     pop()
-    expect(FakeAudioContext.started).toBe((MAX_VOICES + 1) * sources('pop'))
+    expect(FakeAudioContext.started).toBe(clicks + sources('fanfare') + sources('pop'))
   })
 
   it('plays the horn of each vehicle kind, ignoring rapid repeats', () => {
@@ -176,6 +179,7 @@ describe('engine hum', () => {
     expect(engineParams(-3)).toEqual(idle)
     expect(engineParams(7)).toEqual(top)
     expect(top.gain).toBeLessThanOrEqual(0.2) // subtle
+    expect(idle.gain).toBeLessThanOrEqual(0.01) // nearly silent standing still
   })
 
   it('starts two oscillators and stops them once', () => {

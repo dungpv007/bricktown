@@ -6,11 +6,12 @@ import { startEngine, type EngineHum } from './sfx'
 
 /**
  * A subtle engine hum while a drive scene is mounted: its pitch and level follow the car's speed
- * (published by the vehicle a few times per second). It stops when the drive closes, when sound
- * effects are switched off and while the page is hidden.
+ * (published by the vehicle a few times per second). It stops when the drive closes, when `enabled`
+ * turns false (e.g. the maze is won), when sound effects are switched off and while the page is hidden.
  */
-export function useEngineHum(): void {
+export function useEngineHum(enabled = true): void {
   useEffect(() => {
+    if (!enabled) return
     let hum: EngineHum | null = null
     const speed = () => Math.min(1, Math.abs(useDriveStatus.getState().speed) / DRIVE.MAX_SPEED)
     const sync = () => {
@@ -38,5 +39,5 @@ export function useEngineHum(): void {
       hum?.stop()
       hum = null
     }
-  }, [])
+  }, [enabled])
 }

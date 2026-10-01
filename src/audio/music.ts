@@ -2,16 +2,20 @@ import { useApp } from '../state/useApp'
 import { currentAudioContext, onAudioStateChange } from './context'
 
 /**
- * Background music: `public/audio/music.m4a` (AAC, ~175 s) looped while the 🎵 toggle is on.
+ * Background music: `public/audio/music.m4a` (mono AAC 40 kbps, ~900 KB, ~175 s) looped while the
+ * 🎵 toggle is on. Optional and kept cheap:
  *
- * - Starts only once the shared AudioContext runs, i.e. after the first gesture unlocked it
- *   (iOS / Android autoplay rules), with a gentle fade-in.
- * - The file is fetched when the browser is idle after the menu appeared, and decoded once the
- *   context exists. A decoded AudioBuffer loops sample-exact (an <audio loop> leaves a gap at the
- *   seam). Decoded PCM is ~62 MB, so devices reporting ≤ 2 GB memory, and browsers that fail to
- *   decode, stream it through an <audio loop> element instead.
- * - Pauses while the page is hidden and picks up where it left off.
- * - Dips under loud sound effects (`duckMusic`).
+ * - Nothing is created or fetched until a user gesture happens while music is on (`primeMusic`).
+ *   The <audio> element is created and `load()`ed inside that gesture: iOS then lets the same
+ *   element `play()` later, after the fetch finished. A play the browser still refuses
+ *   (NotAllowedError) is simply retried at the next gesture.
+ * - The file is fetched once, whole (no Range request), and played from a Blob URL: the service
+ *   worker caches that response at runtime (CacheFirst, 'bt-audio') so music plays offline later,
+ *   and Safari never has to range-read a cached response. Only the compressed file is in memory.
+ *   A tiny gap at the loop seam is accepted.
+ * - The element goes through the AudioContext (MediaElementAudioSourceNode -> fade -> duck) for the
+ *   1.5 s fade-in, the fade-out and ducking: `element.volume` is read-only on iOS.
+ * - Fades out and pauses while the page is hidden or music is off; the element keeps its position.
  * Nothing here throws: without audio the game just stays quiet.
  */
 
@@ -25,175 +29,146 @@ export const DUCK_LEVEL = 0.4
 const DUCK_DOWN = 0.06
 const DUCK_UP = 0.4
 
-type Track = AudioBuffer | HTMLAudioElement
-
-let duck: GainNode | null = null
-let duckCtx: AudioContext | null = null
-let bytes: Promise<ArrayBuffer | null> | null = null
-let loading: Promise<Track | null> | null = null
-
-/** What is playing now: a looping buffer source (with its offset bookkeeping) or the fallback element. */
-let playing: { source: AudioBufferSourceNode; fade: GainNode; startedAt: number; duration: number } | null = null
-let elementPlaying = false
 let element: HTMLAudioElement | null = null
-let elementFade: GainNode | null = null
-/** Where in the track (s) to pick up after a pause. */
-let offset = 0
+let blobUrl: Promise<string | null> | null = null
+let srcSet = false
+/** element -> fade -> duck -> destination, built the first time the music plays. */
+let fade: GainNode | null = null
+let duck: GainNode | null = null
+let chainCtx: AudioContext | null = null
+let routed = false
+let playing = false
+/** Bumped on every play / pause so a pending fade-out pause cannot stop a newer play. */
+let playToken = 0
 
 const wanted = () =>
   useApp.getState().musicOn && (typeof document === 'undefined' || document.visibilityState !== 'hidden')
 
-function lowMemory(): boolean {
-  const memory = (globalThis.navigator as { deviceMemory?: number } | undefined)?.deviceMemory
-  return typeof memory === 'number' && memory <= 2
-}
-
-/** The ducking stage every music source plays through, once per context. */
-function duckBus(c: AudioContext): GainNode {
-  if (!duck || duckCtx !== c) {
-    duck = c.createGain()
-    duck.gain.value = 1
-    duck.connect(c.destination)
-    duckCtx = c
-  }
-  return duck
-}
-
-function fetchBytes(): Promise<ArrayBuffer | null> {
-  bytes ??= fetch(MUSIC_URL)
-    .then((r) => (r.ok ? r.arrayBuffer() : null))
-    .catch(() => null)
-    .then((data) => {
-      if (!data) bytes = null // offline before the file was cached: try again later
-      return data
+/** Fetches the whole file once and returns a Blob URL for it (null when offline and not cached yet). */
+function fetchTrack(): Promise<string | null> {
+  if (!blobUrl) {
+    let request: Promise<string | null>
+    try {
+      request = fetch(MUSIC_URL)
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((blob) => (blob ? URL.createObjectURL(blob) : null))
+        .catch(() => null)
+    } catch {
+      request = Promise.resolve(null) // no fetch / no Blob URLs
+    }
+    blobUrl = request.then((url) => {
+      if (!url) blobUrl = null // try again at the next chance
+      return url
     })
-  return bytes
+  }
+  return blobUrl
 }
 
-function makeElement(): HTMLAudioElement | null {
+/** Routes the element through the fade and duck gains (once). False without WebAudio routing. */
+function route(c: AudioContext, el: HTMLAudioElement): boolean {
+  if (routed) return chainCtx === c
+  routed = true // a MediaElementSource can only ever be made once per element
   try {
-    if (typeof Audio === 'undefined') return null
-    const el = new Audio(MUSIC_URL)
-    el.loop = true
-    el.preload = 'auto'
-    return el
+    duck = c.createGain()
+    duck.connect(c.destination)
+    fade = c.createGain()
+    fade.gain.value = 0.0001
+    fade.connect(duck)
+    c.createMediaElementSource(el).connect(fade)
+    chainCtx = c
+    return true
   } catch {
-    return null
+    fade = duck = null
+    return false
   }
 }
 
-function decode(c: AudioContext, data: ArrayBuffer): Promise<AudioBuffer> {
-  // Callback form too: older Safari has no promise-returning decodeAudioData.
-  return new Promise((resolve, reject) => {
-    const p = c.decodeAudioData(data, resolve, reject) as Promise<AudioBuffer> | undefined
-    p?.catch(reject)
-  })
-}
-
-function load(c: AudioContext): Promise<Track | null> {
-  loading ??= (async (): Promise<Track | null> => {
-    if (lowMemory()) return makeElement()
-    const data = await fetchBytes()
-    if (!data) return null
-    try {
-      return await decode(c, data)
-    } catch {
-      return makeElement()
-    }
-  })().then((track) => {
-    if (!track) loading = null
-    return track
-  })
-  return loading
-}
-
-function fadeIn(c: AudioContext, gain: GainNode) {
-  const t = c.currentTime
-  gain.gain.cancelScheduledValues(t)
-  gain.gain.setValueAtTime(0.0001, t)
-  gain.gain.linearRampToValueAtTime(MUSIC_VOLUME, t + FADE_IN)
-}
-
-function start(c: AudioContext, track: Track) {
-  if ('getChannelData' in track) {
-    const fade = c.createGain()
-    fade.connect(duckBus(c))
-    const source = c.createBufferSource()
-    source.buffer = track
-    source.loop = true
-    source.connect(fade)
-    const at = offset % track.duration
-    source.start(0, at)
-    fadeIn(c, fade)
-    playing = { source, fade, startedAt: c.currentTime - at, duration: track.duration }
-    return
-  }
-  element = track
-  if (!elementFade) {
-    elementFade = c.createGain()
-    c.createMediaElementSource(track).connect(elementFade)
-    elementFade.connect(duckBus(c))
-  }
-  fadeIn(c, elementFade)
-  elementPlaying = true
-  void track.play().catch(() => {
-    elementPlaying = false
-  })
-}
-
-function pause() {
+/** Starts the element if everything is ready; safe to call often (and synchronously inside a gesture). */
+function tryPlay(): void {
+  const el = element
   const c = currentAudioContext()
-  if (playing && c) {
-    const { source, fade, startedAt, duration } = playing
-    playing = null
-    offset = (c.currentTime - startedAt) % duration
-    try {
-      const t = c.currentTime
-      fade.gain.cancelScheduledValues(t)
-      fade.gain.setValueAtTime(fade.gain.value, t)
-      fade.gain.linearRampToValueAtTime(0.0001, t + FADE_OUT)
-      source.stop(t + FADE_OUT + 0.05)
-    } catch {
-      /* ignore */
-    }
+  if (!el || !srcSet || playing || !c || !wanted()) return
+  const token = ++playToken
+  if (route(c, el) && fade) {
+    const t = c.currentTime
+    fade.gain.cancelScheduledValues(t)
+    fade.gain.setValueAtTime(Math.max(0.0001, fade.gain.value), t)
+    fade.gain.linearRampToValueAtTime(MUSIC_VOLUME, t + FADE_IN)
+  } else {
+    el.volume = MUSIC_VOLUME // plain element: no fades or ducking
   }
-  if (elementPlaying && element) {
-    elementPlaying = false
-    element.pause()
+  playing = true
+  try {
+    void el.play().catch(() => {
+      // Refused (e.g. NotAllowedError outside a gesture on iOS): the next gesture tries again.
+      if (token === playToken) playing = false
+    })
+  } catch {
+    playing = false
   }
 }
 
-let syncing = false
-let again = false
-
-/** Brings playback in line with the toggle, page visibility and the context's state. */
-async function sync(): Promise<void> {
-  if (syncing) {
-    again = true
-    return
+function pause(): void {
+  const el = element
+  if (!playing || !el) return
+  playing = false
+  const token = ++playToken
+  const c = currentAudioContext()
+  if (fade && c && chainCtx === c && c.state === 'running') {
+    const t = c.currentTime
+    fade.gain.cancelScheduledValues(t)
+    fade.gain.setValueAtTime(fade.gain.value, t)
+    fade.gain.linearRampToValueAtTime(0.0001, t + FADE_OUT)
+    window.setTimeout(() => {
+      if (token === playToken) el.pause()
+    }, FADE_OUT * 1000)
+  } else {
+    el.pause()
   }
-  syncing = true
+}
+
+/** Once the track is fetched, hands it to the element and plays (if still wanted). */
+function loadAndPlay(): void {
+  void fetchTrack().then((url) => {
+    if (!url || !element) return
+    if (!srcSet) {
+      element.src = url
+      srcSet = true
+    }
+    tryPlay()
+  })
+}
+
+/**
+ * Call from inside a user gesture (any tap, and the 🎵 toggle switching music on): creates the
+ * element there, starts the fetch once, and (re)tries playing synchronously.
+ */
+export function primeMusic(): void {
   try {
-    do {
-      again = false
-      if (!wanted()) {
-        pause()
-        continue
-      }
-      const c = currentAudioContext()
-      // Not unlocked yet (or suspended by the system): wait for the next state change.
-      if (!c || c.state !== 'running' || playing || elementPlaying) continue
-      const track = await load(c)
-      if (track && wanted() && c.state === 'running' && !playing && !elementPlaying) start(c, track)
-    } while (again)
+    if (!useApp.getState().musicOn) return
+    if (!element) {
+      if (typeof Audio === 'undefined') return
+      element = new Audio()
+      element.loop = true
+      element.preload = 'auto'
+      element.load() // inside the gesture: iOS allows this element to play later
+    }
+    if (srcSet) tryPlay()
+    else loadAndPlay()
   } catch {
     /* audio must never break the game */
-  } finally {
-    syncing = false
   }
 }
 
-const resync = () => void sync()
+/** Follows the toggle, page visibility and the context's state (no gesture here: never creates the element). */
+function sync(): void {
+  try {
+    if (!wanted()) pause()
+    else tryPlay()
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Dips the music to DUCK_LEVEL for `hold` seconds (a horn, a siren, a fanfare), then brings it back.
@@ -202,7 +177,7 @@ const resync = () => void sync()
 export function duckMusic(hold = 0.6): void {
   try {
     const c = currentAudioContext()
-    if (!duck || !c || duckCtx !== c) return
+    if (!playing || !duck || !c || chainCtx !== c) return
     const g = duck.gain
     const t = c.currentTime
     g.cancelScheduledValues(t)
@@ -215,44 +190,36 @@ export function duckMusic(hold = 0.6): void {
   }
 }
 
-/** Runs `fn` once the browser is idle (after first paint), or after a short delay where unsupported. */
-function whenIdle(fn: () => void) {
-  const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }
-  if (w.requestIdleCallback) w.requestIdleCallback(fn, { timeout: 4000 })
-  else window.setTimeout(fn, 1500)
-}
-
+const GESTURES = ['pointerdown', 'touchend', 'click', 'keydown'] as const
 let installed = false
 
 /**
- * Starts managing the music: call once at startup. It fetches the file when the browser is idle,
- * starts after the first gesture and follows the 🎵 toggle and page visibility from then on.
+ * Starts managing the music: call once at startup. Every gesture primes it (cheap no-op while music
+ * is off or already playing); from then on it follows the 🎵 toggle and page visibility.
  */
 export function installMusic(): void {
   if (installed || typeof window === 'undefined' || typeof document === 'undefined') return
   installed = true
-  onAudioStateChange(resync)
-  document.addEventListener('visibilitychange', resync)
+  const onGesture = () => {
+    if (!playing) primeMusic()
+  }
+  for (const name of GESTURES) window.addEventListener(name, onGesture, true)
+  onAudioStateChange(sync)
+  document.addEventListener('visibilitychange', sync)
   useApp.subscribe((s, prev) => {
-    if (s.musicOn === prev.musicOn) return
-    if (s.musicOn && !lowMemory()) void fetchBytes()
-    resync()
-  })
-  whenIdle(() => {
-    if (useApp.getState().musicOn && !lowMemory()) void fetchBytes()
-    resync()
+    if (s.musicOn !== prev.musicOn) sync()
   })
 }
 
-/** Test hook: forgets every node and the loaded track. */
+/** Test hook: forgets the element and nodes. */
 export function resetMusicForTests(): void {
-  duck = null
-  duckCtx = null
-  bytes = null
-  loading = null
-  playing = null
-  elementPlaying = false
   element = null
-  elementFade = null
-  offset = 0
+  blobUrl = null
+  srcSet = false
+  fade = null
+  duck = null
+  chainCtx = null
+  routed = false
+  playing = false
+  playToken = 0
 }

@@ -134,15 +134,23 @@ function useHornKind(source: string) {
 
 /**
  * On-screen driving controls: steering stick on the left, pedals, flip and horn on the right.
- * Also runs the engine hum and picks the horn for `source` (the vehicle being driven).
+ * Also runs the engine hum (silenced by `quietEngine`) and picks the horn for `source` (the vehicle being driven).
  */
-export default function DriveUI({ source, onChangeVehicle }: { source: string; onChangeVehicle: () => void }) {
+export default function DriveUI({
+  source,
+  onChangeVehicle,
+  quietEngine = false,
+}: {
+  source: string
+  onChangeVehicle: () => void
+  quietEngine?: boolean
+}) {
   const t = useT()
   const input = useDriveInput.getState()
   useKeyboard()
   useReleaseControls()
   useHornKind(source)
-  useEngineHum()
+  useEngineHum(!quietEngine)
   return (
     <div className="bt-drive-ui" data-testid="drive-ui">
       <DriveStatusProbe />

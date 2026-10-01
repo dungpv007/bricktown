@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Mode } from '../state/useApp'
 import { persistWarning, usePersistStatus } from '../persistence/status'
+import { primeMusic } from '../audio/music'
 import { snap } from '../audio/sfx'
 import { useApp } from '../state/useApp'
 import { useT, type TKey } from './i18n'
@@ -69,7 +70,10 @@ export default function MainMenu() {
           data-testid="music-toggle"
           aria-label={t('music')}
           aria-pressed={musicOn}
-          onClick={() => setMusicOn(!musicOn)}
+          onClick={() => {
+            setMusicOn(!musicOn)
+            if (!musicOn) primeMusic() // switching on: start it inside this tap (iOS)
+          }}
         >
           {/* There is no "music off" emoji: the note fades (and the button loses its yellow "on" fill). */}
           <span style={musicOn ? undefined : { opacity: 0.35 }}>🎵</span>

@@ -190,7 +190,10 @@ export const SOUNDS: Record<SoundName, Sound> = {
 const MASTER_GAIN = 0.35
 const ATTACK = 0.005
 const RELEASE = 0.05
-/** At most this many sounds at once; extra ones are dropped (a kid tapping fast stays cheap and clean). */
+/**
+ * At most this many sounds at once; extra ones are dropped (a kid tapping fast stays cheap and
+ * clean). The last slot is kept for horns and fanfares, so a burst of clicks never swallows them.
+ */
 export const MAX_VOICES = 6
 /** Horns are only honked so often (a held key or a drumming finger). */
 const HORN_GAP = 0.25
@@ -307,8 +310,8 @@ function play(name: SoundName): boolean {
     if (c.state !== 'running') void c.resume().catch(() => undefined)
     const now = c.currentTime
     voiceEnds = voiceEnds.filter((end) => end > now)
-    if (voiceEnds.length >= MAX_VOICES) return false
     const sound = SOUNDS[name]
+    if (voiceEnds.length >= (sound.duck ? MAX_VOICES : MAX_VOICES - 1)) return false
     const jitter = sound.jitter ?? 0
     const pitch = 1 + (Math.random() * 2 - 1) * jitter
     for (const tone of sound.tones) playTone(c, out, tone, pitch, now)
@@ -355,10 +358,13 @@ export interface EngineHum {
   stop: () => void
 }
 
-/** Engine pitch (Hz) and level at `fraction` (0..1) of top speed: a low idle rising with speed. */
+/**
+ * Engine pitch (Hz) and level at `fraction` (0..1) of top speed: almost silent standing still,
+ * rising in pitch and level with speed.
+ */
 export function engineParams(fraction: number): { freq: number; gain: number; cutoff: number } {
   const s = Math.max(0, Math.min(1, fraction))
-  return { freq: 55 + 75 * s, gain: 0.05 + 0.1 * s, cutoff: 250 + 600 * s }
+  return { freq: 55 + 75 * s, gain: 0.006 + 0.13 * s, cutoff: 250 + 600 * s }
 }
 
 /**
