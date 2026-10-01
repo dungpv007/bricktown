@@ -4,7 +4,7 @@ import { COLORS } from '../../core/colors'
 import { PART_BY_ID } from '../../core/parts/catalog'
 import type { Brick, GuidedState, Template } from '../../core/types'
 import { useApp } from '../../state/useApp'
-import { useEditor } from '../../state/useEditor'
+import { useEditor, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { useGuided } from '../../state/useGuided'
 import ColorPicker from '../../ui/ColorPicker'
@@ -143,7 +143,7 @@ function CelebrationOverlay({ onBrowse }: { onBrowse: () => void }) {
   }
   const onEdit = () => {
     // Opening replaces the kid's current free-build model: ask first if there is one.
-    if (useGame.getState().data.workshop.bricks.length > 0) setConfirming(true)
+    if (workshopHasBricks()) setConfirming(true)
     else openInWorkshop()
   }
   const again = () => {

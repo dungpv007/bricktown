@@ -858,3 +858,182 @@ form.bt-dialog,
   font-size: 28px;
   font-weight: 800;
 }
+
+/* ---------- Polish (14a) ---------- */
+
+.bt-tpl-thumb {
+  display: block;
+  width: 104px;
+  height: 104px;
+  object-fit: contain;
+  border-radius: 16px;
+  background: linear-gradient(#cfeaf7, #eaf6e4);
+  pointer-events: none;
+}
+
+.bt-install-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 560px);
+  padding: 8px 8px 8px 20px;
+  box-sizing: border-box;
+  border-radius: var(--bt-radius);
+  background: var(--bt-yellow);
+  color: var(--bt-ink);
+  font-size: 18px;
+  font-weight: 800;
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-install-hint-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bt-onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: rgba(27, 42, 65, 0.6);
+}
+
+.bt-onboarding-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(100%, 460px);
+  max-height: 100%;
+  padding: 20px 24px 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: var(--bt-radius);
+  background: var(--bt-white);
+  color: var(--bt-ink);
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-onboarding-art {
+  width: 100%;
+  border-radius: 20px;
+  background: linear-gradient(#bfe4f5, #eaf6e4);
+  overflow: hidden;
+}
+
+.bt-onboarding-art svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 34vh;
+  overflow: hidden;
+}
+
+.bt-onboarding-text {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.bt-onboarding-dots {
+  display: flex;
+  gap: 10px;
+}
+
+.bt-ob-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #d5dde6;
+}
+
+.bt-ob-dot-on {
+  background: var(--bt-red);
+}
+
+.bt-ob-drop {
+  animation: bt-ob-drop 2s ease-in infinite;
+}
+
+.bt-ob-tap {
+  animation: bt-ob-tap 2s ease-in-out infinite;
+}
+
+.bt-ob-turn {
+  animation: bt-ob-turn 2.4s ease-in-out infinite;
+  transform-origin: 120px 110px;
+}
+
+.bt-ob-swipe {
+  animation: bt-ob-swipe 2.4s ease-in-out infinite;
+}
+
+.bt-ob-zoom {
+  animation: bt-ob-zoom 2.4s ease-in-out infinite;
+  transform-origin: 120px 100px;
+}
+
+.bt-ob-pinch-a {
+  animation: bt-ob-pinch-a 2.4s ease-in-out infinite;
+}
+
+.bt-ob-pinch-b {
+  animation: bt-ob-pinch-b 2.4s ease-in-out infinite;
+}
+
+@keyframes bt-ob-drop {
+  0%, 15% { transform: translateY(-34px); opacity: 0; }
+  35% { opacity: 1; }
+  55%, 100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes bt-ob-tap {
+  0%, 30% { transform: translateY(0); }
+  50% { transform: translateY(12px); }
+  70%, 100% { transform: translateY(0); }
+}
+
+@keyframes bt-ob-turn {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.82); }
+}
+
+@keyframes bt-ob-swipe {
+  0%, 100% { transform: translateX(-60px); }
+  50% { transform: translateX(60px); }
+}
+
+@keyframes bt-ob-zoom {
+  0%, 100% { transform: scale(0.8); }
+  50% { transform: scale(1.12); }
+}
+
+@keyframes bt-ob-pinch-a {
+  0%, 100% { transform: translate(8px, -8px); }
+  50% { transform: translate(-8px, 8px); }
+}
+
+@keyframes bt-ob-pinch-b {
+  0%, 100% { transform: translate(-8px, 8px); }
+  50% { transform: translate(8px, -8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-ob-drop,
+  .bt-ob-tap,
+  .bt-ob-turn,
+  .bt-ob-swipe,
+  .bt-ob-zoom,
+  .bt-ob-pinch-a,
+  .bt-ob-pinch-b {
+    animation: none;
+  }
+}

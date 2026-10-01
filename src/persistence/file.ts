@@ -20,29 +20,39 @@ export function downloadSave(data: SaveData, slotId: number): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-/** Opens a file picker and parses the chosen backup; null when cancelled or the file is invalid. */
-export function pickAndImportSave(): Promise<SaveData | null> {
+export type ImportOutcome =
+  | { status: 'ok'; data: SaveData }
+  /** The kid closed the file picker without choosing anything. */
+  | { status: 'cancelled' }
+  /** A file was chosen but it is not a readable backup. */
+  | { status: 'invalid' }
+
+/** Opens a file picker and parses the chosen backup. */
+export function pickAndImportSave(): Promise<ImportOutcome> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = '.json,application/json'
     input.style.display = 'none'
-    const finish = (result: SaveData | null) => {
+    const finish = (result: ImportOutcome) => {
       input.remove()
       resolve(result)
     }
     input.addEventListener('change', () => {
       const file = input.files?.[0]
-      if (!file) return finish(null)
+      if (!file) return finish({ status: 'cancelled' })
       file
         .text()
-        .then((text) => finish(importSave(text)))
+        .then((text) => {
+          const data = importSave(text)
+          finish(data ? { status: 'ok', data } : { status: 'invalid' })
+        })
         .catch((e) => {
           console.error('bricktown: import failed', e)
-          finish(null)
+          finish({ status: 'invalid' })
         })
     })
-    input.addEventListener('cancel', () => finish(null))
+    input.addEventListener('cancel', () => finish({ status: 'cancelled' }))
     document.body.appendChild(input)
     input.click()
   })

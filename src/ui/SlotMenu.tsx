@@ -7,7 +7,7 @@ import { deleteSlotById, importIntoCurrentSlot, switchSlot } from '../persistenc
 import { useApp, type SlotId } from '../state/useApp'
 import { usePersistStatus } from '../persistence/status'
 import { useGame } from '../state/useGame'
-import { useT } from './i18n'
+import { useT, type TKey } from './i18n'
 
 const SLOTS: SlotId[] = [1, 2, 3]
 
@@ -40,13 +40,13 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
     }
   }, [])
 
-  const run = async (fn: () => Promise<boolean>) => {
+  const run = async (fn: () => Promise<boolean>, failKey: TKey = 'saveFailed') => {
     if (busy) return
     setBusy(true)
     setError(null)
     try {
       const ok = await fn()
-      if (!ok) setError(t('saveFailed'))
+      if (!ok) setError(t(failKey))
       await refresh()
     } finally {
       setBusy(false)
@@ -60,16 +60,17 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
 
   const onImport = async () => {
     setError(null)
-    const data = await pickAndImportSave()
-    if (data) setPending({ kind: 'import', data })
-    else setError(t('importFailed'))
+    const result = await pickAndImportSave()
+    if (result.status === 'ok') setPending({ kind: 'import', data: result.data })
+    else if (result.status === 'invalid') setError(t('importFailed'))
+    // 'cancelled': nothing was chosen, so there is nothing to report
   }
 
   const onConfirm = () => {
     const p = pending
     setPending(null)
     if (!p) return
-    if (p.kind === 'delete') void run(() => deleteSlotById(p.id))
+    if (p.kind === 'delete') void run(() => deleteSlotById(p.id), 'deleteFailed')
     else void run(() => importIntoCurrentSlot(p.data))
   }
 

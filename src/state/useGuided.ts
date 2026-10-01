@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import * as sfx from '../audio/sfx'
 import { getTemplate } from '../content/templates'
 import { getPart } from '../core/parts/catalog'
 import {
@@ -87,11 +88,17 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     const step = firstIncomplete(t, g.step, placed)
     if (step >= t.steps.length) {
       finish(t)
+      sfx.success()
       return
     }
     useGame.getState().setGuided({ ...g, step, placed })
     set({ viewStep: step })
-    if (step !== g.step) selectNext(t, step, placed)
+    if (step !== g.step) {
+      selectNext(t, step, placed)
+      sfx.success()
+    } else {
+      sfx.snap()
+    }
   }
 
   return {
@@ -141,6 +148,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
       const match = findMatch(a.t, a.g.step, a.g.placed, candidate)
       if (!match) {
         set((s) => ({ errorSeq: s.errorSeq + 1 }))
+        sfx.error()
         return false
       }
       commit(a.t, a.g, match.id)
@@ -166,4 +174,9 @@ export const useGuided = create<GuidedStore>()((set, get) => {
       if (get().celebration) set({ celebration: null })
     },
   }
+})
+
+// A finished model's celebration must not linger and flash when the kid comes back later.
+useApp.subscribe((state, prev) => {
+  if (prev.mode === 'guided' && state.mode !== 'guided') useGuided.getState().dismissCelebration()
 })

@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import type { Mode } from '../state/useApp'
 import { usePersistStatus } from '../persistence/status'
+import { snap } from '../audio/sfx'
 import { useApp } from '../state/useApp'
 import { useT, type TKey } from './i18n'
+import InstallHint from './InstallHint'
+import Onboarding from './Onboarding'
 import SlotMenu from './SlotMenu'
 
 type PlayMode = Exclude<Mode, 'menu'>
@@ -19,6 +22,8 @@ export default function MainMenu() {
   const lang = useApp((s) => s.lang)
   const setLang = useApp((s) => s.setLang)
   const setMode = useApp((s) => s.setMode)
+  const muted = useApp((s) => s.muted)
+  const setMuted = useApp((s) => s.setMuted)
   const persistError = usePersistStatus((s) => s.error)
   const [slotsOpen, setSlotsOpen] = useState(false)
 
@@ -56,6 +61,18 @@ export default function MainMenu() {
         >
           ⚙️ {t('slot')}
         </button>
+        <button
+          className="bt-btn"
+          data-testid="mute-toggle"
+          aria-label={t('sound')}
+          aria-pressed={!muted}
+          onClick={() => {
+            setMuted(!muted)
+            if (muted) snap() // unmuting: confirm with a sound (and wake the audio on iOS)
+          }}
+        >
+          {muted ? '🔇' : '🔊'}
+        </button>
         {persistError && (
           <span
             className="bt-warning"
@@ -67,7 +84,9 @@ export default function MainMenu() {
           </span>
         )}
       </div>
+      <InstallHint />
       {slotsOpen && <SlotMenu onClose={() => setSlotsOpen(false)} />}
+      <Onboarding />
     </div>
   )
 }

@@ -11,10 +11,13 @@ export interface AppState {
   lang: Lang
   slotId: SlotId
   difficulty: Difficulty
+  /** Sound effects off. */
+  muted: boolean
   setMode: (mode: Mode) => void
   setLang: (lang: Lang) => void
   setDifficulty: (difficulty: Difficulty) => void
   setSlot: (slotId: SlotId) => void
+  setMuted: (muted: boolean) => void
 }
 
 const noopStorage: StateStorage = {
@@ -49,13 +52,16 @@ const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal']
 const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
 
 /** Keeps only persisted preference values that are valid; anything else falls back to defaults. */
-export function sanitizePrefs(persisted: unknown): Partial<Pick<AppState, 'lang' | 'difficulty' | 'slotId'>> {
-  const out: Partial<Pick<AppState, 'lang' | 'difficulty' | 'slotId'>> = {}
+export function sanitizePrefs(
+  persisted: unknown,
+): Partial<Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'muted'>> {
+  const out: Partial<Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'muted'>> = {}
   if (typeof persisted !== 'object' || persisted === null) return out
   const p = persisted as Record<string, unknown>
   if (LANGS.includes(p.lang as Lang)) out.lang = p.lang as Lang
   if (DIFFICULTIES.includes(p.difficulty as Difficulty)) out.difficulty = p.difficulty as Difficulty
   if (SLOT_IDS.includes(p.slotId as SlotId)) out.slotId = p.slotId as SlotId
+  if (typeof p.muted === 'boolean') out.muted = p.muted
   return out
 }
 
@@ -66,15 +72,17 @@ export const useApp = create<AppState>()(
       lang: 'vi',
       slotId: 1,
       difficulty: 'easy',
+      muted: false,
       setMode: (mode) => set({ mode }),
       setLang: (lang) => set({ lang }),
       setDifficulty: (difficulty) => set({ difficulty }),
       setSlot: (slotId) => set({ slotId }),
+      setMuted: (muted) => set({ muted }),
     }),
     {
       name: 'bricktown-prefs',
       storage: createJSONStorage(safeStorage),
-      partialize: (s) => ({ lang: s.lang, difficulty: s.difficulty, slotId: s.slotId }),
+      partialize: (s) => ({ lang: s.lang, difficulty: s.difficulty, slotId: s.slotId, muted: s.muted }),
       merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),
     },
   ),

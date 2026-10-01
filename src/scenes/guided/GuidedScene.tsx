@@ -5,10 +5,10 @@ import { getTemplate } from '../../content/templates'
 import { COLORS } from '../../core/colors'
 import { getPart } from '../../core/parts/catalog'
 import { getPartGeometry } from '../../core/parts/geometry'
-import { rotateNormalY, targetAnchor, type Vec3 } from '../../core/pick'
+import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
 import { brickCenter } from '../../core/rotation'
 import { findMatch, placedBricks, type PlacedCandidate } from '../../core/template'
-import type { Brick, GuidedState, Template } from '../../core/types'
+import type { Brick, GuidedState, Rot, Template } from '../../core/types'
 import { useTap } from '../../input/useTap'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks from '../../render/InstancedBricks'
@@ -20,6 +20,8 @@ import Baseplate from '../workshop/Baseplate'
 import { CameraRig, Ground, Lights, SKY } from '../workshop/WorkshopScene'
 
 const GLASS_GHOST = '#3fa9f5'
+const STATIC_GHOST_OPACITY = 0.28
+const STATIC_GHOST_EMISSIVE = 0.05
 
 type Anchor = { x: number; y: number; z: number }
 type GhostPointer = (e: ThreeEvent<PointerEvent>, brick: Brick) => void
@@ -30,8 +32,20 @@ const sameAnchor = (a: Anchor | null, b: Anchor | null) =>
 const stepBricks = (t: Template, from: number, to: number): Brick[] =>
   t.steps.slice(from, to).flat().map((i) => t.bricks[i])
 
-/** A brick still to place, in its own colour, gently pulsing. Tappable. */
-function TargetGhost({ brick, onPointer }: { brick: Brick; onPointer?: GhostPointer }) {
+/** What the pointer is aiming at: a target ghost (fixed spot) or a surface hit (spot depends on the part). */
+type Aim = { ghost: Anchor } | { hit: PickHit }
+
+const aimAnchor = (aim: Aim | null, partId: string, rot: Rot): Anchor | null => {
+  if (!aim) return null
+  return 'ghost' in aim ? aim.ghost : targetAnchor(aim.hit, getPart(partId), rot)
+}
+
+/**
+ * A brick of the viewed step, in its own colour. Bricks still to place pulse and can be tapped;
+ * with `pulse` off (an earlier step being looked at) it is a steady, faint outline-like ghost that
+ * must not read as something to tap.
+ */
+function TargetGhost({ brick, pulse = true, onPointer }: { brick: Brick; pulse?: boolean; onPointer?: GhostPointer }) {
   // One material per ghost: each pulses in its own colour (only a handful per step).
   const [material] = useState(() => {
     const c = COLORS[brick.c]
@@ -51,6 +65,11 @@ function TargetGhost({ brick, onPointer }: { brick: Brick; onPointer?: GhostPoin
   useFrame(({ clock }) => {
     const mat = meshRef.current?.material as THREE.MeshStandardMaterial | undefined
     if (!mat) return
+    if (!pulse) {
+      mat.opacity = STATIC_GHOST_OPACITY
+      mat.emissiveIntensity = STATIC_GHOST_EMISSIVE
+      return
+    }
     const wave = 0.5 + 0.5 * Math.sin(clock.elapsedTime * 4)
     mat.opacity = 0.3 + 0.35 * wave
     mat.emissiveIntensity = 0.15 + 0.45 * wave
@@ -100,22 +119,30 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   }, [template, guided, celebrating, viewingPast, viewStep, step])
 
   // Normal mode: preview of the selected part where the kid points (green on a target, red elsewhere).
-  const [anchor, setAnchorState] = useState<Anchor | null>(null)
-  const anchorRef = useRef<Anchor | null>(null)
-  const setAnchor = useCallback((next: Anchor | null) => {
-    if (sameAnchor(anchorRef.current, next)) return
-    anchorRef.current = next
-    setAnchorState(next)
+  // The aim is kept (not just the anchor) so the preview re-centres right away when only the part
+  // or rotation changes; it is stored only when it moves the anchor.
+  const [aim, setAimState] = useState<Aim | null>(null)
+  const aimRef = useRef<Aim | null>(null)
+  const setAim = useCallback((next: Aim | null) => {
+    const prev = aimRef.current
+    if (prev === next) return
+    if (prev && next) {
+      const { partId: p, rot: r } = useEditor.getState()
+      if (sameAnchor(aimAnchor(prev, p, r), aimAnchor(next, p, r))) return
+    }
+    aimRef.current = next
+    setAimState(next)
   }, [])
+  const anchor = useMemo(() => aimAnchor(aim, partId, rot), [aim, partId, rot])
 
   const el = useThree((s) => s.gl.domElement)
   useEffect(() => {
     const onLeave = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') setAnchor(null)
+      if (e.pointerType === 'mouse') setAim(null)
     }
     el.addEventListener('pointerleave', onLeave)
     return () => el.removeEventListener('pointerleave', onLeave)
-  }, [el, setAnchor])
+  }, [el, setAim])
 
   const candidateAt = (a: Anchor): PlacedCandidate => ({ p: partId, x: a.x, y: a.y, z: a.z, r: rot, c: color })
   const previewValid =
@@ -127,31 +154,32 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
       e.stopPropagation() // only the nearest hit counts
       const type = e.nativeEvent.type
       const ed = useEditor.getState()
-      const computeAnchor = (): Anchor | null => {
+      const computeAim = (): Aim | null => {
         // Pointing at a target spot means "put the selected part there".
-        if (ghost) return { x: ghost.x, y: ghost.y, z: ghost.z }
+        if (ghost) return { ghost: { x: ghost.x, y: ghost.y, z: ghost.z } }
         if (!e.face) return null
         const local: Vec3 = [e.face.normal.x, e.face.normal.y, e.face.normal.z]
         const normal = brick ? rotateNormalY(local, brick.r) : local
-        return targetAnchor({ point: [e.point.x, e.point.y, e.point.z], normal, brick }, getPart(ed.partId), ed.rot)
+        return { hit: { point: [e.point.x, e.point.y, e.point.z], normal, brick } }
       }
       if (type === 'pointermove') {
-        if (e.pointerType === 'mouse' && e.buttons === 0) setAnchor(computeAnchor())
+        if (e.pointerType === 'mouse' && e.buttons === 0) setAim(computeAim())
         return
       }
       if (type === 'pointerdown') {
-        setAnchor(computeAnchor())
+        setAim(computeAim())
         return
       }
       if (type !== 'pointerup' || !consumeTap(e.pointerId)) return
-      const a = computeAnchor()
-      if (!a) return
-      setAnchor(a)
+      const next = computeAim()
+      const a = aimAnchor(next, ed.partId, ed.rot)
+      if (!next || !a) return
+      setAim(next)
       const ok = useGuided.getState().tryPlace({ p: ed.partId, x: a.x, y: a.y, z: a.z, r: ed.rot, c: ed.color })
       // A wrong spot keeps the (red, shaking) preview visible.
-      if (ok) setAnchor(null)
+      if (ok) setAim(null)
     },
-    [consumeTap, setAnchor],
+    [consumeTap, setAim],
   )
 
   const onGhostPointer = useCallback<GhostPointer>(
@@ -177,7 +205,7 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
       <Baseplate size={template.baseplate} kind={template.kind} onPointer={normalTaps ? onBaseplatePointer : undefined} />
       <InstancedBricks bricks={solid} onBrickPointer={normalTaps ? onBrickPointer : undefined} />
       {ghosts.map((b) => (
-        <TargetGhost key={b.id} brick={b} onPointer={interactive ? onGhostPointer : undefined} />
+        <TargetGhost key={b.id} brick={b} pulse={!viewingPast} onPointer={interactive ? onGhostPointer : undefined} />
       ))}
       {normalTaps && anchor && (
         <GhostBrick partId={partId} rot={rot} anchor={anchor} valid={previewValid} shakeKey={errorSeq} />

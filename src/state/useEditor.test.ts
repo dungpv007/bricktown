@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createEmptySave } from '../core/serialize'
 import type { Brick } from '../core/types'
-import { useEditor } from './useEditor'
+import { useApp } from './useApp'
+import { useEditor, workshopHasBricks } from './useEditor'
 import { useGame } from './useGame'
 
 const bricks = () => useGame.getState().data.workshop.bricks
@@ -184,6 +185,68 @@ describe('useEditor move tool', () => {
     expect(ed().carried).toBeNull()
     expect(bricks()).toHaveLength(1)
     expect(bricks()[0].id).toBe(id)
+  })
+})
+
+describe('useEditor carry cancel', () => {
+  const pickUp = () => {
+    ed().place(0, 0, 0)
+    const id = bricks()[0].id
+    ed().setTool('move')
+    ed().tapBrick(id)
+    return id
+  }
+
+  it('cancelCarry puts the brick back where it was and keeps history intact', () => {
+    const id = pickUp()
+    expect(bricks()).toHaveLength(0)
+    ed().cancelCarry()
+    expect(ed().carried).toBeNull()
+    expect(bricks()).toHaveLength(1)
+    expect(bricks()[0]).toMatchObject({ id, x: 0, z: 0 })
+    ed().undo() // undoes the original placement, not the cancelled pickup
+    expect(bricks()).toHaveLength(0)
+  })
+
+  it('cancelCarry without a carried brick does nothing', () => {
+    ed().place(0, 0, 0)
+    const before = bricks()
+    ed().cancelCarry()
+    expect(bricks()).toBe(before)
+  })
+
+  it('switching away from the move tool cancels the carry', () => {
+    const id = pickUp()
+    ed().setTool('paint')
+    expect(ed().carried).toBeNull()
+    expect(ed().tool).toBe('paint')
+    expect(bricks().map((b) => b.id)).toEqual([id])
+  })
+
+  it('re-selecting the move tool while carrying keeps carrying', () => {
+    const id = pickUp()
+    ed().setTool('move')
+    expect(ed().carried?.id).toBe(id)
+    expect(bricks()).toHaveLength(0)
+  })
+
+  it('leaving the workshop cancels the carry', () => {
+    useApp.setState({ mode: 'workshop' })
+    const id = pickUp()
+    useApp.setState({ mode: 'menu' })
+    expect(ed().carried).toBeNull()
+    expect(bricks().map((b) => b.id)).toEqual([id])
+  })
+
+  it('workshopHasBricks counts a carried brick', () => {
+    expect(workshopHasBricks()).toBe(false)
+    pickUp()
+    expect(bricks()).toHaveLength(0)
+    expect(workshopHasBricks()).toBe(true)
+    ed().cancelCarry()
+    expect(workshopHasBricks()).toBe(true)
+    ed().undo()
+    expect(workshopHasBricks()).toBe(false)
   })
 })
 

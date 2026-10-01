@@ -14,6 +14,7 @@ interface BtWindow {
       }
     }
     useGuided: { getState(): { pending(): Array<{ id: string }>; placeGhost(id: string): boolean } }
+    flushAutosave(): Promise<boolean>
   }
 }
 
@@ -73,8 +74,8 @@ test('guided: progress survives leaving and coming back', async ({ page }) => {
   await page.getByTestId('step-prev').click()
   await expect(page.getByTestId('step-counter')).toHaveText(/^1\//)
 
-  // Saved with the slot: still there after a reload (autosave is debounced).
-  await page.waitForTimeout(2500)
+  // Saved with the slot: still there after a reload (autosave is debounced, so flush it now).
+  await expect.poll(() => page.evaluate(() => (window as unknown as BtWindow).__bt.flushAutosave())).toBe(true)
   await page.reload()
   await page.getByTestId('menu-guided').click()
   await expect(page.getByTestId('step-counter')).toHaveText(/^2\//)

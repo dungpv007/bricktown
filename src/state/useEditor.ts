@@ -1,10 +1,12 @@
 import { create } from 'zustand'
+import * as sfx from '../audio/sfx'
 import { DEFAULT_COLOR } from '../core/colors'
 import { newId } from '../core/ids'
 import { addBrick, paintBrick, removeBrick, rotateBrick, type PlaceError, type PlaceResult } from '../core/model'
 import { nextRot } from '../core/rotation'
 import type { Baseplate, Brick, BlueprintKind, PartCategory, Rot } from '../core/types'
 import { createHistory } from './history'
+import { useApp } from './useApp'
 import { useGame } from './useGame'
 
 export type Tool = 'place' | 'paint' | 'delete' | 'rotate' | 'move'
@@ -22,6 +24,7 @@ export interface EditorState {
   carried: Brick | null
   canUndo: boolean
   canRedo: boolean
+  /** Switching away from the move tool puts a carried brick back where it was. */
   setTool: (tool: Tool) => void
   setPart: (partId: string) => void
   setColor: (color: number) => void
@@ -29,6 +32,8 @@ export interface EditorState {
   rotateCurrent: () => void
   place: (x: number, y: number, z: number) => void
   tapBrick: (id: string) => void
+  /** Puts a brick picked up by the move tool back where it was (no-op when none is carried). */
+  cancelCarry: () => void
   undo: () => void
   redo: () => void
   newModel: (kind: BlueprintKind, baseplate: Baseplate) => void
@@ -49,10 +54,13 @@ const setBricks = (bricks: Brick[]) => useGame.getState().setWorkshop({ ...works
 
 export const useEditor = create<EditorState>()((set, get) => {
   const syncHistory = () => set({ canUndo: history.canUndo(), canRedo: history.canRedo() })
-  const reject = (error: PlaceError) => set((s) => ({ lastError: error, errorSeq: s.errorSeq + 1 }))
+  const reject = (error: PlaceError) => {
+    set((s) => ({ lastError: error, errorSeq: s.errorSeq + 1 }))
+    sfx.error()
+  }
 
-  /** Applies a model-function result: records history on success, reports the error otherwise. */
-  const commit = (before: Brick[], result: PlaceResult): boolean => {
+  /** Applies a model-function result: records history and plays `sound` on success, reports the error otherwise. */
+  const commit = (before: Brick[], result: PlaceResult, sound: () => void): boolean => {
     if (result.error) {
       reject(result.error)
       return false
@@ -61,7 +69,15 @@ export const useEditor = create<EditorState>()((set, get) => {
     setBricks(result.bricks)
     set({ lastError: null })
     syncHistory()
+    sound()
     return true
+  }
+
+  const cancelCarry = () => {
+    if (!get().carried) return
+    if (pickupOrigin) setBricks(pickupOrigin)
+    pickupOrigin = null
+    set({ carried: null, lastError: null })
   }
 
   const reset = () => {
@@ -82,7 +98,11 @@ export const useEditor = create<EditorState>()((set, get) => {
     canUndo: false,
     canRedo: false,
 
-    setTool: (tool) => set({ tool }),
+    setTool: (tool) => {
+      if (tool !== 'move') cancelCarry()
+      set({ tool })
+    },
+    cancelCarry,
     setPart: (partId) => set({ partId }),
     setColor: (color) => set({ color }),
     setCategory: (category) => set({ category }),
@@ -105,10 +125,11 @@ export const useEditor = create<EditorState>()((set, get) => {
         setBricks(result.bricks)
         set({ carried: null, lastError: null })
         syncHistory()
+        sfx.snap()
         return
       }
       const bricks = workshop().bricks
-      commit(bricks, addBrick(bricks, brick, workshop().baseplate))
+      commit(bricks, addBrick(bricks, brick, workshop().baseplate), sfx.snap)
     },
 
     tapBrick: (id) => {
@@ -119,13 +140,13 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (!target) return
       switch (tool) {
         case 'paint':
-          commit(bricks, { bricks: paintBrick(bricks, id, color), error: null })
+          commit(bricks, { bricks: paintBrick(bricks, id, color), error: null }, sfx.paint)
           break
         case 'delete':
-          commit(bricks, { bricks: removeBrick(bricks, id), error: null })
+          commit(bricks, { bricks: removeBrick(bricks, id), error: null }, sfx.pop)
           break
         case 'rotate':
-          commit(bricks, rotateBrick(bricks, id, baseplate))
+          commit(bricks, rotateBrick(bricks, id, baseplate), sfx.snap)
           break
         case 'move':
           pickupOrigin = bricks
@@ -139,10 +160,7 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     undo: () => {
       if (get().carried) {
-        // Cancel the pickup.
-        if (pickupOrigin) setBricks(pickupOrigin)
-        pickupOrigin = null
-        set({ carried: null, lastError: null })
+        cancelCarry()
         return
       }
       const prev = history.undo(workshop().bricks)
@@ -178,3 +196,20 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
   }
 })
+
+// Leaving the workshop with a brick in hand would lose it: put it back.
+useApp.subscribe((state, prev) => {
+  if (prev.mode === 'workshop' && state.mode !== 'workshop') useEditor.getState().cancelCarry()
+})
+
+/** True when the workshop model has any brick, counting one currently carried by the move tool. */
+export function workshopHasBricks(): boolean {
+  return useGame.getState().data.workshop.bricks.length > 0 || useEditor.getState().carried !== null
+}
+
+/** Reactive version of {@link workshopHasBricks}. */
+export function useWorkshopHasBricks(): boolean {
+  const stored = useGame((s) => s.data.workshop.bricks.length > 0)
+  const carrying = useEditor((s) => s.carried !== null)
+  return stored || carrying
+}

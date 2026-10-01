@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Baseplate, Blueprint, BlueprintKind } from '../../core/types'
-import { useEditor } from '../../state/useEditor'
+import { useEditor, useWorkshopHasBricks, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import BlueprintLibrary from '../../ui/BlueprintLibrary'
 import ColorPicker from '../../ui/ColorPicker'
@@ -31,7 +31,7 @@ const ERROR_ICON_MS = 900
 function NewModelPicker({ onClose }: { onClose: () => void }) {
   const t = useT()
   const newModel = useEditor((s) => s.newModel)
-  const hasBricks = useGame((s) => s.data.workshop.bricks.length > 0)
+  const hasBricks = useWorkshopHasBricks()
   // Starting over wipes the current build (and its undo history), so ask first when there is one.
   const [pending, setPending] = useState<ModelOption | null>(null)
   const start = (o: ModelOption) => {
@@ -116,7 +116,7 @@ export default function WorkshopUI() {
   const [saveOpen, setSaveOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [pendingOpen, setPendingOpen] = useState<Blueprint | null>(null)
-  const hasBricks = useGame((s) => s.data.workshop.bricks.length > 0)
+  const hasBricks = useWorkshopHasBricks()
   const loadBricks = useEditor((s) => s.loadBricks)
 
   const open = (bp: Blueprint) => {
@@ -127,7 +127,7 @@ export default function WorkshopUI() {
   const onPick = (bp: Blueprint) => {
     // Opening replaces the model being built, so ask first unless there is nothing to lose.
     const { workshop } = useGame.getState().data
-    if (workshop.bricks.length > 0 && workshop.editingBlueprintId !== bp.id) setPendingOpen(bp)
+    if (workshopHasBricks() && workshop.editingBlueprintId !== bp.id) setPendingOpen(bp)
     else open(bp)
   }
 
@@ -147,7 +147,10 @@ export default function WorkshopUI() {
           data-testid="save-blueprint"
           aria-label={t('save')}
           disabled={!hasBricks}
-          onClick={() => setSaveOpen(true)}
+          onClick={() => {
+            useEditor.getState().cancelCarry() // the saved model must include a brick in hand
+            setSaveOpen(true)
+          }}
         >
           💾
         </button>

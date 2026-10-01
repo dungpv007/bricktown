@@ -2,7 +2,22 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: 'e2e',
-  use: { baseURL: 'http://localhost:5173' },
+  use: {
+    baseURL: 'http://localhost:5173',
+    // First-launch onboarding is off by default so specs reach the menu; its own spec turns it on.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://localhost:5173',
+          localStorage: [
+            { name: 'bricktown-onboarded', value: '1' },
+            { name: 'bricktown-install-hint-dismissed', value: '1' },
+          ],
+        },
+      ],
+    },
+  },
   projects: [{ name: 'tablet', use: { ...devices['iPad (gen 7) landscape'], browserName: 'chromium' } }],
   webServer: { command: 'npm run dev', url: 'http://localhost:5173', reuseExistingServer: true },
 })

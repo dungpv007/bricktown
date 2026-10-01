@@ -190,3 +190,20 @@ describe('useGuided.resume', () => {
     expect(guided()!.step).toBe(1)
   })
 })
+
+describe('useGuided celebration lifetime', () => {
+  it('is cleared when leaving guided mode, so re-entering never flashes it', () => {
+    useApp.setState({ mode: 'guided' })
+    useGuided.setState({ celebration: { templateId: 'tree', blueprintId: 'bp' } })
+    useApp.setState({ mode: 'menu' })
+    expect(g().celebration).toBeNull()
+  })
+
+  it('is kept while switching between other modes', () => {
+    useApp.setState({ mode: 'workshop' })
+    useGuided.setState({ celebration: { templateId: 'tree', blueprintId: 'bp' } })
+    useApp.setState({ mode: 'menu' })
+    expect(g().celebration).not.toBeNull()
+    useGuided.setState({ celebration: null })
+  })
+})
