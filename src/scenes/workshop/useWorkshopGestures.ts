@@ -10,6 +10,8 @@ export interface WorkshopGestureHandlers {
   pick: (x: number, y: number, excludeId?: string) => PickHit | null
   /** Lets one finger / the left button turn the camera (off while a press on a brick may move it). */
   setOrbit: (on: boolean) => void
+  /** A press went down on a brick (it may become a move): stop any camera glide under the finger. */
+  pressBrick: () => void
   tapBrick: (brick: Brick) => void
   tapPlate: (hit: PickHit) => void
   tapSky: () => void
@@ -95,8 +97,10 @@ export function useWorkshopGestures(el: HTMLElement, handlers: WorkshopGestureHa
         moved: false,
         dragging: false,
       }
-      // Pressing a brick may become a move: the camera must not turn under the finger.
-      h.current.setOrbit(gestureIntent(facts(g, false)) !== 'hold-brick')
+      // Pressing a brick may become a move: the camera must not turn (or glide) under the finger.
+      const holding = gestureIntent(facts(g, false)) === 'hold-brick'
+      if (holding) h.current.pressBrick()
+      h.current.setOrbit(!holding)
     }
 
     const onMove = (e: PointerEvent) => {

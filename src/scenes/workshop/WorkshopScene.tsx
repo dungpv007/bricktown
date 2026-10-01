@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
@@ -95,21 +95,22 @@ interface Glide { from: { p: Vec3; t: Vec3 }; to: { p: Vec3; t: Vec3 }; start: n
 
 /**
  * Camera + orbit controls framing the baseplate as it was at mount; remount (via `key`) to re-frame.
- * With `fit`, `model` (the bounds of the bricks on it) is framed too, within `workshopFit`'s limits.
- * Each new `shift` moves the camera by that much, following bricks that moved after a resize.
- * With `fit`, the plate is framed inside the part of the screen the HUD leaves free, and after a
- * resize that pushes it out of there the camera glides (same angles) to fit it again.
+ * The plate and `model` (the bounds of the bricks on it, within `workshopFit`'s limits) are framed
+ * inside the part of the screen the HUD leaves free. Each new `shift` moves the camera by that
+ * much, following bricks that moved after a resize; after a resize that pushes the plate out of
+ * the free area the camera glides (same angles) to fit it again.
  */
-export function CameraRig({
+function CameraRig({
   size,
   model = null,
   shift,
-  fit = false,
+  cancelGlideRef,
 }: {
   size: BaseplateSize
   model?: Bounds | null
   shift?: ViewShift
-  fit?: boolean
+  /** Set to a function that stops the current glide (e.g. when a press lands on a brick). */
+  cancelGlideRef?: RefObject<(() => void) | null>
 }) {
   const span = Math.max(size.w, size.d)
   const canvas = useThree((s) => s.gl.domElement)
@@ -117,7 +118,6 @@ export function CameraRig({
   // Fixed at mount: later size changes must not snap the view back to the plate centre.
   const [{ target, position, safe }] = useState(() => {
     const frame = defaultView(size)
-    if (!fit) return { ...frame, safe: null }
     const dir = unit([frame.position[0] - frame.target[0], frame.position[1], frame.position[2] - frame.target[2]])
     return fitPlate(size, model, dir, canvas, view.width, view.height)
   })
@@ -152,7 +152,7 @@ export function CameraRig({
     const f = fitted.current
     const plateChanged = f.w !== size.w || f.d !== size.d
     const viewChanged = f.width !== view.width || f.height !== view.height
-    if (!fit || (!plateChanged && !viewChanged)) return
+    if (!plateChanged && !viewChanged) return
     const cam = camera.current
     const ctl = controls.current
     if (!cam || !ctl) return
@@ -168,17 +168,24 @@ export function CameraRig({
       // The window resized or the device rotated: a plate that was fully shown is framed again
       // for the new screen; a close-up the player zoomed into is left alone.
       const before = projectBounds(plateCorners(size), p, t, FOV, f.width / f.height)
-      refit = before !== null && f.safe !== null && rectInside(before, f.safe, 0.01)
+      refit = before !== null && rectInside(before, f.safe, 0.01)
     }
     fitted.current = { w: size.w, d: size.d, width: view.width, height: view.height, safe: next.safe }
     if (refit) glide.current = { from: { p, t }, to: { p: next.position, t: next.target }, start: performance.now() }
-  }, [fit, size, model, canvas, view])
+  }, [size, model, canvas, view])
 
   // Any camera drag by the player cancels a glide. Passed as a prop so it follows the controls
   // instance drei recreates (e.g. when the default camera changes), not just the first one.
   const cancelGlide = useCallback(() => {
     glide.current = null
   }, [])
+  useEffect(() => {
+    if (!cancelGlideRef) return
+    cancelGlideRef.current = cancelGlide
+    return () => {
+      if (cancelGlideRef.current === cancelGlide) cancelGlideRef.current = null
+    }
+  }, [cancelGlideRef, cancelGlide])
 
   useFrame(() => {
     const g = glide.current
@@ -331,9 +338,11 @@ function WorkshopWorld() {
   }, [el, get])
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const cancelGlide = useRef<(() => void) | null>(null)
 
   useWorkshopGestures(el, {
     pick,
+    pressBrick: () => cancelGlide.current?.(),
     setOrbit: (on) => {
       const controls = get().controls as ComponentRef<typeof OrbitControls> | null
       if (controls) controls.enableRotate = on
@@ -437,7 +446,7 @@ function WorkshopWorld() {
   return (
     <>
       {/* Re-framed for each loaded model; resizing the plate only shifts the view (see CameraRig). */}
-      <CameraRig key={frameSeq} size={baseplate} model={model} shift={viewShift} fit />
+      <CameraRig key={frameSeq} size={baseplate} model={model} shift={viewShift} cancelGlideRef={cancelGlide} />
       <Lights size={baseplate} height={modelTop(model)} />
       <Ground size={baseplate} />
       <group ref={pickRoot}>
