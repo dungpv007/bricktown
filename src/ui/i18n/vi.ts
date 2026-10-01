@@ -88,4 +88,13 @@ export const vi = {
   cityToolPlace: 'Đặt nhà',
   cityDrawer: 'Kho',
   cityEdit: 'Sửa trong xưởng',
+  drivePick: 'Chọn xe để lái',
+  driveNeedsWheels: 'Cần thêm bánh xe',
+  driveLoading: 'Đang chuẩn bị xe...',
+  driveGas: 'Chạy',
+  driveReverse: 'Lùi',
+  driveFlip: 'Lật xe lại',
+  driveHorn: 'Bóp còi',
+  driveChange: 'Đổi xe',
+  driveSteer: 'Lái',
 } as const

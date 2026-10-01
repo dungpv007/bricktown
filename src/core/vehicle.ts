@@ -22,7 +22,7 @@ const STEER_TOLERANCE = 0.5
 const MASS_PER_BRICK = 0.2
 const MIN_MASS = 2
 
-const isWheel = (brick: Brick): boolean => getPart(brick.p).tags?.includes('wheel') ?? false
+export const isWheel = (brick: Brick): boolean => getPart(brick.p).tags?.includes('wheel') ?? false
 
 export function analyzeVehicle(bricks: Brick[]): VehicleAnalysis {
   const wheelBricks = bricks.filter(isWheel)
