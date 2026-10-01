@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
 import { COLORS } from '../core/colors'
+import { FIG_PRESETS, MINIFIG_PART, figKey } from '../core/figures'
 import { PART_CATEGORIES, PARTS } from '../core/parts/catalog'
 import type { PartCategory, PartDef, PartShape } from '../core/types'
+import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
 import { getPartThumbnail } from '../render/thumbnails'
+import { FigureImage } from './FigureEditor'
 import { useT, type TKey } from './i18n'
 import { useThumbnail } from './useThumbnail'
 
@@ -17,6 +20,7 @@ const CATEGORY_TABS: Record<PartCategory, { icon: string; labelKey: TKey }> = {
   furniture: { icon: '🪑', labelKey: 'catFurniture' },
   nature: { icon: '🌳', labelKey: 'catNature' },
   decor: { icon: '🖼️', labelKey: 'catDecor' },
+  figure: { icon: '🧑', labelKey: 'catFigure' },
 }
 
 /** Shapes without a simple silhouette get an emoji (fallback while a thumbnail renders, and in compact lists). */
@@ -24,7 +28,7 @@ const SHAPE_EMOJI: Partial<Record<PartShape, string>> = {
   wheel: '🛞', window: '🪟', door: '🚪', fence: '🚧', table: '🪑', chair: '🪑', counter: '🗄️',
   stove: '🍳', fridge: '🧊', sign: '🪧', lamp: '💡', tree: '🌳', bush: '🌿', flower: '🌷',
   nose_cone: '🚀', dish: '📡', antenna: '📶', bars: '⛓️', steering: '🛞', computer: '💻', bed: '🛏️',
-  flag: '🚩', fin: '🚀', engine: '🔥', tile_print: '🖼️',
+  flag: '🚩', fin: '🚀', engine: '🔥', tile_print: '🖼️', minifig: '🧑',
 }
 
 /** Printed tiles show their picture (fallback while the thumbnail renders, and in the rotate button). */
@@ -110,12 +114,66 @@ export function PartIcon({ part, color }: { part: PartDef; color: string }) {
 
 /** Rendered thumbnail of the part in the current colour; the SVG / emoji icon shows until it is ready. */
 function PartButtonImage({ part, color, hex }: { part: PartDef; color: number; hex: string }) {
+  const fig = useEditor((s) => s.fig)
+  if (part.id === MINIFIG_PART) return <FigureImage fig={fig} />
+  return <ColoredPartImage part={part} color={color} hex={hex} />
+}
+
+function ColoredPartImage({ part, color, hex }: { part: PartDef; color: number; hex: string }) {
   const url = useThumbnail(`part:${part.id}:${color}`, () => getPartThumbnail(part.id, color))
   if (!url) return <PartIcon part={part} color={hex} />
   return <img className="bt-part-thumb" src={url} alt="" draggable={false} />
 }
 
 const sizeLabel = (p: PartDef) => `${p.w}×${p.d}`
+
+/** The figure tab: ✏️ (customise the figure to place, shown in its current look), then the ready-made figures. */
+function FigureButtons() {
+  const t = useT()
+  const lang = useApp((s) => s.lang)
+  const partId = useEditor((s) => s.partId)
+  const fig = useEditor((s) => s.fig)
+  const carried = useEditor((s) => s.carried)
+  const select = () => {
+    const ed = useEditor.getState()
+    ed.setPart(MINIFIG_PART)
+    ed.setTool('place')
+  }
+  const current = partId === MINIFIG_PART ? figKey(fig) : null
+  return (
+    <>
+      <button
+        className="bt-btn bt-part-btn bt-fig-btn bt-fig-edit-btn"
+        data-testid="fig-edit"
+        aria-label={t('figEdit')}
+        disabled={carried !== null}
+        onClick={() => {
+          select()
+          useEditor.getState().openFigEditor()
+        }}
+      >
+        <FigureImage fig={fig} />
+        <span className="bt-fig-edit-badge" aria-hidden="true">✏️</span>
+      </button>
+      {FIG_PRESETS.map((p) => (
+        <button
+          key={p.id}
+          className="bt-btn bt-part-btn bt-fig-btn"
+          data-testid={`fig-preset-${p.id}`}
+          aria-label={p.name[lang]}
+          aria-pressed={current === figKey(p.style)}
+          disabled={carried !== null}
+          onClick={() => {
+            useEditor.getState().setFig(p.style)
+            select()
+          }}
+        >
+          <FigureImage fig={p.style} />
+        </button>
+      ))}
+    </>
+  )
+}
 
 interface Props {
   /** Show only these parts (no category tabs), e.g. the parts of a Guided Build step. */
@@ -174,7 +232,8 @@ export default function PartPalette({ allowedParts }: Props = {}) {
             </span>
           )}
         </button>
-        {parts.map((p) => (
+        {!allowedParts && category === 'figure' && <FigureButtons />}
+        {(allowedParts || category !== 'figure') && parts.map((p) => (
           <button
             key={p.id}
             className="bt-btn bt-part-btn"

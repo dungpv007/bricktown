@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { figPreset } from './figures'
 import { SCHEMA_VERSION, createEmptySave, exportSave, importSave, migrate } from './serialize'
 
 describe('serialize', () => {
@@ -111,5 +112,30 @@ describe('serialize', () => {
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 10 } } }).workshop.baseplate).toEqual({ w: 8, d: 8, c: 10 })
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 99 } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 'red' } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
+  })
+  it('round-trips figures with their style (an additive field: still schema 2)', () => {
+    const save = createEmptySave()
+    save.workshop.bricks.push({ id: 'f', p: 'minifig', x: 0, y: 0, z: 0, r: 2, c: 21, fig: figPreset('police') })
+    save.blueprints.push({
+      id: 'bp', name: 'x', kind: 'building', tags: [], baseplate: { w: 8, d: 8 },
+      bricks: [{ id: 'g', p: 'minifig', x: 2, y: 0, z: 2, r: 0, c: 0, fig: { ...figPreset('robber'), arms: 1 } }],
+      createdAt: 1, updatedAt: 1,
+    })
+    expect(importSave(exportSave(save))).toEqual(save)
+  })
+  it('drops figure styles it cannot read, keeping the bricks', () => {
+    const fig = (extra: object) => ({ id: 'f', p: 'minifig', x: 0, y: 0, z: 0, r: 0, c: 0, ...extra })
+    const out = migrate({
+      schemaVersion: SCHEMA_VERSION,
+      blueprints: [
+        { id: 'bp', name: 'x', kind: 'building', tags: [], baseplate: { w: 8, d: 8 }, createdAt: 1, updatedAt: 1, bricks: [fig({ fig: { torso: 'red' } })] },
+      ],
+      city: {},
+      workshop: { bricks: [fig({ fig: 'police' }), fig({ fig: { ...figPreset('chef'), accessory: 'sword' } }), fig({})] },
+    })
+    const { accessory: _a, ...chef } = figPreset('chef')
+    void _a
+    expect(out.workshop.bricks).toEqual([fig({}), fig({ fig: chef }), fig({})])
+    expect(out.blueprints[0].bricks).toEqual([fig({})])
   })
 })

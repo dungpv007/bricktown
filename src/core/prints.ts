@@ -1,6 +1,6 @@
 /**
  * Prints: pictures drawn on parts in their own fixed colours (printed tiles, the computer screen;
- * later figure faces and torsos). Every print lives in one texture atlas, so all printed surfaces
+ * minifigure faces and torsos). Every print lives in one texture atlas, so all printed surfaces
  * of a scene share one material and draw in one batch per part (instanced) or per model (baked).
  *
  * This registry is the pure layout: each print's size in atlas cells (1 cell = 1 stud of print) and
@@ -31,6 +31,22 @@ export const PRINTS: PrintDef[] = [
   { id: 'number_112', w: 2, h: 1 },
   { id: 'heart', w: 1, h: 1 },
   { id: 'star', w: 1, h: 1 },
+  // Minifigure faces (wrapped round the front half of the head, hence 2:1) and torso prints.
+  // Ids are `fig_face_<FigFace>` / `fig_torso_<FigPrint>` (see core/figures; 'plain' has none).
+  { id: 'fig_face_smile', w: 2, h: 1 },
+  { id: 'fig_face_grin', w: 2, h: 1 },
+  { id: 'fig_face_wink', w: 2, h: 1 },
+  { id: 'fig_face_surprised', w: 2, h: 1 },
+  { id: 'fig_face_beard', w: 2, h: 1 },
+  { id: 'fig_face_glasses', w: 2, h: 1 },
+  { id: 'fig_torso_police', w: 1, h: 1 },
+  { id: 'fig_torso_chef', w: 1, h: 1 },
+  { id: 'fig_torso_fire', w: 1, h: 1 },
+  { id: 'fig_torso_space', w: 1, h: 1 },
+  { id: 'fig_torso_vest', w: 1, h: 1 },
+  { id: 'fig_torso_stripes', w: 1, h: 1 },
+  { id: 'fig_torso_suit', w: 1, h: 1 },
+  { id: 'fig_torso_apron', w: 1, h: 1 },
 ]
 
 export const PRINT_BY_ID: Record<string, PrintDef> = Object.fromEntries(PRINTS.map((p) => [p.id, p]))

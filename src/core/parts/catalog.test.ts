@@ -3,9 +3,9 @@ import { PARTS, PART_BY_ID, PART_CATEGORIES, getPart } from './catalog'
 import { PRINT_BY_ID } from '../prints'
 
 describe('part catalog', () => {
-  it('has 62 unique part ids', () => {
-    expect(PARTS).toHaveLength(62)
-    expect(new Set(PARTS.map((p) => p.id)).size).toBe(62)
+  it('has 63 unique part ids', () => {
+    expect(PARTS).toHaveLength(63)
+    expect(new Set(PARTS.map((p) => p.id)).size).toBe(63)
   })
 
   it('every part has w, d, h >= 1 as integers', () => {
@@ -20,12 +20,12 @@ describe('part catalog', () => {
   it('every part category is listed in PART_CATEGORIES', () => {
     for (const p of PARTS) expect(PART_CATEGORIES).toContain(p.category)
     expect(PART_CATEGORIES).toEqual([
-      'brick', 'plate', 'slope', 'round', 'door_window', 'wheel', 'furniture', 'nature', 'decor',
+      'brick', 'plate', 'slope', 'round', 'door_window', 'wheel', 'furniture', 'nature', 'decor', 'figure',
     ])
   })
 
   it('PART_BY_ID indexes every part', () => {
-    expect(Object.keys(PART_BY_ID)).toHaveLength(62)
+    expect(Object.keys(PART_BY_ID)).toHaveLength(63)
     for (const p of PARTS) expect(PART_BY_ID[p.id]).toBe(p)
   })
 

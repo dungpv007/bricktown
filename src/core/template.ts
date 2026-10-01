@@ -1,4 +1,5 @@
 import { COLORS } from './colors'
+import { isFigure, parseFig } from './figures'
 import { newId } from './ids'
 import { canPlace } from './model'
 import { Occupancy } from './occupancy'
@@ -31,12 +32,15 @@ export function autoSteps(bricks: Brick[], maxPerStep = 4): number[][] {
 
 export type PlacedCandidate = Pick<Brick, 'p' | 'x' | 'y' | 'z' | 'r' | 'c'>
 
-/** Same part, color and position, and a rotation that looks identical. */
+/**
+ * Same part, color and position, and a rotation that looks identical. A figure ignores colour: the
+ * placed figure takes the template's style (and so its torso colour).
+ */
 export function matchesTarget(placed: PlacedCandidate, target: Brick): boolean {
   const part = PART_BY_ID[target.p]
   return (
     placed.p === target.p &&
-    placed.c === target.c &&
+    (placed.c === target.c || isFigure(target)) &&
     placed.x === target.x &&
     placed.y === target.y &&
     placed.z === target.z &&
@@ -104,6 +108,12 @@ export function validateTemplate(t: Template): string[] {
     if (!PART_BY_ID[b.p]) problems.push(`brick ${b.id}: unknown part ${b.p}`)
     if (!Number.isInteger(b.c) || b.c < 0 || b.c >= COLORS.length) {
       problems.push(`brick ${b.id}: color ${b.c} out of range`)
+    }
+    if (b.fig !== undefined) {
+      // parseFig copies every field it keeps, so nothing was dropped when the key counts agree.
+      const parsed = parseFig(b.fig)
+      if (!parsed || Object.keys(parsed).length !== Object.keys(b.fig).length) problems.push(`brick ${b.id}: invalid figure style`)
+      else if (!isFigure(b)) problems.push(`brick ${b.id}: figure style on a part that is not a figure`)
     }
   })
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { bakeBricks, bakeCacheSize, bakeKey, bakedGeometries, evictBakes } from './bake'
 import { COLORS } from './colors'
+import { figKey, figPreset } from './figures'
+import { getFigureGeometry } from './parts/figureGeometry'
 import { bounds } from './model'
 import { getPartGeometry } from './parts/geometry'
 import { getPrintGeometry } from './parts/printGeometry'
@@ -251,5 +253,52 @@ describe('bakeKey', () => {
     expect(bakeKey([b('a', 'brick_2x4', 1, 2, 3, 1, 4), b('b', 'brick_1x1', 0, 0, 0)])).toBe(
       'brick_2x4,1,2,3,1,4;brick_1x1,0,0,0,0,2',
     )
+  })
+
+  it("adds a figure's look, so restyling a figure re-bakes", () => {
+    const chef = { ...b('f', 'minifig', 0, 0, 0, 0, 0), fig: figPreset('chef') }
+    const robber = { ...chef, fig: figPreset('robber') }
+    expect(bakeKey([chef])).toBe(`minifig,0,0,0,0,0,${figKey(figPreset('chef'))}`)
+    expect(bakeKey([robber])).not.toBe(bakeKey([chef]))
+    expect(bakeKey([{ ...chef, fig: figPreset('chef') }])).toBe(bakeKey([chef]))
+  })
+})
+
+describe('baking figures', () => {
+  const fig = (id: string, preset: string, x: number, c = 2): Brick => ({ ...b(id, 'minifig', x, 0, 0, 0, c), fig: figPreset(preset) })
+
+  it("bakes a figure's body opaque in its own vertex colours, whatever the brick colour", () => {
+    const { opaque, trans, metal } = bakeBricks([fig('f', 'robber', 0, TRANS_RED)])
+    expect(trans).toBeNull()
+    expect(metal).toBeNull()
+    const body = getFigureGeometry(figPreset('robber')).body
+    expect(vertexCount(opaque)).toBe(vertexCount(body))
+    const src = body.getAttribute('color')
+    const out = opaque.getAttribute('color')
+    for (const i of [0, Math.floor(src.count / 2), src.count - 1]) {
+      expect(out.getX(i)).toBeCloseTo(src.getX(i), 5)
+      expect(out.getY(i)).toBeCloseTo(src.getY(i), 5)
+      expect(out.getZ(i)).toBeCloseTo(src.getZ(i), 5)
+    }
+  })
+
+  it('bakes figure faces and torso prints into the print geometry, next to printed tiles', () => {
+    const bricks = [fig('f', 'police', 0), b('t', 'print_star_1x1', 4, 0, 0)]
+    const { print } = bakeBricks(bricks)
+    expect(print).not.toBeNull()
+    expect(vertexCount(print!)).toBe(vertexCount(getFigureGeometry(figPreset('police')).print) + vertexCount(getPrintGeometry('print_star_1x1')!))
+  })
+
+  it('places a figure like any brick: inside its rotated footprint, standing on its plate', () => {
+    const f: Brick = { ...fig('f', 'chef', 3), z: 2, y: 3, r: 1 }
+    const { opaque } = bakeBricks([f])
+    opaque.computeBoundingBox()
+    const bb = opaque.boundingBox!
+    const [cx, , cz] = brickCenter(f)
+    expect(bb.min.x).toBeGreaterThanOrEqual(cx - 0.5 - 1e-6) // rotated: 1 stud along X
+    expect(bb.max.x).toBeLessThanOrEqual(cx + 0.5 + 1e-6)
+    expect(bb.min.z).toBeGreaterThanOrEqual(cz - 1 - 1e-6)
+    expect(bb.max.z).toBeLessThanOrEqual(cz + 1 + 1e-6)
+    expect(bb.min.y).toBeCloseTo(platesToWorld(3), 2)
   })
 })

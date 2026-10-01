@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { PRINTS, PRINT_ATLAS, printRect } from '../core/prints'
+import { FIGURE_PRINT_DRAWERS } from './figurePrints'
 
 /**
  * Draws every print (see core/prints) into one canvas with Canvas2D, once, at startup, and wraps
@@ -65,6 +66,8 @@ function flamePath(ctx: CanvasRenderingContext2D, cx: number, top: number, botto
 }
 
 export const PRINT_DRAWERS: Record<string, PrintDrawer> = {
+  ...FIGURE_PRINT_DRAWERS,
+
   police(ctx, w, h) {
     // Navy shield, gold rim and star, POLICE across it.
     const l = M + 14, r = w - M - 14, t = M + 10
@@ -192,63 +195,67 @@ export const PRINT_DRAWERS: Record<string, PrintDrawer> = {
   },
 
   menu(ctx, w, h) {
-    // Chalkboard in a wooden frame: MENU and three dishes with prices.
-    roundRect(ctx, M, M, w - 2 * M, h - 2 * M, 14)
+    // Chalkboard in a wooden frame: MENU and three dishes with prices. Laid out on a 256x128 grid,
+    // scaled to the cell (X = w / 256, Y = h / 128 per grid pixel).
+    const X = w / 256, Y = h / 128
+    roundRect(ctx, M, M, w - 2 * M, h - 2 * M, 14 * Y)
     ctx.fillStyle = '#8a5a2b'
     ctx.fill()
-    roundRect(ctx, M + 8, M + 8, w - 2 * M - 16, h - 2 * M - 16, 8)
+    roundRect(ctx, M + 8, M + 8, w - 2 * M - 16, h - 2 * M - 16, 8 * Y)
     ctx.fillStyle = '#20352c'
     ctx.fill()
-    text(ctx, 'MENU', w / 2, 36, 30, '#ffe066')
+    text(ctx, 'MENU', w / 2, 36 * Y, 30 * Y, '#ffe066')
     const dots = ['#ff6b6b', '#ffd43b', '#69db7c']
     ctx.lineCap = 'round'
     dots.forEach((color, i) => {
-      const y = 64 + i * 19
+      const y = (64 + i * 19) * Y
       ctx.beginPath()
-      ctx.arc(36, y, 6, 0, Math.PI * 2)
+      ctx.arc(36 * X, y, 6 * Y, 0, Math.PI * 2)
       ctx.fillStyle = color
       ctx.fill()
       ctx.beginPath()
-      ctx.moveTo(52, y)
-      ctx.lineTo(172 - i * 18, y)
-      ctx.lineWidth = 5
+      ctx.moveTo(52 * X, y)
+      ctx.lineTo((172 - i * 18) * X, y)
+      ctx.lineWidth = 5 * Y
       ctx.strokeStyle = 'rgba(255,255,255,0.85)'
       ctx.stroke()
-      text(ctx, String([5, 8, 3][i]), 214, y + 1, 20, WHITE)
+      text(ctx, String([5, 8, 3][i]), 214 * X, y + Y, 20 * Y, WHITE)
     })
   },
 
   screen(ctx, w, h) {
-    // A computer screen: a window with a title bar, a bar chart and lines of text.
-    roundRect(ctx, M - 2, M - 2, w - 2 * M + 4, h - 2 * M + 4, 10)
+    // A computer screen: a window with a title bar, a bar chart and lines of text. Laid out on a
+    // 256x128 grid, scaled to the cell.
+    const X = w / 256, Y = h / 128
+    roundRect(ctx, M - 2, M - 2, w - 2 * M + 4, h - 2 * M + 4, 10 * Y)
     const sky = ctx.createLinearGradient(0, 0, 0, h)
     sky.addColorStop(0, '#1e6fd9')
     sky.addColorStop(1, '#0d3b7a')
     ctx.fillStyle = sky
     ctx.fill()
-    roundRect(ctx, 20, 18, w - 40, h - 36, 6)
+    roundRect(ctx, 20 * X, 18 * Y, w - 40 * X, h - 36 * Y, 6 * Y)
     ctx.fillStyle = '#f4f7fb'
     ctx.fill()
     ctx.fillStyle = '#ff9f1c'
-    ctx.fillRect(20, 18, w - 40, 14)
+    ctx.fillRect(20 * X, 18 * Y, w - 40 * X, 14 * Y)
     for (const [i, c] of [RED, GOLD, '#2fb344'].entries()) {
       ctx.beginPath()
-      ctx.arc(w - 34 - i * 14, 25, 4, 0, Math.PI * 2)
+      ctx.arc(w - (34 + i * 14) * X, 25 * Y, 4 * Y, 0, Math.PI * 2)
       ctx.fillStyle = c
       ctx.fill()
     }
     const bars = [30, 48, 22, 58, 40]
     bars.forEach((bh, i) => {
       ctx.fillStyle = ['#2fb344', '#1e6fd9', '#ff9f1c', '#d01012', '#7048e8'][i]
-      ctx.fillRect(34 + i * 18, 100 - bh, 12, bh)
+      ctx.fillRect((34 + i * 18) * X, (100 - bh) * Y, 12 * X, bh * Y)
     })
     ctx.lineCap = 'round'
     ctx.strokeStyle = '#8a97a8'
-    ctx.lineWidth = 6
+    ctx.lineWidth = 6 * Y
     for (let i = 0; i < 4; i++) {
       ctx.beginPath()
-      ctx.moveTo(140, 48 + i * 15)
-      ctx.lineTo(i % 2 === 0 ? 216 : 196, 48 + i * 15)
+      ctx.moveTo(140 * X, (48 + i * 15) * Y)
+      ctx.lineTo((i % 2 === 0 ? 216 : 196) * X, (48 + i * 15) * Y)
       ctx.stroke()
     }
   },

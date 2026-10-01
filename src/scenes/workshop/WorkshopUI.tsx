@@ -7,6 +7,7 @@ import BlueprintLibrary from '../../ui/BlueprintLibrary'
 import ColorPicker from '../../ui/ColorPicker'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import ErrorBadge from '../../ui/ErrorBadge'
+import FigureEditor from '../../ui/FigureEditor'
 import { useT, type TKey } from '../../ui/i18n'
 import PartPalette from '../../ui/PartPalette'
 import SaveBlueprintDialog from '../../ui/SaveBlueprintDialog'
@@ -155,6 +156,7 @@ export default function WorkshopUI() {
       <ColorPicker />
       <PartPalette />
       <ErrorBadge errorSeq={errorSeq} testId="place-error" labelKey={isResizeError(lastError) ? 'cantResize' : 'cantPlace'} />
+      <FigureEditor />
       {pickerOpen && <NewModelPicker onClose={() => setPickerOpen(false)} />}
       {saveOpen && <SaveBlueprintDialog onClose={() => setSaveOpen(false)} />}
       {libraryOpen && <BlueprintLibrary onPick={onPick} onClose={() => setLibraryOpen(false)} />}

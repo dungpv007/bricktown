@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { getPartGeometry } from '../core/parts/geometry'
+import { brickBodyGeometry } from '../core/parts/brickGeometry'
 import { brickCenter } from '../core/rotation'
-import type { Rot } from '../core/types'
+import type { FigStyle, Rot } from '../core/types'
 import { ghostMaterial } from './materials'
 
 interface Props {
   partId: string
+  /** The figure about to be placed, when the part is a minifigure. */
+  fig?: FigStyle
   rot: Rot
   /** Where the part would go; null hides the ghost. */
   anchor: { x: number; y: number; z: number } | null
@@ -32,7 +34,7 @@ const noRaycast = () => null
  * Translucent preview of the part about to be placed; green when it fits, red when it does not.
  * Uses the shared `ghostMaterial` (one ghost on screen at a time), tinted every frame.
  */
-export default function GhostBrick({ partId, rot, anchor, valid, visible = true, shakeKey = 0 }: Props) {
+export default function GhostBrick({ partId, fig, rot, anchor, valid, visible = true, shakeKey = 0 }: Props) {
   const meshRef = useRef<THREE.Mesh>(null)
   const shakeStart = useRef<number | null>(null)
   const firstShakeKey = useRef(shakeKey)
@@ -42,7 +44,8 @@ export default function GhostBrick({ partId, rot, anchor, valid, visible = true,
 
   const shown = visible && anchor !== null
   const a = anchor ?? ORIGIN
-  const [cx, cy, cz] = brickCenter({ id: 'ghost', p: partId, x: a.x, y: a.y, z: a.z, r: rot, c: 0 })
+  const probe = { id: 'ghost', p: partId, x: a.x, y: a.y, z: a.z, r: rot, c: 0, ...(fig ? { fig } : {}) }
+  const [cx, cy, cz] = brickCenter(probe)
 
   useFrame(({ clock }) => {
     const mesh = meshRef.current
@@ -66,7 +69,7 @@ export default function GhostBrick({ partId, rot, anchor, valid, visible = true,
     <mesh
       ref={meshRef}
       visible={shown}
-      geometry={getPartGeometry(partId)}
+      geometry={brickBodyGeometry(probe)}
       material={ghostMaterial}
       position={[cx, cy, cz]}
       rotation={[0, (rot * Math.PI) / 2, 0]}

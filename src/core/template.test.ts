@@ -9,6 +9,7 @@ import {
   templateToBlueprint,
   validateTemplate,
 } from './template'
+import { figPreset } from './figures'
 import type { Brick, Rot, Template } from './types'
 
 const brick = (id: string, p: string, x: number, y: number, z: number, r: Rot = 0, c = 2): Brick => ({
@@ -88,6 +89,15 @@ describe('matchesTarget', () => {
     expect(matchesTarget({ p: 'brick_2x4', x: 2, y: 0, z: 1, r: 0, c: 2 }, target)).toBe(false)
     expect(matchesTarget({ p: 'brick_2x4', x: 1, y: 3, z: 1, r: 0, c: 2 }, target)).toBe(false)
     expect(matchesTarget({ p: 'brick_2x4', x: 1, y: 0, z: 2, r: 0, c: 2 }, target)).toBe(false)
+  })
+  it('matches a figure by position and facing only: its style (and torso colour) comes from the template', () => {
+    const police: Brick = { ...brick('f', 'minifig', 2, 0, 3, 1, 21), fig: figPreset('police') }
+    expect(matchesTarget({ p: 'minifig', x: 2, y: 0, z: 3, r: 1, c: 0 }, police)).toBe(true)
+    expect(matchesTarget({ p: 'minifig', x: 2, y: 0, z: 3, r: 1, c: 21 }, police)).toBe(true)
+    // A figure faces one way: every other rotation is a different placement.
+    for (const r of [0, 2, 3] as Rot[]) expect(matchesTarget({ p: 'minifig', x: 2, y: 0, z: 3, r, c: 21 }, police)).toBe(false)
+    expect(matchesTarget({ p: 'minifig', x: 3, y: 0, z: 3, r: 1, c: 21 }, police)).toBe(false)
+    expect(matchesTarget({ p: 'brick_1x2', x: 2, y: 0, z: 3, r: 1, c: 21 }, police)).toBe(false)
   })
 })
 
@@ -200,5 +210,17 @@ describe('validateTemplate', () => {
   it('reports out-of-range step indices', () => {
     const t = { ...sample(), steps: [[0, 1], [2, 7]] }
     expect(validateTemplate(t).some((p) => p.includes('unknown brick index 7'))).toBe(true)
+  })
+  it('accepts figures with a valid style and reports a style that is not valid', () => {
+    const t = sample()
+    t.bricks.push({ ...brick('t-3', 'minifig', 4, 0, 4, 0, 0), fig: figPreset('chef') })
+    t.steps = [[0, 1], [2], [3]]
+    expect(validateTemplate(t)).toEqual([])
+    t.bricks[3] = { ...t.bricks[3], fig: figPreset('police') } // optional fields in any order
+    expect(validateTemplate(t)).toEqual([])
+    t.bricks[3] = { ...t.bricks[3], fig: { ...figPreset('police'), accessory: 'sword' as never } }
+    expect(validateTemplate(t)).toEqual(['brick t-3: invalid figure style'])
+    t.bricks[3] = { ...t.bricks[3], fig: { ...figPreset('chef'), hat: 'wizard' as never } }
+    expect(validateTemplate(t)).toEqual(['brick t-3: invalid figure style'])
   })
 })

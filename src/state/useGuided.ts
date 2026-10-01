@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
 import { getTemplate } from '../content/templates'
+import { figOf, isFigure } from '../core/figures'
 import { getPart } from '../core/parts/catalog'
 import {
   findMatch,
@@ -55,7 +56,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     return g && t ? { g, t } : null
   }
 
-  /** Puts the next brick to place into the editor (part, colour, rotation, palette tab). */
+  /** Puts the next brick to place into the editor (part, colour, rotation, palette tab; a figure's style). */
   const selectNext = (t: Template, step: number, placed: readonly string[]) => {
     const next = nextPending(t, step, placed)
     if (!next) return
@@ -64,6 +65,7 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     ed.setCategory(getPart(next.p).category)
     ed.setPart(next.p)
     ed.setColor(next.c)
+    if (isFigure(next)) ed.setFig(figOf(next))
     useEditor.setState({ rot: next.r })
   }
 

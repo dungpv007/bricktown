@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
 import { plateColor, plateShift, resizeBaseplate, type PlateSide, type ResizeDir, type ResizeError } from '../core/baseplate'
 import { DEFAULT_COLOR } from '../core/colors'
+import { DEFAULT_FIG, figKey, figOf, isFigure, MINIFIG_PART } from '../core/figures'
 import { newId } from '../core/ids'
-import { addBrick, paintBrick, removeBrick, rotateBrick, type PlaceError, type PlaceResult } from '../core/model'
+import { addBrick, paintBrick, removeBrick, restyleFigure, rotateBrick, type PlaceError, type PlaceResult } from '../core/model'
 import { nextRot } from '../core/rotation'
-import type { Baseplate, Brick, BlueprintKind, PartCategory, Rot } from '../core/types'
+import type { Baseplate, Brick, BlueprintKind, FigStyle, PartCategory, Rot } from '../core/types'
 import { createHistory } from './history'
 import { useApp } from './useApp'
 import { useGame } from './useGame'
@@ -19,12 +20,19 @@ export type EditorError = PlaceError | ResizeError
  */
 export interface ViewShift { seq: number; dx: number; dz: number }
 
+/** What the open figure editor changes: a placed figure, or (`brickId: null`) the figure to place next. */
+export interface FigEditorTarget { brickId: string | null }
+
 export interface EditorState {
   tool: Tool
   partId: string
   color: number
+  /** The look of the next minifigure placed (when `partId` is the minifig part). */
+  fig: FigStyle
   rot: Rot
   category: PartCategory
+  /** The figure editor, when open. */
+  figEditor: FigEditorTarget | null
   lastError: EditorError | null
   /** Incremented on every rejected action, so UI can react to repeats of the same error. */
   errorSeq: number
@@ -39,6 +47,12 @@ export interface EditorState {
   setTool: (tool: Tool) => void
   setPart: (partId: string) => void
   setColor: (color: number) => void
+  setFig: (fig: FigStyle) => void
+  /** Gives placed figure `id` a new look (undoable; no-op when it already looks like that). */
+  restyleFigure: (id: string, fig: FigStyle) => void
+  /** Opens the figure editor for placed figure `brickId`, or for the figure to place next. */
+  openFigEditor: (brickId?: string) => void
+  closeFigEditor: () => void
   setCategory: (category: PartCategory) => void
   rotateCurrent: () => void
   place: (x: number, y: number, z: number) => void
@@ -117,15 +131,17 @@ export const useEditor = create<EditorState>()((set, get) => {
     history.clear()
     pickupOrigin = null
     origin = { x: 0, z: 0 }
-    set((s) => ({ carried: null, lastError: null, canUndo: false, canRedo: false, frameSeq: s.frameSeq + 1 }))
+    set((s) => ({ carried: null, lastError: null, canUndo: false, canRedo: false, frameSeq: s.frameSeq + 1, figEditor: null }))
   }
 
   return {
     tool: 'place',
     partId: 'brick_2x4',
     color: DEFAULT_COLOR,
+    fig: DEFAULT_FIG,
     rot: 0,
     category: 'brick',
+    figEditor: null,
     lastError: null,
     errorSeq: 0,
     carried: null,
@@ -141,14 +157,25 @@ export const useEditor = create<EditorState>()((set, get) => {
     cancelCarry,
     setPart: (partId) => set({ partId }),
     setColor: (color) => set({ color }),
+    setFig: (fig) => set({ fig: { ...fig } }),
+    restyleFigure: (id, fig) => {
+      const bricks = workshop().bricks
+      const target = bricks.find((b) => b.id === id)
+      if (!target || !isFigure(target) || figKey(figOf(target)) === figKey(fig)) return
+      commit(bricks, { bricks: restyleFigure(bricks, id, fig), error: null }, sfx.paint)
+    },
+    openFigEditor: (brickId) => set({ figEditor: { brickId: brickId ?? null } }),
+    closeFigEditor: () => set({ figEditor: null }),
     setCategory: (category) => set({ category }),
     rotateCurrent: () => set((s) => ({ rot: nextRot(s.rot) })),
 
     place: (x, y, z) => {
-      const { carried, partId, color, rot } = get()
+      const { carried, partId, color, rot, fig } = get()
       const brick: Brick = carried
         ? { ...carried, x, y, z, r: rot }
-        : { id: newId(), p: partId, x, y, z, r: rot, c: color }
+        : partId === MINIFIG_PART
+          ? { id: newId(), p: partId, x, y, z, r: rot, c: fig.torso, fig: { ...fig } }
+          : { id: newId(), p: partId, x, y, z, r: rot, c: color }
       if (carried && pickupOrigin) {
         // Completing a move: the pre-pickup bricks form the single undo step.
         const result = addBrick(workshop().bricks, brick, workshop().baseplate)
@@ -176,6 +203,12 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (!target) return
       switch (tool) {
         case 'paint':
+          if (isFigure(target)) {
+            // Painting a figure recolours its torso, then shows it in the figure editor for more.
+            if (figOf(target).torso !== color) commit(bricks, { bricks: paintBrick(bricks, id, color), error: null }, sfx.paint)
+            set({ figEditor: { brickId: id } })
+            return
+          }
           if (target.c === color) return // already this colour: nothing to undo
           commit(bricks, { bricks: paintBrick(bricks, id, color), error: null }, sfx.paint)
           break
@@ -188,7 +221,14 @@ export const useEditor = create<EditorState>()((set, get) => {
         case 'move':
           pickupOrigin = bricks
           setBricks(removeBrick(bricks, id))
-          set({ carried: target, partId: target.p, color: target.c, rot: target.r, lastError: null })
+          set({
+            carried: target,
+            partId: target.p,
+            color: target.c,
+            rot: target.r,
+            lastError: null,
+            ...(isFigure(target) ? { fig: figOf(target) } : {}),
+          })
           break
         case 'place':
           break

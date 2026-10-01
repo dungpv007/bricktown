@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { DEFAULT_FIG, figPreset } from '../core/figures'
 import { createEmptySave } from '../core/serialize'
 import type { Brick } from '../core/types'
 import { useApp } from './useApp'
@@ -452,5 +453,86 @@ describe('useEditor setPlateColor', () => {
     expect(ed().carried).toBeNull()
     expect(bricks()).toHaveLength(1)
     expect(plate().c).toBe(0)
+  })
+})
+
+describe('useEditor figures', () => {
+  const placeFig = (preset: string, x = 2, z = 2) => {
+    ed().setPart('minifig')
+    ed().setFig(figPreset(preset))
+    ed().place(x, 0, z)
+    return bricks()[bricks().length - 1]
+  }
+
+  it('starts with the default figure and places the current figure style', () => {
+    expect(ed().fig).toEqual(DEFAULT_FIG)
+    const f = placeFig('chef')
+    expect(f).toMatchObject({ p: 'minifig', x: 2, y: 0, z: 2, c: figPreset('chef').torso, fig: figPreset('chef') })
+    // Other parts carry no style.
+    ed().setPart('brick_1x1')
+    ed().place(8, 0, 8)
+    expect(bricks()[1].fig).toBeUndefined()
+  })
+
+  it('restyles a placed figure as one undoable step', () => {
+    const f = placeFig('chef')
+    ed().restyleFigure(f.id, figPreset('robber'))
+    expect(bricks()[0]).toMatchObject({ c: figPreset('robber').torso, fig: figPreset('robber') })
+    ed().undo()
+    expect(bricks()[0].fig).toEqual(figPreset('chef'))
+    ed().redo()
+    expect(bricks()[0].fig).toEqual(figPreset('robber'))
+  })
+
+  it('restyling with the same look records nothing', () => {
+    const f = placeFig('chef')
+    const before = ed().canUndo
+    ed().undo()
+    ed().redo()
+    ed().restyleFigure(f.id, { ...figPreset('chef'), arms: figPreset('chef').torso })
+    expect(ed().canRedo).toBe(false)
+    expect(ed().canUndo).toBe(before)
+    expect(bricks()[0].fig).toEqual(figPreset('chef'))
+  })
+
+  it('painting a figure recolours its torso (undoable) and opens the figure editor for it', () => {
+    const f = placeFig('chef')
+    ed().setTool('paint')
+    ed().setColor(2)
+    ed().tapBrick(f.id)
+    expect(bricks()[0].fig).toEqual({ ...figPreset('chef'), torso: 2 })
+    expect(ed().figEditor).toEqual({ brickId: f.id })
+    ed().closeFigEditor()
+    expect(ed().figEditor).toBeNull()
+    ed().undo()
+    expect(bricks()[0].fig).toEqual(figPreset('chef'))
+    // Its torso already has the colour: nothing to paint, the editor still opens.
+    ed().setColor(figPreset('chef').torso)
+    ed().tapBrick(f.id)
+    expect(ed().canRedo).toBe(true)
+    expect(ed().figEditor).toEqual({ brickId: f.id })
+  })
+
+  it('opens the figure editor for the figure about to be placed', () => {
+    ed().openFigEditor()
+    expect(ed().figEditor).toEqual({ brickId: null })
+  })
+
+  it('carrying a figure keeps its style and shows it as the current figure', () => {
+    const f = placeFig('robber')
+    ed().setFig(figPreset('chef'))
+    ed().setTool('move')
+    ed().tapBrick(f.id)
+    expect(ed().fig).toEqual(figPreset('robber'))
+    ed().place(6, 0, 6)
+    expect(bricks()[0]).toMatchObject({ x: 6, z: 6, fig: figPreset('robber') })
+  })
+
+  it('a new model or a loaded one closes the figure editor', () => {
+    const f = placeFig('robber')
+    ed().setTool('paint')
+    ed().tapBrick(f.id)
+    ed().newModel('building', { w: 16, d: 16 })
+    expect(ed().figEditor).toBeNull()
   })
 })

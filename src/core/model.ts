@@ -1,7 +1,8 @@
+import { figOf, isFigure, withTorso } from './figures'
 import { Occupancy } from './occupancy'
 import { getPart } from './parts/catalog'
 import { footprint, nextRot } from './rotation'
-import type { Baseplate, Brick } from './types'
+import type { Baseplate, Brick, FigStyle } from './types'
 
 export const MAX_HEIGHT_PLATES = 72
 export const MAX_BRICKS = 1500
@@ -43,8 +44,19 @@ export function removeBrick(bricks: Brick[], id: string): Brick[] {
   return bricks.filter((b) => b.id !== id)
 }
 
+/** Recolours a brick; painting a figure recolours its torso. */
 export function paintBrick(bricks: Brick[], id: string, c: number): Brick[] {
-  return bricks.map((b) => (b.id === id ? { ...b, c } : b))
+  return bricks.map((b) => {
+    if (b.id !== id) return b
+    return isFigure(b) ? { ...b, c, fig: withTorso(figOf(b), c) } : { ...b, c }
+  })
+}
+
+/** Gives figure `id` a new style (its `c` follows the torso colour); other bricks are left alone. */
+export function restyleFigure(bricks: Brick[], id: string, fig: FigStyle): Brick[] {
+  const target = bricks.find((b) => b.id === id)
+  if (!target || !isFigure(target)) return bricks
+  return bricks.map((b) => (b === target ? { ...b, c: fig.torso, fig: { ...fig } } : b))
 }
 
 function replaceBrick(

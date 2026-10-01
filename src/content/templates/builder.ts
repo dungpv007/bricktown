@@ -1,5 +1,6 @@
+import { MINIFIG_PART, figPreset } from '../../core/figures'
 import { autoSteps } from '../../core/template'
-import type { Baseplate, BlueprintKind, Brick, LocalizedText, Rot, Template } from '../../core/types'
+import type { Baseplate, BlueprintKind, Brick, FigStyle, LocalizedText, Rot, Template } from '../../core/types'
 
 export interface TemplateSpec {
   id: string
@@ -59,6 +60,11 @@ export interface BoxWallsSpec {
 export interface Builder {
   /** Adds a brick; `done` gives it the stable id `${templateId}-${index}`. */
   add(p: string, x: number, y: number, z: number, r: Rot, c: number): Brick
+  /**
+   * Adds a minifigure: a preset id (see `FIG_PRESETS`, e.g. 'police') or a custom style. It stands
+   * on 2x1 studs (1x2 for odd `r`) and faces +Z at r = 0. Its colour is its torso colour.
+   */
+  fig(style: string | FigStyle, x: number, y: number, z: number, r: Rot): Brick
   /** Adds several bricks that share a y level. Each entry is `[part, x, z, rot, color]`. */
   layer(y: number, entries: Array<[string, number, number, Rot, number]>): Brick[]
   /** Number of bricks added so far. */
@@ -174,6 +180,12 @@ export function createBuilder(): Builder {
 
   return {
     add,
+    fig(style, x, y, z, r) {
+      const fig = typeof style === 'string' ? figPreset(style) : { ...style }
+      const brick: Brick = { id: String(bricks.length), p: MINIFIG_PART, x, y, z, r, c: fig.torso, fig }
+      bricks.push(brick)
+      return brick
+    },
     layer: (y, entries) => entries.map(([p, x, z, r, c]) => add(p, x, y, z, r, c)),
     count: () => bricks.length,
     wall,

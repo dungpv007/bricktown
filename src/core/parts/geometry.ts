@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { PLATE_HEIGHT, platesToWorld } from '../units'
+import { DEFAULT_FIG, MINIFIG_PART } from '../figures'
 import type { PartDef } from '../types'
 import { getPart } from './catalog'
+import { getFigureGeometry } from './figureGeometry'
 
 /**
  * Procedural low-poly geometry for every part, centred on the origin at r=0:
@@ -380,6 +382,9 @@ function buildBody(p: PartDef, H: number): Piece[] {
       ]
     }
 
+    case 'minifig':
+      throw new Error('Minifigures are built per style by figureGeometry')
+
     case 'flower': {
       const headR = 0.2
       const headY = top - headR
@@ -422,8 +427,12 @@ function build(p: PartDef): THREE.BufferGeometry {
 
 const cache = new Map<string, THREE.BufferGeometry>()
 
-/** One merged, cached geometry per part id. Callers must not dispose or mutate it. */
+/**
+ * One merged, cached geometry per part id. Callers must not dispose or mutate it. The minifig part
+ * gives the default figure (a figure brick's own look comes from `brickBodyGeometry`).
+ */
 export function getPartGeometry(partId: string): THREE.BufferGeometry {
+  if (partId === MINIFIG_PART) return getFigureGeometry(DEFAULT_FIG).body
   let g = cache.get(partId)
   if (!g) {
     g = build(getPart(partId))

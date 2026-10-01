@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { bakeBricksUncached, bakedGeometries, disposeBaked, type BakedModel } from '../core/bake'
+import { MINIFIG_PART, figKey } from '../core/figures'
 import { getPart } from '../core/parts/catalog'
-import type { Brick } from '../core/types'
+import type { Brick, FigStyle } from '../core/types'
 import { bakedMaterials } from './materials'
 
 /**
@@ -17,6 +18,8 @@ export const PART_THUMB_SIZE = 128
 const VIEW_DIR = new THREE.Vector3(1, 0.9, 1).normalize()
 /** Steeper, from the front, for flat printed tiles: the picture is what tells them apart. */
 const PRINT_VIEW_DIR = new THREE.Vector3(0.3, 1.6, 0.8).normalize()
+/** Figures from the front, a little to the right and above: the face and torso print show. */
+const FIGURE_VIEW_DIR = new THREE.Vector3(0.45, 0.35, 1).normalize()
 const FIT_MARGIN = 1.12
 
 let renderer: THREE.WebGLRenderer | null = null
@@ -81,7 +84,8 @@ function fitCamera(box: THREE.Box3, viewDir: THREE.Vector3): THREE.OrthographicC
   return camera
 }
 
-function render(bricks: Brick[], size: number, viewDir: THREE.Vector3): string {
+/** `crop`: fraction of the model's height, from the bottom, left out of the framing (a figure's bust). */
+function render(bricks: Brick[], size: number, viewDir: THREE.Vector3, crop = 0): string {
   const gl = getRenderer()
   if (!gl || bricks.length === 0) return ''
   const scene = createScene()
@@ -97,6 +101,7 @@ function render(bricks: Brick[], size: number, viewDir: THREE.Vector3): string {
       if (mesh.geometry.boundingBox) box.union(mesh.geometry.boundingBox)
       scene.add(mesh)
     }
+    if (crop > 0) box.min.y += (box.max.y - box.min.y) * crop
     gl.setSize(size, size, false)
     gl.render(scene, fitCamera(box, viewDir))
     return gl.domElement.toDataURL('image/png')
@@ -116,13 +121,14 @@ export function getThumbnail(
   bricks: Brick[],
   size = BLUEPRINT_THUMB_SIZE,
   viewDir: THREE.Vector3 = VIEW_DIR,
+  crop = 0,
 ): Promise<string> {
   const cached = memo.get(key)
   if (cached) return cached
   // One render per macrotask so a burst of requests never blocks input.
   const result = queue
     .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
-    .then(() => render(bricks, size, viewDir))
+    .then(() => render(bricks, size, viewDir, crop))
     .then((url) => {
       if (!url) memo.delete(key) // failures are not remembered, so a later request can retry
       return url
@@ -142,4 +148,17 @@ export function getPartThumbnail(partId: string, color: number): Promise<string>
     // Unknown part: render() resolves '' for it anyway.
   }
   return getThumbnail(`part:${partId}:${color}`, [brick], PART_THUMB_SIZE, viewDir)
+}
+
+/** Small figure buttons show the figure from the hips up, so the face and print read. */
+const FIGURE_BUST_CROP = 0.3
+
+/**
+ * Thumbnail of a minifigure style: at button size (the default) its bust, larger (the figure
+ * editor's preview) the whole figure.
+ */
+export function getFigureThumbnail(fig: FigStyle, size = PART_THUMB_SIZE): Promise<string> {
+  const brick: Brick = { id: 'thumb', p: MINIFIG_PART, x: 0, y: 0, z: 0, r: 0, c: fig.torso, fig }
+  const crop = size <= PART_THUMB_SIZE ? FIGURE_BUST_CROP : 0
+  return getThumbnail(`fig:${figKey(fig)}:${size}`, [brick], size, FIGURE_VIEW_DIR, crop)
 }

@@ -218,6 +218,7 @@ function WorkshopWorld() {
   const { bricks, baseplate, kind } = workshop
   const tool = useEditor((s) => s.tool)
   const partId = useEditor((s) => s.partId)
+  const fig = useEditor((s) => s.fig)
   const rot = useEditor((s) => s.rot)
   const carried = useEditor((s) => s.carried)
   const errorSeq = useEditor((s) => s.errorSeq)
@@ -322,7 +323,7 @@ function WorkshopWorld() {
       <Baseplate size={baseplate} kind={kind} onPointer={onBaseplatePointer} />
       <InstancedBricks bricks={bricks} onBrickPointer={handlePointer} />
       {/* Always mounted (toggled via `visible`) so placing a brick never remounts it. */}
-      <GhostBrick partId={partId} rot={rot} anchor={anchor} valid={valid} visible={placing} shakeKey={errorSeq} />
+      <GhostBrick partId={partId} fig={fig} rot={rot} anchor={anchor} valid={valid} visible={placing} shakeKey={errorSeq} />
     </>
   )
 }

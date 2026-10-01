@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  MAX_BRICKS, MAX_HEIGHT_PLATES, addBrick, bounds, canPlace, moveBrick, paintBrick, removeBrick, rotateBrick,
+  MAX_BRICKS, MAX_HEIGHT_PLATES, addBrick, bounds, canPlace, moveBrick, paintBrick, removeBrick, restyleFigure, rotateBrick,
 } from './model'
+import { DEFAULT_FIG, figPreset } from './figures'
 import type { Baseplate, Brick } from './types'
 
 const bp: Baseplate = { w: 8, d: 8 }
@@ -71,6 +72,34 @@ describe('model operations', () => {
     const out = paintBrick(input, 'a', 5)
     expect(out[0].c).toBe(5)
     expect(input[0].c).toBe(0)
+  })
+  it('paintBrick on a figure recolours its torso (and keeps c in step with it)', () => {
+    const fig: Brick = { ...b('f', 0, 0, 0, 'minifig'), c: 0, fig: figPreset('chef') }
+    const out = paintBrick([fig], 'f', 2)
+    expect(out[0]).toEqual({ ...fig, c: 2, fig: { ...figPreset('chef'), torso: 2 } })
+    // A figure without a style starts from the default one.
+    const bare: Brick = { ...b('g', 0, 0, 0, 'minifig'), c: DEFAULT_FIG.torso }
+    expect(paintBrick([bare], 'g', 5)[0].fig).toEqual({ ...DEFAULT_FIG, torso: 5 })
+  })
+  it('restyleFigure sets a figure style immutably, c following the torso', () => {
+    const input: Brick[] = [{ ...b('f', 0, 0, 0, 'minifig'), fig: figPreset('chef') }, b('a', 4, 0, 4)]
+    const out = restyleFigure(input, 'f', figPreset('robber'))
+    expect(out[0]).toEqual({ ...input[0], c: figPreset('robber').torso, fig: figPreset('robber') })
+    expect(out[1]).toBe(input[1])
+    expect(input[0].fig).toEqual(figPreset('chef'))
+    // Only figures carry a style.
+    expect(restyleFigure(input, 'a', figPreset('robber'))).toBe(input)
+  })
+  it('places a figure like a brick: supported, colliding by its footprint, bricks on its head', () => {
+    const fig: Brick = { ...b('f', 2, 0, 2, 'minifig'), fig: figPreset('chef') }
+    expect(canPlace([], fig, bp)).toBeNull()
+    expect(canPlace([], { ...fig, y: 3 }, bp)).toBe('unsupported')
+    expect(canPlace([fig], { ...b('x', 3, 5, 2, 'brick_1x1') }, bp)).toBe('collision')
+    // A 1x1 brick on the head (12 plates up).
+    expect(canPlace([fig], { ...b('x', 3, 12, 2, 'brick_1x1') }, bp)).toBeNull()
+    // Standing on a plate.
+    const plate = b('p', 0, 0, 0, 'plate_4x4')
+    expect(canPlace([plate], { ...fig, y: 1 }, bp)).toBeNull()
   })
   it('rotateBrick rotates in place', () => {
     const input = [b('a', 0, 0, 0)]

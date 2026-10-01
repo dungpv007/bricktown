@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { COLORS, colorMaterialKind, type MaterialKind } from './colors'
-import { getPartGeometry } from './parts/geometry'
-import { getPrintGeometry } from './parts/printGeometry'
+import { figKey, figOf, isFigure } from './figures'
+import { brickBodyGeometry, brickPrintGeometry } from './parts/brickGeometry'
 import { brickCenter, QUARTER_COS, QUARTER_SIN } from './rotation'
 import type { Brick, Rot } from './types'
 
@@ -9,7 +9,7 @@ import type { Brick, Rot } from './types'
  * Baking merges a whole brick model into one geometry per material kind (see `MaterialKind`), so
  * the City can draw hundreds of buildings with a handful of draw calls. Each baked body vertex
  * carries its brick's colour in a linear-space `color` attribute (render with `vertexColors`
- * materials). Prints (see core/prints) go in one more geometry with atlas texture coordinates.
+ * materials); a minifigure keeps its own colours and always bakes opaque. Prints (see core/prints) go in one more geometry with atlas texture coordinates.
  */
 export interface BakedModel {
   opaque: THREE.BufferGeometry
@@ -48,14 +48,23 @@ export function disposeBaked(baked: BakedModel): void {
 const FALLBACK_HEX = '#ffffff'
 const tmpColor = new THREE.Color()
 
-/** Content key: part, position, rotation and colour of every brick (ids do not affect the geometry). */
+/**
+ * Content key: part, position, rotation and colour of every brick, plus a figure's look (ids do
+ * not affect the geometry).
+ */
 export function bakeKey(bricks: Brick[]): string {
-  return bricks.map((b) => `${b.p},${b.x},${b.y},${b.z},${b.r},${b.c}`).join(';')
+  return bricks
+    .map((b) => `${b.p},${b.x},${b.y},${b.z},${b.r},${b.c}${isFigure(b) ? `,${figKey(figOf(b))}` : ''}`)
+    .join(';')
 }
+
+/** Which colour material a brick's body bakes into: its colour's kind; figures are always opaque. */
+export const brickMaterialKind = (b: Brick): MaterialKind => (isFigure(b) ? 'opaque' : colorMaterialKind(b.c))
 
 /**
  * Merges one source geometry per brick, each moved by its brick's transform. With `colored`, every
- * vertex gets its brick's colour; a source `uv` attribute is carried over unchanged.
+ * vertex gets its brick's colour, or its own colour when the source has a `color` attribute (a
+ * figure); a source `uv` attribute is carried over unchanged.
  */
 function mergeBricks(
   bricks: Brick[],
@@ -79,6 +88,7 @@ function mergeBricks(
     const pos = src.getAttribute('position')
     const nor = src.getAttribute('normal')
     const uv = src.getAttribute('uv')
+    const own = src.getAttribute('color')
     const [cx, cy, cz] = brickCenter(b)
     const cos = QUARTER_COS[b.r as Rot]
     const sin = QUARTER_SIN[b.r as Rot]
@@ -95,9 +105,9 @@ function mergeBricks(
       normals[offset + 1] = nor.getY(v)
       normals[offset + 2] = -nx * sin + nz * cos
       if (colors) {
-        colors[offset] = tmpColor.r
-        colors[offset + 1] = tmpColor.g
-        colors[offset + 2] = tmpColor.b
+        colors[offset] = own ? own.getX(v) : tmpColor.r
+        colors[offset + 1] = own ? own.getY(v) : tmpColor.g
+        colors[offset + 2] = own ? own.getZ(v) : tmpColor.b
       }
       if (uvs) {
         const k = (offset / 3) * 2
@@ -117,8 +127,7 @@ function mergeBricks(
   return geometry
 }
 
-const bodyOf = (b: Brick) => getPartGeometry(b.p)
-const printOf = (b: Brick) => getPrintGeometry(b.p)!
+const printOf = (b: Brick) => brickPrintGeometry(b)!
 
 /**
  * Bakes without touching the cache. The caller owns the returned geometries and must dispose them.
@@ -126,11 +135,11 @@ const printOf = (b: Brick) => getPrintGeometry(b.p)!
  */
 export function bakeBricksUncached(bricks: Brick[]): BakedModel {
   const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
-  for (const b of bricks) byKind[colorMaterialKind(b.c)].push(b)
-  const printed = bricks.filter((b) => getPrintGeometry(b.p) !== null)
-  const optional = (list: Brick[]) => (list.length > 0 ? mergeBricks(list, bodyOf, true) : null)
+  for (const b of bricks) byKind[brickMaterialKind(b)].push(b)
+  const printed = bricks.filter((b) => brickPrintGeometry(b) !== null)
+  const optional = (list: Brick[]) => (list.length > 0 ? mergeBricks(list, brickBodyGeometry, true) : null)
   return {
-    opaque: mergeBricks(byKind.opaque, bodyOf, true),
+    opaque: mergeBricks(byKind.opaque, brickBodyGeometry, true),
     trans: optional(byKind.trans),
     metal: optional(byKind.metal),
     print: printed.length > 0 ? mergeBricks(printed, printOf, false) : null,

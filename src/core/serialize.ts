@@ -1,5 +1,6 @@
 import { COLORS } from './colors'
-import type { Baseplate, SaveData } from './types'
+import { parseFig } from './figures'
+import type { Baseplate, Blueprint, Brick, SaveData } from './types'
 
 export const SCHEMA_VERSION = 2
 
@@ -25,6 +26,8 @@ export const MIGRATIONS: Record<number, Migration> = {
    */
   1: (data) => data,
 }
+// `Brick.fig` (minifigure styles) was added later without a version bump: it is optional and purely
+// additive, older saves simply have no figures, and `normalize` drops any style it cannot read.
 
 const UNSUPPORTED = 'unsupported save'
 
@@ -67,6 +70,9 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
   return {
     ...(data as unknown as SaveData),
     schemaVersion: SCHEMA_VERSION,
+    blueprints: arrayOr<Blueprint>(data.blueprints, []).map((bp) =>
+      isRecord(bp) && Array.isArray(bp.bricks) ? { ...bp, bricks: normalizeBricks(bp.bricks) } : bp,
+    ),
     city: {
       size: isPositiveInt(city.size) ? city.size : empty.city.size,
       roads: arrayOr<string>(city.roads, []).filter((r) => typeof r === 'string'),
@@ -78,7 +84,7 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
         isRecord(baseplate) && isPositiveInt(baseplate.w) && isPositiveInt(baseplate.d)
           ? normalizePlate(baseplate.w, baseplate.d, baseplate.c)
           : empty.workshop.baseplate,
-      bricks: arrayOr(workshop.bricks, []),
+      bricks: normalizeBricks(arrayOr(workshop.bricks, [])),
       ...(typeof workshop.editingBlueprintId === 'string' ? { editingBlueprintId: workshop.editingBlueprintId } : {}),
     },
     guided:
@@ -87,6 +93,16 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
         : null,
     completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
   }
+}
+
+/** Bricks as stored, except that a figure style that is not valid is dropped (see `parseFig`). */
+function normalizeBricks(bricks: unknown[]): Brick[] {
+  return bricks.map((b) => {
+    if (!isRecord(b) || !('fig' in b)) return b as unknown as Brick
+    const { fig, ...rest } = b
+    const style = parseFig(fig)
+    return (style ? { ...rest, fig: style } : rest) as unknown as Brick
+  })
 }
 
 function normalizePlate(w: number, d: number, c: unknown): Baseplate {

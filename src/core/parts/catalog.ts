@@ -84,6 +84,9 @@ export const PARTS: PartDef[] = [
   printed('number', 'number_112', 2, 1),
   printed('heart', 'heart', 1, 1),
   printed('star', 'star', 1, 1),
+
+  // A minifigure: its look comes from `Brick.fig` (see core/figures), not the brick colour.
+  part('minifig', 'figure', 'minifig', 2, 1, 12, false, 1),
 ]
 
 export const PART_BY_ID: Record<string, PartDef> = Object.fromEntries(
@@ -97,5 +100,5 @@ export function getPart(id: string): PartDef {
 }
 
 export const PART_CATEGORIES: PartCategory[] = [
-  'brick', 'plate', 'slope', 'round', 'door_window', 'wheel', 'furniture', 'nature', 'decor',
+  'brick', 'plate', 'slope', 'round', 'door_window', 'wheel', 'furniture', 'nature', 'decor', 'figure',
 ]

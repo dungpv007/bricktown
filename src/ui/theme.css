@@ -1481,3 +1481,122 @@ form.bt-dialog,
   display: flex;
   gap: 16px;
 }
+
+/* ---------- Minifigures ---------- */
+
+/* Palette: the ✏️ button shows the figure about to be placed, with a pencil badge. */
+.bt-fig-edit-btn {
+  position: relative;
+  background: var(--bt-yellow);
+}
+
+.bt-fig-edit-badge {
+  position: absolute;
+  right: 2px;
+  bottom: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Figure buttons show a bust thumbnail, bigger than a brick's. */
+.bt-fig-btn .bt-part-thumb,
+.bt-fig-preset .bt-part-thumb {
+  width: 56px;
+  height: 56px;
+}
+
+/* Figure editor: a big live preview beside tabbed options (stacked on narrow screens). */
+.bt-fig-editor {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  width: min(100%, 920px);
+  max-height: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  border-radius: var(--bt-radius);
+  background: var(--bt-white);
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-fig-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 240px;
+  height: 240px;
+  border-radius: var(--bt-radius);
+  background: radial-gradient(circle at 50% 40%, #ffffff, #dbeefb);
+}
+
+.bt-fig-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.bt-fig-preview .bt-part-emoji {
+  font-size: 120px;
+  line-height: 1;
+}
+
+.bt-fig-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bt-fig-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bt-fig-tabs .bt-btn[aria-selected='true'] {
+  background: var(--bt-yellow);
+}
+
+.bt-fig-tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 72px; /* room for the ✓ button in the corner */
+}
+
+.bt-fig-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bt-fig-swatch {
+  width: var(--bt-touch);
+  height: var(--bt-touch);
+}
+
+.bt-fig-option[aria-pressed='true'],
+.bt-fig-preset[aria-pressed='true'] {
+  background: var(--bt-yellow);
+  outline: 4px solid var(--bt-ink);
+}
+
+.bt-fig-done {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+}
+
+@media (max-width: 700px) {
+  .bt-fig-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .bt-fig-preview {
+    width: 100%;
+    height: 180px;
+  }
+}

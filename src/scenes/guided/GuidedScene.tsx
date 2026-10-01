@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { getTemplate } from '../../content/templates'
 import { COLORS, GLASS_COLOR } from '../../core/colors'
 import { getPart } from '../../core/parts/catalog'
-import { getPartGeometry } from '../../core/parts/geometry'
+import { brickBodyGeometry } from '../../core/parts/brickGeometry'
 import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
 import { brickCenter } from '../../core/rotation'
 import { findMatch, placedBricks, type PlacedCandidate } from '../../core/template'
@@ -78,7 +78,7 @@ function TargetGhost({ brick, pulse = true, onPointer }: { brick: Brick; pulse?:
   return (
     <mesh
       ref={meshRef}
-      geometry={getPartGeometry(brick.p)}
+      geometry={brickBodyGeometry(brick)}
       material={material}
       position={brickCenter(brick)}
       rotation={[0, (brick.r * Math.PI) / 2, 0]}
@@ -102,6 +102,7 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
   const errorSeq = useGuided((s) => s.errorSeq)
   const easy = useApp((s) => s.difficulty === 'easy')
   const partId = useEditor((s) => s.partId)
+  const fig = useEditor((s) => s.fig)
   const rot = useEditor((s) => s.rot)
   const color = useEditor((s) => s.color)
   const consumeTap = useTap()
@@ -208,7 +209,7 @@ function TemplateWorld({ template, guided, celebrating }: WorldProps) {
         <TargetGhost key={b.id} brick={b} pulse={!viewingPast} onPointer={interactive ? onGhostPointer : undefined} />
       ))}
       {normalTaps && anchor && (
-        <GhostBrick partId={partId} rot={rot} anchor={anchor} valid={previewValid} shakeKey={errorSeq} />
+        <GhostBrick partId={partId} fig={fig} rot={rot} anchor={anchor} valid={previewValid} shakeKey={errorSeq} />
       )}
     </>
   )
