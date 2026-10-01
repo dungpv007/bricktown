@@ -18,15 +18,21 @@ export const glassMaterial = new THREE.MeshStandardMaterial({
 export const GHOST_OPACITY = 0.5
 
 /**
- * The placement preview material. Each ghost owns one (its tint and emissive pulse are animated
- * per frame), so the caller disposes it on unmount.
+ * The placement preview material, shared like the others (compiled once, never disposed).
+ * Only one ghost is shown at a time; GhostBrick sets its tint and emissive pulse each frame.
+ */
+export const ghostMaterial = new THREE.MeshStandardMaterial({
+  roughness: 0.4,
+  metalness: 0,
+  transparent: true,
+  opacity: GHOST_OPACITY,
+  depthWrite: false,
+})
+
+/**
+ * A copy of `ghostMaterial` for callers that need several differently tinted previews at once
+ * (same shader settings, so three reuses the compiled program). The caller disposes it.
  */
 export function createGhostMaterial(): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
-    roughness: 0.4,
-    metalness: 0,
-    transparent: true,
-    opacity: GHOST_OPACITY,
-    depthWrite: false,
-  })
+  return ghostMaterial.clone()
 }

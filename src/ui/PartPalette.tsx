@@ -116,7 +116,7 @@ export default function PartPalette() {
   const parts = PARTS.filter((p) => p.category === category)
 
   return (
-    <div className="bt-palette bt-panel">
+    <div className="bt-palette bt-hud-panel">
       <div className="bt-palette-row" role="tablist">
         {PART_CATEGORIES.map((c) => (
           <button

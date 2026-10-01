@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Baseplate, BlueprintKind } from '../../core/types'
 import { useEditor } from '../../state/useEditor'
+import { useGame } from '../../state/useGame'
 import ColorPicker from '../../ui/ColorPicker'
 import { useT, type TKey } from '../../ui/i18n'
 import PartPalette from '../../ui/PartPalette'
@@ -27,30 +28,61 @@ const ERROR_ICON_MS = 900
 function NewModelPicker({ onClose }: { onClose: () => void }) {
   const t = useT()
   const newModel = useEditor((s) => s.newModel)
+  const hasBricks = useGame((s) => s.data.workshop.bricks.length > 0)
+  // Starting over wipes the current build (and its undo history), so ask first when there is one.
+  const [pending, setPending] = useState<ModelOption | null>(null)
+  const start = (o: ModelOption) => {
+    newModel(o.kind, o.baseplate)
+    onClose()
+  }
+
   return (
     <div className="bt-modal-backdrop" onClick={onClose}>
-      <div className="bt-modal" role="dialog" aria-label={t('newModel')} onClick={(e) => e.stopPropagation()}>
-        <div className="bt-cards">
-          {MODEL_OPTIONS.map((o) => (
-            <button
-              key={o.id}
-              className="bt-card"
-              style={{ background: o.color }}
-              data-testid={`new-model-${o.id}`}
-              onClick={() => {
-                newModel(o.kind, o.baseplate)
-                onClose()
-              }}
-            >
-              <span className="bt-card-icon" aria-hidden="true">{o.icon}</span>
-              {o.labelKeys.map((k) => t(k)).join(' ')}
-              <span className="bt-card-size">{`${o.baseplate.w}×${o.baseplate.d}`}</span>
+      <div className="bt-ws-dialog" role="dialog" aria-label={t('newModel')} onClick={(e) => e.stopPropagation()}>
+        {pending ? (
+          <div className="bt-ws-confirm" data-testid="new-model-confirm-step">
+            <span className="bt-ws-confirm-icon" aria-hidden="true">🧱➜🗑️</span>
+            <div className="bt-row">
+              <button
+                className="bt-btn bt-ws-confirm-btn bt-ws-confirm-no"
+                data-testid="new-model-cancel"
+                aria-label={t('back')}
+                onClick={() => setPending(null)}
+              >
+                ✗
+              </button>
+              <button
+                className="bt-btn bt-ws-confirm-btn bt-ws-confirm-yes"
+                data-testid="new-model-confirm"
+                aria-label={t('newModel')}
+                onClick={() => start(pending)}
+              >
+                ✓
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="bt-cards">
+              {MODEL_OPTIONS.map((o) => (
+                <button
+                  key={o.id}
+                  className="bt-card"
+                  style={{ background: o.color }}
+                  data-testid={`new-model-${o.id}`}
+                  onClick={() => (hasBricks ? setPending(o) : start(o))}
+                >
+                  <span className="bt-card-icon" aria-hidden="true">{o.icon}</span>
+                  {o.labelKeys.map((k) => t(k)).join(' ')}
+                  <span className="bt-card-size">{`${o.baseplate.w}×${o.baseplate.d}`}</span>
+                </button>
+              ))}
+            </div>
+            <button className="bt-btn" data-testid="new-model-close" aria-label={t('close')} onClick={onClose}>
+              ✕
             </button>
-          ))}
-        </div>
-        <button className="bt-btn" data-testid="new-model-close" aria-label={t('close')} onClick={onClose}>
-          ✕
-        </button>
+          </>
+        )}
       </div>
     </div>
   )

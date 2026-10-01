@@ -156,7 +156,8 @@
   pointer-events: auto;
 }
 
-.bt-panel {
+/* Translucent HUD panel; not .bt-panel, which is the slot menu dialog. */
+.bt-hud-panel {
   box-sizing: border-box;
   padding: 6px;
   border-radius: var(--bt-radius);
@@ -356,7 +357,7 @@
   background: rgba(27, 42, 65, 0.45);
 }
 
-.bt-modal {
+.bt-ws-dialog {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -485,4 +486,32 @@
 .bt-warning {
   font-size: 40px;
   line-height: 1;
+}
+
+.bt-ws-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 8px 0;
+}
+
+.bt-ws-confirm-icon {
+  font-size: 64px;
+  line-height: 1;
+}
+
+.bt-ws-confirm-btn {
+  width: 120px;
+  height: 96px;
+  font-size: 48px;
+  color: var(--bt-white);
+}
+
+.bt-ws-confirm-no {
+  background: var(--bt-red);
+}
+
+.bt-ws-confirm-yes {
+  background: var(--bt-green);
 }

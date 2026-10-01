@@ -4,7 +4,7 @@ import { OrbitControls, PerspectiveCamera, Stats } from '@react-three/drei'
 import * as THREE from 'three'
 import { canPlace } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
-import { rotateNormalY, targetAnchor, type Vec3 } from '../../core/pick'
+import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
 import type { Baseplate as BaseplateSize, Brick } from '../../core/types'
 import { useTap } from '../../input/useTap'
 import GhostBrick from '../../render/GhostBrick'
@@ -95,13 +95,22 @@ function WorkshopWorld() {
   const errorSeq = useEditor((s) => s.errorSeq)
   const consumeTap = useTap()
 
-  const [anchor, setAnchorState] = useState<Anchor | null>(null)
-  const anchorRef = useRef<Anchor | null>(null)
-  const setAnchor = useCallback((next: Anchor | null) => {
-    if (sameAnchor(anchorRef.current, next)) return
-    anchorRef.current = next
-    setAnchorState(next)
+  // The last pointer hit is kept (not just the anchor) so the anchor re-centres right away when
+  // only the part or rotation changes. It is stored only when it moves the anchor.
+  const [hit, setHitState] = useState<PickHit | null>(null)
+  const hitRef = useRef<PickHit | null>(null)
+  const setHit = useCallback((next: PickHit | null) => {
+    const prev = hitRef.current
+    if (prev === next) return
+    if (prev && next) {
+      const { partId: p, rot: r } = useEditor.getState()
+      const part = getPart(p)
+      if (sameAnchor(targetAnchor(prev, part, r), targetAnchor(next, part, r))) return
+    }
+    hitRef.current = next
+    setHitState(next)
   }, [])
+  const anchor = useMemo(() => (hit ? targetAnchor(hit, getPart(partId), rot) : null), [hit, partId, rot])
 
   const placing = tool === 'place' || carried !== null
 
@@ -109,11 +118,11 @@ function WorkshopWorld() {
   useEffect(() => {
     // Mouse left the 3D view (e.g. onto the toolbars): drop the hover preview.
     const onLeave = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') setAnchor(null)
+      if (e.pointerType === 'mouse') setHit(null)
     }
     el.addEventListener('pointerleave', onLeave)
     return () => el.removeEventListener('pointerleave', onLeave)
-  }, [el, setAnchor])
+  }, [el, setHit])
 
   // canPlace rebuilds an occupancy grid, so it only runs when the target actually changes.
   const ax = anchor?.x
@@ -131,36 +140,37 @@ function WorkshopWorld() {
       const type = e.nativeEvent.type
       const ed = useEditor.getState()
       const isPlacing = ed.tool === 'place' || ed.carried !== null
-      const computeAnchor = (): Anchor | null => {
+      const pickHit = (): PickHit | null => {
         if (!e.face) return null
         const local: Vec3 = [e.face.normal.x, e.face.normal.y, e.face.normal.z]
         const normal = brick ? rotateNormalY(local, brick.r) : local
-        return targetAnchor({ point: [e.point.x, e.point.y, e.point.z], normal, brick }, getPart(ed.partId), ed.rot)
+        return { point: [e.point.x, e.point.y, e.point.z], normal, brick }
       }
 
       if (type === 'pointermove') {
         // Hover only: a held button or finger means the camera is being dragged.
-        if (isPlacing && e.pointerType === 'mouse' && e.buttons === 0) setAnchor(computeAnchor())
+        if (isPlacing && e.pointerType === 'mouse' && e.buttons === 0) setHit(pickHit())
         return
       }
       if (type === 'pointerdown') {
-        if (isPlacing) setAnchor(computeAnchor())
+        if (isPlacing) setHit(pickHit())
         return
       }
       if (type !== 'pointerup' || !consumeTap(e.pointerId)) return
 
       if (isPlacing) {
-        const a = computeAnchor()
-        if (!a) return
-        setAnchor(a)
+        const h = pickHit()
+        if (!h) return
+        setHit(h)
+        const a = targetAnchor(h, getPart(ed.partId), ed.rot)
         ed.place(a.x, a.y, a.z)
         // The ghost would now sit inside the new brick; hide it until the pointer moves again.
-        if (useEditor.getState().lastError === null) setAnchor(null)
+        if (useEditor.getState().lastError === null) setHit(null)
       } else if (brick) {
         ed.tapBrick(brick.id)
       }
     },
-    [consumeTap, setAnchor],
+    [consumeTap, setHit],
   )
 
   const onBaseplatePointer = useCallback((e: ThreeEvent<PointerEvent>) => handlePointer(e, null), [handlePointer])
@@ -175,9 +185,8 @@ function WorkshopWorld() {
       </mesh>
       <Baseplate size={baseplate} kind={kind} onPointer={onBaseplatePointer} />
       <InstancedBricks bricks={bricks} onBrickPointer={handlePointer} />
-      {placing && anchor && (
-        <GhostBrick partId={partId} rot={rot} anchor={anchor} valid={valid} shakeKey={errorSeq} />
-      )}
+      {/* Always mounted (toggled via `visible`) so placing a brick never remounts it. */}
+      <GhostBrick partId={partId} rot={rot} anchor={anchor} valid={valid} visible={placing} shakeKey={errorSeq} />
     </>
   )
 }

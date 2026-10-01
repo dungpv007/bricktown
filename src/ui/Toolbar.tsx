@@ -21,7 +21,7 @@ export default function Toolbar() {
   const canRedo = useEditor((s) => s.canRedo && s.carried === null)
 
   return (
-    <div className="bt-toolbar bt-panel" role="toolbar" aria-orientation="vertical">
+    <div className="bt-toolbar bt-hud-panel" role="toolbar" aria-orientation="vertical">
       {TOOLS.map(({ tool, icon, labelKey }) => (
         <button
           key={tool}

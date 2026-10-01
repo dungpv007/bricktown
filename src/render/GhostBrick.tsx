@@ -1,16 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getPartGeometry } from '../core/parts/geometry'
 import { brickCenter } from '../core/rotation'
 import type { Rot } from '../core/types'
-import { createGhostMaterial } from './materials'
+import { ghostMaterial } from './materials'
 
 interface Props {
   partId: string
   rot: Rot
-  anchor: { x: number; y: number; z: number }
+  /** Where the part would go; null hides the ghost. */
+  anchor: { x: number; y: number; z: number } | null
   valid: boolean
+  /**
+   * Keep the ghost mounted and toggle this instead of unmounting it, so showing it again after
+   * each placement costs nothing. Defaults to true.
+   */
+  visible?: boolean
   /** Changes whenever an action is rejected; each change plays a short shake. */
   shakeKey?: number
 }
@@ -19,13 +25,14 @@ const VALID_TINT = new THREE.Color('#3ddc84')
 const INVALID_TINT = new THREE.Color('#ff3b30')
 const SHAKE_SECONDS = 0.35
 const SHAKE_AMPLITUDE = 0.12
+const ORIGIN = { x: 0, y: 0, z: 0 }
 const noRaycast = () => null
 
-/** Translucent preview of the part about to be placed; green when it fits, red when it does not. */
-export default function GhostBrick({ partId, rot, anchor, valid, shakeKey = 0 }: Props) {
-  const [material] = useState(createGhostMaterial)
-  useEffect(() => () => material.dispose(), [material])
-
+/**
+ * Translucent preview of the part about to be placed; green when it fits, red when it does not.
+ * Uses the shared `ghostMaterial` (one ghost on screen at a time), tinted every frame.
+ */
+export default function GhostBrick({ partId, rot, anchor, valid, visible = true, shakeKey = 0 }: Props) {
   const meshRef = useRef<THREE.Mesh>(null)
   const shakeStart = useRef<number | null>(null)
   const firstShakeKey = useRef(shakeKey)
@@ -33,11 +40,13 @@ export default function GhostBrick({ partId, rot, anchor, valid, shakeKey = 0 }:
     if (shakeKey !== firstShakeKey.current) shakeStart.current = performance.now()
   }, [shakeKey])
 
-  const [cx, cy, cz] = brickCenter({ id: 'ghost', p: partId, x: anchor.x, y: anchor.y, z: anchor.z, r: rot, c: 0 })
+  const shown = visible && anchor !== null
+  const a = anchor ?? ORIGIN
+  const [cx, cy, cz] = brickCenter({ id: 'ghost', p: partId, x: a.x, y: a.y, z: a.z, r: rot, c: 0 })
 
   useFrame(({ clock }) => {
     const mesh = meshRef.current
-    if (!mesh) return
+    if (!mesh || !mesh.visible) return
     const mat = mesh.material as THREE.MeshStandardMaterial
     const tint = valid ? VALID_TINT : INVALID_TINT
     mat.color.copy(tint)
@@ -56,8 +65,9 @@ export default function GhostBrick({ partId, rot, anchor, valid, shakeKey = 0 }:
   return (
     <mesh
       ref={meshRef}
+      visible={shown}
       geometry={getPartGeometry(partId)}
-      material={material}
+      material={ghostMaterial}
       position={[cx, cy, cz]}
       rotation={[0, (rot * Math.PI) / 2, 0]}
       raycast={noRaycast}

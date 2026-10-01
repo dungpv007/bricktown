@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useThree } from '@react-three/fiber'
-
-/** Tap = pointer down -> up within 250 ms and < 8 px of movement, with no second finger involved. */
-export const TAP_MAX_MS = 250
-export const TAP_MAX_PX = 8
-
-interface Down {
-  id: number
-  x: number
-  y: number
-  t: number
-}
+import { isTap, type TapDown } from './tapGesture'
 
 /**
  * Tracks pointer gestures on the R3F canvas (must be used inside `<Canvas>`).
@@ -20,7 +10,7 @@ interface Down {
 export function useTap(): (pointerId: number) => boolean {
   const el = useThree((s) => s.gl.domElement)
   const active = useRef(new Set<number>())
-  const down = useRef<Down | null>(null)
+  const down = useRef<(TapDown & { id: number }) | null>(null)
   const multi = useRef(false)
   const tapPointer = useRef<number | null>(null)
 
@@ -30,22 +20,26 @@ export function useTap(): (pointerId: number) => boolean {
     // pointerup to scene objects. Window also sees releases outside the canvas (over the UI).
     const onDown = (e: PointerEvent) => {
       tapPointer.current = null
+      // A primary pointer starts a fresh gesture, so a pointerup lost earlier (e.g. released
+      // outside the window) cannot make every later tap look like a pinch.
+      if (e.isPrimary) active.current.clear()
       active.current.add(e.pointerId)
       if (active.current.size === 1) {
-        down.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp }
-        // Only the primary mouse button taps; right/middle drag pans the camera.
-        multi.current = e.button !== 0
+        down.current = { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, button: e.button }
+        multi.current = false
       } else {
         multi.current = true
       }
     }
     const onUp = (e: PointerEvent) => {
+      // Any release invalidates an older verdict: only this pointerup may be a tap.
+      tapPointer.current = null
       active.current.delete(e.pointerId)
       const d = down.current
       if (d && d.id === e.pointerId) {
-        const moved = Math.hypot(e.clientX - d.x, e.clientY - d.y)
-        const quick = e.timeStamp - d.t <= TAP_MAX_MS
-        tapPointer.current = !multi.current && quick && moved < TAP_MAX_PX ? e.pointerId : null
+        if (isTap(d, { x: e.clientX, y: e.clientY, t: e.timeStamp }, multi.current)) {
+          tapPointer.current = e.pointerId
+        }
         down.current = null
       }
     }

@@ -8,7 +8,7 @@ export default function ColorPicker() {
   const current = useEditor((s) => s.color)
   const setColor = useEditor((s) => s.setColor)
   return (
-    <div className="bt-colors bt-panel" role="group">
+    <div className="bt-colors bt-hud-panel" role="group">
       {COLORS.map((c) => (
         <button
           key={c.id}
