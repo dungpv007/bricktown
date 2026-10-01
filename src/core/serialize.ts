@@ -1,10 +1,14 @@
 import { COLORS } from './colors'
+import { newId } from './ids'
 import { MINIFIG_PART, parseFig } from './figures'
 import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, isBorder, isCorner, type Cell, type Maze } from './maze'
 import { validateTemplate } from './template'
 import type { Baseplate, Blueprint, Brick, MazeChallenge, MazeRecord, SaveData, Template } from './types'
 
 export const SCHEMA_VERSION = 3
+
+/** Best runs of the ready-made mazes are kept under `tpl:<template id>`. */
+const TEMPLATE_KEY_PREFIX = 'tpl:'
 
 export function createEmptySave(): SaveData {
   return {
@@ -168,7 +172,10 @@ function normalizeMazes(raw: unknown[]): Maze[] {
   const out: Maze[] = []
   for (const m of raw) {
     if (!isRecord(m) || typeof m.id !== 'string' || m.id === '' || seen.has(m.id) || !isMazeSize(m.w) || !isMazeSize(m.h)) continue
+    // `tpl:<id>` keys a ready-made maze's best run: a kid's maze must never share it.
+    const id = m.id.startsWith(TEMPLATE_KEY_PREFIX) ? newId('maze') : m.id
     seen.add(m.id)
+    seen.add(id)
     const dims = { w: m.w, h: m.h }
     const keys = (v: unknown): string[] => {
       const valid = arrayOr<unknown>(v, []).filter((k): k is string => {
@@ -197,7 +204,7 @@ function normalizeMazes(raw: unknown[]): Maze[] {
       }
     }
     out.push({
-      id: m.id,
+      id,
       name: typeof m.name === 'string' ? m.name : '',
       w: m.w,
       h: m.h,

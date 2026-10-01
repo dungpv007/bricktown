@@ -292,6 +292,20 @@ describe('serialize: mazes (schema 3)', () => {
     expect('templateId' in m3).toBe(false)
   })
 
+  it('gives a kid’s maze stored under a ready-made maze id (tpl:…) a fresh id, so it never shares that record', () => {
+    const out = migrate({
+      ...createEmptySave(),
+      mazes: [maze({ id: 'tpl:easy' }), maze({ id: 'm2' })],
+      mazeRecords: { 'tpl:easy': { timeMs: 900, stars: 1, coins: 0 } },
+    })
+    expect(out.mazes).toHaveLength(2)
+    const [renamed, kept] = out.mazes
+    expect(renamed.id).toMatch(/^maze_/)
+    expect(renamed).toEqual({ ...maze(), id: renamed.id })
+    expect(kept.id).toBe('m2')
+    expect(out.mazeRecords).toEqual({ 'tpl:easy': { timeMs: 900, stars: 1, coins: 0 } }) // still the template's
+  })
+
   it('drops doors that break the maze rules, walling their gap', () => {
     const doorsAt = (entry: object | null, exit: object | null, extra: Partial<Maze> = {}) =>
       migrate({ ...createEmptySave(), mazes: [{ ...maze(), ...extra, entry, exit }] }).mazes[0]
