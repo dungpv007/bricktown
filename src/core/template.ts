@@ -1,12 +1,17 @@
 import { COLORS } from './colors'
 import { newId } from './ids'
 import { canPlace } from './model'
+import { Occupancy } from './occupancy'
 import { PART_BY_ID } from './parts/catalog'
 import { rotEquivalent } from './rotation'
 import type { Blueprint, Brick, GuidedState, LocalizedText, Template } from './types'
 
-/** Groups brick indices into build steps: layer by layer (y, then z, then x), at most `maxPerStep` per step. */
+/**
+ * Groups brick indices into build steps: layer by layer (y, then z, then x), at most `maxPerStep`
+ * per step (values below 1 count as 1).
+ */
 export function autoSteps(bricks: Brick[], maxPerStep = 4): number[][] {
+  const max = maxPerStep >= 1 ? Math.floor(maxPerStep) : 1
   const order = bricks
     .map((_, i) => i)
     .sort((a, b) => bricks[a].y - bricks[b].y || bricks[a].z - bricks[b].z || bricks[a].x - bricks[b].x)
@@ -14,7 +19,7 @@ export function autoSteps(bricks: Brick[], maxPerStep = 4): number[][] {
   let current: number[] = []
   for (const i of order) {
     const startsNewLayer = current.length > 0 && bricks[current[0]].y !== bricks[i].y
-    if (current.length >= maxPerStep || startsNewLayer) {
+    if (current.length >= max || startsNewLayer) {
       steps.push(current)
       current = []
     }
@@ -114,15 +119,19 @@ export function validateTemplate(t: Template): string[] {
     else if (n > 1) problems.push(`brick ${b.id}: appears in ${n} steps`)
   })
 
-  const placed: Brick[] = []
-  for (const step of t.steps) {
-    for (const i of step) {
-      const b = t.bricks[i]
-      if (!b || !PART_BY_ID[b.p]) continue
-      const error = canPlace(placed, b, t.baseplate)
+  // Kids may place a step's bricks in any order, so each brick must fit using only the bricks of
+  // earlier steps (support, bounds, collisions), and must not overlap another brick of its step.
+  const earlier: Brick[] = []
+  t.steps.forEach((step, s) => {
+    if (step.length === 0) problems.push(`step ${s}: empty`)
+    const stepBricks = step.map((i) => t.bricks[i]).filter((b) => b !== undefined && PART_BY_ID[b.p] !== undefined)
+    const sameStep = new Occupancy()
+    for (const b of stepBricks) {
+      const error = canPlace(earlier, b, t.baseplate) ?? (sameStep.collides(b) ? 'collision' : null)
       if (error) problems.push(`brick ${b.id}: cannot be placed in step order (${error})`)
-      placed.push(b)
+      sameStep.add(b)
     }
-  }
+    earlier.push(...stepBricks)
+  })
   return problems
 }

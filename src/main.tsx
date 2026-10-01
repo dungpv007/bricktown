@@ -6,9 +6,10 @@ import './ui/theme.css'
 import { useApp } from './state/useApp'
 import { useEditor } from './state/useEditor'
 import { useGame } from './state/useGame'
+import { useGuided } from './state/useGuided'
 
 if (import.meta.env.DEV) {
-  ;(window as unknown as { __bt: unknown }).__bt = { useApp, useGame, useEditor }
+  ;(window as unknown as { __bt: unknown }).__bt = { useApp, useGame, useEditor, useGuided }
 }
 
 createRoot(document.getElementById('root')!).render(

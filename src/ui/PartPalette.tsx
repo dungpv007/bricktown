@@ -26,7 +26,7 @@ const ICON = 44
 const STROKE = 'rgba(0,0,0,0.35)'
 
 /** Small SVG silhouette of a part: top view for boxes / round parts, side view for slopes. */
-function PartIcon({ part, color }: { part: PartDef; color: string }) {
+export function PartIcon({ part, color }: { part: PartDef; color: string }) {
   const emoji = SHAPE_EMOJI[part.shape]
   if (emoji) return <span className="bt-part-emoji" aria-hidden="true">{emoji}</span>
 
@@ -99,8 +99,13 @@ function PartIcon({ part, color }: { part: PartDef; color: string }) {
 
 const sizeLabel = (p: PartDef) => `${p.w}×${p.d}`
 
+interface Props {
+  /** Show only these parts (no category tabs), e.g. the parts of a Guided Build step. */
+  allowedParts?: string[]
+}
+
 /** Bottom drawer: category tabs, the current-part rotate button and the parts of that category. */
-export default function PartPalette() {
+export default function PartPalette({ allowedParts }: Props = {}) {
   const t = useT()
   const category = useEditor((s) => s.category)
   const partId = useEditor((s) => s.partId)
@@ -113,26 +118,30 @@ export default function PartPalette() {
   const rotateCurrent = useEditor((s) => s.rotateCurrent)
   const hex = COLORS[color]?.hex ?? '#ffffff'
   const current = PARTS.find((p) => p.id === partId)
-  const parts = PARTS.filter((p) => p.category === category)
+  const parts = allowedParts
+    ? PARTS.filter((p) => allowedParts.includes(p.id))
+    : PARTS.filter((p) => p.category === category)
 
   return (
     <div className="bt-palette bt-hud-panel">
-      <div className="bt-palette-row" role="tablist">
-        {PART_CATEGORIES.map((c) => (
-          <button
-            key={c}
-            role="tab"
-            className="bt-btn bt-icon-btn"
-            data-testid={`category-${c}`}
-            aria-label={t(CATEGORY_TABS[c].labelKey)}
-            aria-selected={category === c}
-            aria-pressed={category === c}
-            onClick={() => setCategory(c)}
-          >
-            {CATEGORY_TABS[c].icon}
-          </button>
-        ))}
-      </div>
+      {!allowedParts && (
+        <div className="bt-palette-row" role="tablist">
+          {PART_CATEGORIES.map((c) => (
+            <button
+              key={c}
+              role="tab"
+              className="bt-btn bt-icon-btn"
+              data-testid={`category-${c}`}
+              aria-label={t(CATEGORY_TABS[c].labelKey)}
+              aria-selected={category === c}
+              aria-pressed={category === c}
+              onClick={() => setCategory(c)}
+            >
+              {CATEGORY_TABS[c].icon}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="bt-palette-row bt-palette-parts">
         <button
           className="bt-btn bt-part-btn bt-rotate-btn"

@@ -57,6 +57,11 @@ describe('autoSteps', () => {
     expect(flat).toEqual(bricks.map((_, i) => i))
   })
 
+  it('never produces an empty step when maxPerStep <= 0 (clamps to 1)', () => {
+    const bricks = [brick('a', 'brick_1x1', 0, 0, 0), brick('b', 'brick_1x1', 1, 0, 0)]
+    expect(autoSteps(bricks, 0)).toEqual([[0], [1]])
+    expect(autoSteps(bricks, -3)).toEqual([[0], [1]])
+  })
   it('handles no bricks', () => {
     expect(autoSteps([])).toEqual([])
   })
@@ -166,6 +171,23 @@ describe('validateTemplate', () => {
     const problems = validateTemplate(t)
     expect(problems.some((p) => p.includes('unknown part nope'))).toBe(true)
     expect(problems.some((p) => p.includes('color 99 out of range'))).toBe(true)
+  })
+  it('reports a brick that only rests on a brick of its own step (kids may place in any order)', () => {
+    const t = sample()
+    // t-3 sits on t-2 (y=3, plate h=1 -> y=4) but both are in the same step.
+    t.bricks.push(brick('t-3', 'plate_2x2', 0, 4, 0))
+    t.steps = [[0, 1], [2, 3]]
+    expect(validateTemplate(t).some((p) => p.includes('t-3') && p.includes('unsupported'))).toBe(true)
+  })
+  it('still reports collisions between bricks of the same step', () => {
+    const t = sample()
+    t.bricks.push(brick('t-3', 'plate_2x2', 1, 3, 0))
+    t.steps = [[0, 1], [2, 3]]
+    expect(validateTemplate(t).some((p) => p.includes('t-3') && p.includes('collision'))).toBe(true)
+  })
+  it('reports empty steps', () => {
+    const t = { ...sample(), steps: [[0, 1], [], [2]] }
+    expect(validateTemplate(t).some((p) => p.includes('step 1') && p.includes('empty'))).toBe(true)
   })
   it('reports out-of-range step indices', () => {
     const t = { ...sample(), steps: [[0, 1], [2, 7]] }

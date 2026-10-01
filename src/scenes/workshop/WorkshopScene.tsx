@@ -13,7 +13,7 @@ import { useEditor } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
 
-const SKY = '#87ceeb'
+export const SKY = '#87ceeb'
 const GROUND = '#a9dc9b'
 const SHADOW_MAP_SIZE = 1024
 
@@ -22,7 +22,7 @@ type Anchor = { x: number; y: number; z: number }
 const sameAnchor = (a: Anchor | null, b: Anchor | null) =>
   a === b || (a !== null && b !== null && a.x === b.x && a.y === b.y && a.z === b.z)
 
-function Lights({ size }: { size: BaseplateSize }) {
+export function Lights({ size }: { size: BaseplateSize }) {
   const light = useRef<THREE.DirectionalLight>(null)
   const target = useMemo(() => new THREE.Object3D(), [])
   const cx = size.w / 2
@@ -60,7 +60,7 @@ function Lights({ size }: { size: BaseplateSize }) {
 }
 
 /** Camera + orbit controls framing the baseplate; remounted (reset) when the plate size changes. */
-function CameraRig({ size }: { size: BaseplateSize }) {
+export function CameraRig({ size }: { size: BaseplateSize }) {
   const span = Math.max(size.w, size.d)
   const dist = span * 1.5 + 8
   const target: Vec3 = [size.w / 2, 0, size.d / 2]
@@ -82,6 +82,16 @@ function CameraRig({ size }: { size: BaseplateSize }) {
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
       />
     </>
+  )
+}
+
+/** Big grass plane under the baseplate. */
+export function Ground({ size }: { size: BaseplateSize }) {
+  return (
+    <mesh position={[size.w / 2, -0.2, size.d / 2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <planeGeometry args={[400, 400]} />
+      <meshStandardMaterial color={GROUND} roughness={1} />
+    </mesh>
   )
 }
 
@@ -179,10 +189,7 @@ function WorkshopWorld() {
     <>
       <CameraRig key={`${baseplate.w}x${baseplate.d}`} size={baseplate} />
       <Lights size={baseplate} />
-      <mesh position={[baseplate.w / 2, -0.2, baseplate.d / 2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[400, 400]} />
-        <meshStandardMaterial color={GROUND} roughness={1} />
-      </mesh>
+      <Ground size={baseplate} />
       <Baseplate size={baseplate} kind={kind} onPointer={onBaseplatePointer} />
       <InstancedBricks bricks={bricks} onBrickPointer={handlePointer} />
       {/* Always mounted (toggled via `visible`) so placing a brick never remounts it. */}
