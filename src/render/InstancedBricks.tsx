@@ -28,6 +28,15 @@ interface BrickGroupData {
 
 const MIN_CAPACITY = 16
 
+/**
+ * The brick drawn by instance `instanceId` of `object`, when `object` is one of the instanced
+ * meshes here (for callers raycasting the scene themselves); undefined otherwise.
+ */
+export function brickOfInstance(object: THREE.Object3D, instanceId: number | undefined): Brick | undefined {
+  const bricks = object.userData.bricks as Brick[] | undefined
+  return bricks && instanceId !== undefined ? bricks[instanceId] : undefined
+}
+
 function groupBricks(bricks: Brick[]): BrickGroupData[] {
   const groups = new Map<string, BrickGroupData>()
   const add = (b: Brick, kind: BakedKind) => {
@@ -78,6 +87,7 @@ function BrickGroup({ sample, kind, bricks, onBrickPointer }: Omit<BrickGroupDat
       if (!uncolored) mesh.setColorAt(i, tmpColor.set(COLORS[b.c]?.hex ?? '#ffffff'))
     })
     mesh.count = bricks.length
+    mesh.userData.bricks = bricks // instance i draws bricks[i] (see brickOfInstance)
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     // Raycasting and frustum culling use these; they go stale whenever instances move.

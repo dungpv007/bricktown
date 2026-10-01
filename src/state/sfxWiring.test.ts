@@ -29,7 +29,6 @@ beforeEach(() => {
   vi.clearAllMocks()
   useGame.setState({ data: createEmptySave() })
   ed().newModel('building', { w: 16, d: 16 })
-  ed().setTool('place')
   ed().setPart('brick_2x4')
   useEditor.setState({ rot: 0 })
 })
@@ -43,16 +42,24 @@ describe('workshop sounds', () => {
     expect(sfx.snap).toHaveBeenCalledTimes(1)
   })
 
-  it('paint and pop for the paint and delete tools', () => {
-    ed().place(0, 0, 0)
-    const { id, c } = useGame.getState().data.workshop.bricks[0]
-    ed().setTool('paint')
-    ed().setColor(c + 1) // a different colour: repainting the same one is a silent no-op
-    ed().tapBrick(id)
+  it('paint and pop for recolouring and deleting the selected brick', () => {
+    ed().place(0, 0, 0) // and selects it
+    const { c } = useGame.getState().data.workshop.bricks[0]
+    ed().paintSelected(c + 1) // a different colour: repainting the same one is a silent no-op
     expect(sfx.paint).toHaveBeenCalledTimes(1)
-    ed().setTool('delete')
-    ed().tapBrick(id)
+    ed().deleteSelected()
     expect(sfx.pop).toHaveBeenCalledTimes(1)
+  })
+
+  it('snap for a move, a turn and a copy of the selected brick', () => {
+    ed().place(0, 0, 0)
+    const { id } = useGame.getState().data.workshop.bricks[0]
+    vi.clearAllMocks()
+    ed().moveBrick(id, { x: 4, y: 0, z: 4 })
+    ed().rotateSelected()
+    ed().duplicateSelected()
+    expect(sfx.snap).toHaveBeenCalledTimes(3)
+    expect(sfx.error).not.toHaveBeenCalled()
   })
   it('snap on plate grow, pop on shrink, error on a rejected resize', () => {
     ed().resizePlate('E', 'grow')

@@ -10,11 +10,13 @@ export const MAX_BRICKS = 1500
 
 export type PlaceError = 'collision' | 'unsupported' | 'out_of_bounds' | 'limit'
 
+/** `occupancy`: a prebuilt Occupancy of `bricks` (without `ignoreId`), for callers checking many bricks against one set. */
 export function canPlace(
   bricks: Brick[],
   brick: Brick,
   baseplate: Baseplate,
   ignoreId?: string,
+  occupancy?: Occupancy,
 ): PlaceError | null {
   const part = getPart(brick.p)
   const { fx, fz } = footprint(part, brick.r)
@@ -27,7 +29,7 @@ export function canPlace(
     return 'out_of_bounds'
   }
   if (ignoreId === undefined && bricks.length >= MAX_BRICKS) return 'limit'
-  const occ = Occupancy.from(ignoreId === undefined ? bricks : bricks.filter((b) => b.id !== ignoreId))
+  const occ = occupancy ?? Occupancy.from(ignoreId === undefined ? bricks : bricks.filter((b) => b.id !== ignoreId))
   if (occ.collides(brick)) return 'collision'
   if (!occ.isSupported(brick)) return 'unsupported'
   return null

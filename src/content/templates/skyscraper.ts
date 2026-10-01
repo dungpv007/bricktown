@@ -73,7 +73,7 @@ for (let f = 0; f <= OFFICE_FLOORS; f++) {
 b.walls({ x0: 5, x1: 10, z0: 5, z1: 10, y: ROOF_Y, courses: 2, color: ROOF })
 b.plates(ROOF_Y + 6, 5, 5, 10, 10, SLAB)
 b.add('dish_2x2', 10, ROOF_Y, 11, 0, COLUMN)
-b.add('flag_1x2', X0, ROOF_Y, X0, 0, RED)
+b.add('flag_1x2', X0, ROOF_Y, Z0, 0, RED)
 for (let i = 0; i < 4; i++) b.add('round_1x1', 7, ROOF_Y + 7 + i * 3, 7, 0, i === 3 ? RED : SILVER)
 b.add('antenna_1x1', 7, ROOF_Y + 19, 7, 0, SILVER)
 

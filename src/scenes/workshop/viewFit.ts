@@ -122,3 +122,137 @@ export function fitView(
   }
   return { target, position: at(target, dist) }
 }
+
+// ---- Framing the plate and the model on it (Workshop and Guided share these) ----
+
+/** Vertical field of view of the Workshop and Guided cameras (degrees). */
+export const VIEW_FOV = 45
+
+export interface View { target: Vec3; position: Vec3 }
+
+const add = (a: Vec3, b: Vec3, k: number): Vec3 => [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k]
+const length = (v: Vec3) => Math.hypot(v[0], v[1], v[2])
+const viewDir = (v: View): Vec3 => normalize(sub(v.position, v.target))
+const viewDistance = (v: View) => length(sub(v.position, v.target))
+
+/** The usual view of a plate: from the front-right, a bit above, looking at its centre on the ground. */
+export function defaultView(size: Baseplate): View {
+  const dist = Math.max(size.w, size.d) * 1.5 + 8
+  const target: Vec3 = [size.w / 2, 0, size.d / 2]
+  return { target, position: [target[0] + dist * 0.45, dist * 0.7, target[2] + dist * 0.75] }
+}
+
+/** Top of a model in world units (0 without bricks). */
+export const modelTop = (model: Bounds | null): number => (model ? platesToWorld(model.maxY) : 0)
+
+const SCREEN: NdcRect = { x0: -1, y0: -1, x1: 1, y1: 1 }
+
+/**
+ * Where `view` may show the model without backing off: the HUD-free `safe` rect, grown to wherever
+ * the plate already reaches on screen (the usual view lets a big plate run under the HUD), but never
+ * past the screen edges.
+ */
+export function allowedRect(size: Baseplate, view: View, aspect: number, safe: NdcRect): NdcRect {
+  const p = projectBounds(plateCorners(size), view.position, view.target, VIEW_FOV, aspect)
+  // A plate corner behind the camera: zoomed right in, the plate runs off every edge.
+  if (!p) return SCREEN
+  return {
+    x0: Math.max(SCREEN.x0, Math.min(safe.x0, p.x0)),
+    y0: Math.max(SCREEN.y0, Math.min(safe.y0, p.y0)),
+    x1: Math.min(SCREEN.x1, Math.max(safe.x1, p.x1)),
+    y1: Math.min(SCREEN.y1, Math.max(safe.y1, p.y1)),
+  }
+}
+
+/**
+ * How far (NDC) a model may reach past the allowed rect and still count as shown: the HUD-free rect
+ * already keeps a margin from the HUD, and a roof grazing it is no reason to move the camera.
+ */
+export const SHOW_TOLERANCE = 0.05
+
+/** True when the whole `box` (no box: nothing to show) is inside `allowedRect` for `view` (give or take SHOW_TOLERANCE). */
+export function showsModel(size: Baseplate, box: Bounds | null, view: View, aspect: number, safe: NdcRect): boolean {
+  if (!box) return true
+  const b = projectBounds(boxCorners(box), view.position, view.target, VIEW_FOV, aspect)
+  return b !== null && rectInside(b, allowedRect(size, view, aspect, safe), SHOW_TOLERANCE)
+}
+
+/** Orbit point for a tall build: over the plate centre, half way up what is built, so zooming stays on it. */
+export function liftedTarget(size: Baseplate, box: Bounds | null): Vec3 {
+  return [size.w / 2, modelTop(box) / 2, size.d / 2]
+}
+
+const MAX_DISTANCE = 4000
+
+/** Smallest distance from `target` along `dir` at which all `points` are inside `safe` (MAX_DISTANCE if none). */
+export function fitDistance(points: Vec3[], target: Vec3, dir: Vec3, aspect: number, safe: NdcRect): number {
+  let lo = 0.5
+  let hi = MAX_DISTANCE
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2
+    const b = projectBounds(points, add(target, dir, mid), target, VIEW_FOV, aspect)
+    if (b && rectInside(b, safe)) hi = mid
+    else lo = mid
+  }
+  return hi
+}
+
+/** Looks at the lifted target along `dir`, at least `minDistance` away and far enough to show the plate and `box`. */
+function backOff(size: Baseplate, box: Bounds | null, dir: Vec3, minDistance: number, aspect: number, safe: NdcRect): View {
+  const target = liftedTarget(size, box)
+  const dist = Math.max(minDistance, fitDistance(framePoints(size, box), target, dir, aspect, safe))
+  return { target, position: add(target, dir, dist) }
+}
+
+/**
+ * Guided's first framing (when a build starts or is resumed) for what is on the plate so far (`box`: placed bricks and the step's ghosts):
+ * the usual view when it shows them, else backed off (same angles) around the lifted target.
+ */
+export function guidedFrame(size: Baseplate, box: Bounds | null, aspect: number, safe: NdcRect): View {
+  const usual = defaultView(size)
+  if (showsModel(size, box, usual, aspect, safe)) return usual
+  return backOff(size, box, viewDir(usual), viewDistance(usual), aspect, safe)
+}
+
+/** True when every corner of `box` is on screen inside `safe` (give or take SHOW_TOLERANCE). */
+export function boxVisible(box: Bounds, view: View, aspect: number, safe: NdcRect): boolean {
+  const b = projectBounds(boxCorners(box), view.position, view.target, VIEW_FOV, aspect)
+  return b !== null && rectInside(b, safe, SHOW_TOLERANCE)
+}
+
+/**
+ * Guided, when a new step starts: null while the step's bricks (`stepBox`) are all visible in the
+ * HUD-free `safe` rect from the player's `view` (however far they zoomed in), else the smallest move
+ * that brings them into view. The angles are kept, the orbit point keeps its place over the plate
+ * (clamped onto it) but is lifted to the middle of the step, and the camera only ever moves away:
+ * no closer than now, no further than the step needs.
+ */
+export function stepRefit(size: Baseplate, stepBox: Bounds | null, view: View, aspect: number, safe: NdcRect): View | null {
+  if (!stepBox || boxVisible(stepBox, view, aspect, safe)) return null
+  const clamp = (v: number, hi: number) => Math.min(hi, Math.max(0, v))
+  const target: Vec3 = [
+    clamp(view.target[0], size.w),
+    platesToWorld(stepBox.minY + stepBox.maxY) / 2,
+    clamp(view.target[2], size.d),
+  ]
+  const dir = viewDir(view)
+  const dist = Math.max(viewDistance(view), fitDistance(boxCorners(stepBox), target, dir, aspect, safe))
+  return { target, position: add(target, dir, dist) }
+}
+
+/** How much further than the plate-only fit the Workshop may back off to show a tall model. */
+export const MAX_MODEL_ZOOM_OUT = 1.6
+
+/**
+ * Workshop framing along `dir`: the plate and its model, but never more than MAX_MODEL_ZOOM_OUT times
+ * further than the plate alone needs, so the plate (and its edge buttons) stays big. A taller model
+ * keeps the plate framed and its top is cropped (the kid can orbit up).
+ */
+export function workshopFit(size: Baseplate, model: Bounds | null, dir: Vec3, aspect: number, safe: NdcRect): View {
+  const plate = fitView(plateCorners(size), dir, VIEW_FOV, aspect, safe)
+  if (!model) return plate
+  const all = fitView(framePoints(size, model), dir, VIEW_FOV, aspect, safe)
+  const cap = viewDistance(plate) * MAX_MODEL_ZOOM_OUT
+  if (viewDistance(all) <= cap) return all
+  return { target: plate.target, position: add(plate.target, dir, cap) }
+}

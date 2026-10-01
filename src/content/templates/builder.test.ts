@@ -17,6 +17,7 @@ describe('template builder steps', () => {
   it('takes a bigger step size, capped at the opening step size', () => {
     expect(build(6).steps.slice(-2).map((s) => s.length)).toEqual([6, 2])
     expect(build(10).steps.slice(-2).map((s) => s.length)).toEqual([6, 2])
+    expect(build(0).steps.slice(-2).map((s) => s.length)).toEqual([1, 1])
   })
 })
 

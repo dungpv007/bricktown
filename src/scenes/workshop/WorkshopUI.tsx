@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { isResizeError } from '../../core/baseplate'
 import type { Baseplate, Blueprint, BlueprintKind } from '../../core/types'
+import { isDragActive } from '../../input/dragActivity'
 import { useEditor, useWorkshopHasBricks, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import BlueprintLibrary from '../../ui/BlueprintLibrary'
@@ -93,6 +94,34 @@ function NewModelPicker({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** True when a key press belongs to a text field (e.g. the blueprint name), not to the editor. */
+const typingIn = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+
+/** Desktop keys for the selected brick: Delete / Backspace, R (rotate), Ctrl/Cmd+D (duplicate), Esc. */
+function useSelectionKeys() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Not while typing, nor behind an open dialog (the library, the figure editor...).
+      // Nor mid-drag: deleting or turning the brick under the finger would surprise.
+      if (typingIn(e.target) || e.altKey || isDragActive() || document.querySelector('[role="dialog"]')) return
+      const ed = useEditor.getState()
+      if (ed.selectedId === null) return
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+      if (mod && key === 'd') ed.duplicateSelected()
+      else if (mod) return
+      else if (key === 'delete' || key === 'backspace') ed.deleteSelected()
+      else if (key === 'r') ed.rotateSelected()
+      else if (key === 'escape') ed.deselect()
+      else return
+      e.preventDefault() // e.g. Ctrl+D would bookmark the page, Backspace navigate back
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+}
+
 /** HTML overlay on top of the workshop canvas. */
 export default function WorkshopUI() {
   const t = useT()
@@ -104,6 +133,7 @@ export default function WorkshopUI() {
   const [pendingOpen, setPendingOpen] = useState<Blueprint | null>(null)
   const hasBricks = useWorkshopHasBricks()
   const loadBricks = useEditor((s) => s.loadBricks)
+  useSelectionKeys()
 
   const open = (bp: Blueprint) => {
     loadBricks(bp.bricks, bp.kind, bp.baseplate, bp.id)
@@ -136,10 +166,7 @@ export default function WorkshopUI() {
           data-testid="save-blueprint"
           aria-label={t('save')}
           disabled={!hasBricks}
-          onClick={() => {
-            useEditor.getState().cancelCarry() // the saved model must include a brick in hand
-            setSaveOpen(true)
-          }}
+          onClick={() => setSaveOpen(true)}
         >
           💾
         </button>
@@ -153,8 +180,8 @@ export default function WorkshopUI() {
         </button>
       </div>
       <Toolbar />
-      <ColorPicker />
-      <PartPalette />
+      <ColorPicker recolorsSelection />
+      <PartPalette dragToPlace />
       <ErrorBadge errorSeq={errorSeq} testId="place-error" labelKey={isResizeError(lastError) ? 'cantResize' : 'cantPlace'} />
       <FigureEditor />
       {pickerOpen && <NewModelPicker onClose={() => setPickerOpen(false)} />}

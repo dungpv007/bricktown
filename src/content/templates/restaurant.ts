@@ -17,7 +17,7 @@ const b = createBuilder()
 b.plates(0, X0, Z0, X1, Z1, FLOOR)
 
 // Three tables with two chairs each on both sides of the entrance (left tables, then mirrored right
-// tables). At the two middle tables a customer stands where one chair would be.
+// tables). At the left middle table a customer stands where its left chair would be.
 const tables: Array<[number, number]> = [[7, 11], [7, 15], [11, 13], [23, 11], [23, 15], [19, 13]]
 for (const [x, z] of tables) {
   b.add('table_2x2', x, 1, z, 0, WOOD)

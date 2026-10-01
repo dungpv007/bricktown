@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
-import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { bounds, canPlace, type Bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
 import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
-import type { Baseplate as BaseplateSize, Brick } from '../../core/types'
-import { useTap } from '../../input/useTap'
+import type { Baseplate as BaseplateSize, Brick, Rot } from '../../core/types'
+import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import GhostBrick from '../../render/GhostBrick'
-import InstancedBricks from '../../render/InstancedBricks'
+import InstancedBricks, { brickOfInstance } from '../../render/InstancedBricks'
+import SelectionHighlight from '../../render/SelectionHighlight'
 import { useEditor, type ViewShift } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
 import PlateEdgeButtons, { PlateEdgeTracker, type EdgeElements } from './PlateEdgeButtons'
+import { plateScreen } from './plateScreen'
 import { safeRect, toNdc } from './safeArea'
-import { fitView, framePoints, projectBounds, rectInside, type NdcRect } from './viewFit'
-import { platesToWorld } from '../../core/units'
+import { useWorkshopGestures } from './useWorkshopGestures'
+import { VIEW_FOV, defaultView, modelTop, plateCorners, projectBounds, rectInside, workshopFit } from './viewFit'
 import DevStats from '../../ui/DevStats'
 
 export const SKY = '#87ceeb'
@@ -69,16 +71,9 @@ export function Lights({ size, height = 0 }: { size: BaseplateSize; height?: num
   )
 }
 
-const FOV = 45
+const FOV = VIEW_FOV
 /** How long the camera glides to re-fit the plate after a resize. */
 const REFIT_MS = 350
-
-function frameView(size: BaseplateSize): { target: Vec3; position: Vec3 } {
-  const dist = Math.max(size.w, size.d) * 1.5 + 8
-  const target: Vec3 = [size.w / 2, 0, size.d / 2]
-  // Looking from the front-right, a bit above.
-  return { target, position: [target[0] + dist * 0.45, dist * 0.7, target[2] + dist * 0.75] }
-}
 
 const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v[0], v[1], v[2])
@@ -88,28 +83,19 @@ const unit = (v: Vec3): Vec3 => {
 /** Room left around the fitted plate for the edge ➕/➖ buttons (pixels). */
 const FIT_PAD = 72
 
-/** Framing that shows all `points` (the plate and its model) in the HUD-free part of the canvas, looking along `dir`. */
-function fitPlate(points: Vec3[], dir: Vec3, canvas: HTMLElement, width: number, height: number) {
+/** Framing that shows the whole plate (and its model, within limits) in the HUD-free part of the canvas, looking along `dir`. */
+function fitPlate(size: BaseplateSize, model: Bounds | null, dir: Vec3, canvas: HTMLElement, width: number, height: number) {
   const r = safeRect(canvas)
   const pad = Math.max(0, Math.min(FIT_PAD, (r.right - r.left) / 4, (r.bottom - r.top) / 4))
   const safe = toNdc({ left: r.left + pad, top: r.top + pad, right: r.right - pad, bottom: r.bottom - pad }, width, height)
-  return { safe, ...fitView(points, dir, FOV, width / height, safe) }
+  return { safe, ...workshopFit(size, model, dir, width / height, safe) }
 }
-
-/**
- * Without `fit` (Guided), where a tall model must stay clear of the HUD: clear of the top bar and
- * the step card, and of the palette and colours in normal mode (NDC).
- */
-const FIXED_SAFE: NdcRect = { x0: -0.72, x1: 0.68, y0: -0.5, y1: 0.74 }
-
-/** Top of a model in world units (0 without bricks). */
-export const modelTop = (model: Bounds | null): number => (model ? platesToWorld(model.maxY) : 0)
 
 interface Glide { from: { p: Vec3; t: Vec3 }; to: { p: Vec3; t: Vec3 }; start: number }
 
 /**
- * Camera + orbit controls framing the baseplate (and `model`, the bounds of the bricks on it, so a
- * tall build is shown whole) as it was at mount; remount (via `key`) to re-frame.
+ * Camera + orbit controls framing the baseplate as it was at mount; remount (via `key`) to re-frame.
+ * With `fit`, `model` (the bounds of the bricks on it) is framed too, within `workshopFit`'s limits.
  * Each new `shift` moves the camera by that much, following bricks that moved after a resize.
  * With `fit`, the plate is framed inside the part of the screen the HUD leaves free, and after a
  * resize that pushes it out of there the camera glides (same angles) to fit it again.
@@ -130,16 +116,10 @@ export function CameraRig({
   const view = useThree((s) => s.size)
   // Fixed at mount: later size changes must not snap the view back to the plate centre.
   const [{ target, position, safe }] = useState(() => {
-    const frame = frameView(size)
+    const frame = defaultView(size)
+    if (!fit) return { ...frame, safe: null }
     const dir = unit([frame.position[0] - frame.target[0], frame.position[1], frame.position[2] - frame.target[2]])
-    const points = framePoints(size, model)
-    if (fit) return fitPlate(points, dir, canvas, view.width, view.height)
-    if (!model) return { ...frame, safe: null }
-    // The usual framing unless the model pokes out of it (a tower): then back off to show it whole.
-    const aspect = view.width / view.height
-    const shown = projectBounds(points, frame.position, frame.target, FOV, aspect)
-    if (shown && rectInside(shown, FIXED_SAFE)) return { ...frame, safe: null }
-    return { ...fitView(points, dir, FOV, aspect, FIXED_SAFE), safe: null }
+    return fitPlate(size, model, dir, canvas, view.width, view.height)
   })
   const camera = useRef<THREE.PerspectiveCamera>(null)
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
@@ -178,17 +158,16 @@ export function CameraRig({
     if (!cam || !ctl) return
     const p: Vec3 = [cam.position.x, cam.position.y, cam.position.z]
     const t: Vec3 = [ctl.target.x, ctl.target.y, ctl.target.z]
-    const points = framePoints(size, model)
-    const next = fitPlate(points, unit([p[0] - t[0], p[1] - t[1], p[2] - t[2]]), canvas, view.width, view.height)
+    const next = fitPlate(size, model, unit([p[0] - t[0], p[1] - t[1], p[2] - t[2]]), canvas, view.width, view.height)
     let refit: boolean
     if (plateChanged) {
       // The plate grew or shrank: glide only when it no longer fits the free area.
-      const shown = projectBounds(points, p, t, FOV, view.width / view.height)
+      const shown = projectBounds(plateCorners(size), p, t, FOV, view.width / view.height)
       refit = !(shown && rectInside(shown, next.safe, 0.01))
     } else {
       // The window resized or the device rotated: a plate that was fully shown is framed again
       // for the new screen; a close-up the player zoomed into is left alone.
-      const before = projectBounds(points, p, t, FOV, f.width / f.height)
+      const before = projectBounds(plateCorners(size), p, t, FOV, f.width / f.height)
       refit = before !== null && f.safe !== null && rectInside(before, f.safe, 0.01)
     }
     fitted.current = { w: size.w, d: size.d, width: view.width, height: view.height, safe: next.safe }
@@ -246,56 +225,194 @@ export function Ground({ size }: { size: BaseplateSize }) {
   )
 }
 
+/**
+ * The ghost on screen: the current part (mouse hover over the empty plate, a part dragged out of
+ * the palette, a rejected quick-place) or a brick being moved (`brick`, over `hit` or nothing).
+ */
+type Preview = { kind: 'part'; hit: PickHit } | { kind: 'move'; brick: Brick; hit: PickHit | null }
+
+/** Where the preview's part would go, for the editor's current part and rotation. */
+function previewAnchor(p: Preview | null, partId: string, rot: Rot): Anchor | null {
+  if (!p) return null
+  if (p.kind === 'move') return p.hit ? targetAnchor(p.hit, getPart(p.brick.p), p.brick.r) : null
+  return targetAnchor(p.hit, getPart(partId), rot)
+}
+
+const samePreview = (a: Preview | null, b: Preview | null): boolean => {
+  if (a === b) return true
+  if (!a || !b || a.kind !== b.kind) return false
+  if (a.kind === 'move' && b.kind === 'move' && a.brick !== b.brick) return false
+  const { partId, rot } = useEditor.getState()
+  return sameAnchor(previewAnchor(a, partId, rot), previewAnchor(b, partId, rot))
+}
+
+/** How long a rejected drop keeps its red, shaking ghost on screen. */
+const FLASH_MS = 450
+
 function WorkshopWorld() {
   const workshop = useGame((s) => s.data.workshop)
   const { bricks, baseplate, kind } = workshop
-  const tool = useEditor((s) => s.tool)
   const partId = useEditor((s) => s.partId)
   const fig = useEditor((s) => s.fig)
   const rot = useEditor((s) => s.rot)
-  const carried = useEditor((s) => s.carried)
+  const selectedId = useEditor((s) => s.selectedId)
   const errorSeq = useEditor((s) => s.errorSeq)
   const viewShift = useEditor((s) => s.viewShift)
   const frameSeq = useEditor((s) => s.frameSeq)
-  const consumeTap = useTap()
   const model = useMemo(() => bounds(bricks), [bricks])
-
-  // The last pointer hit is kept (not just the anchor) so the anchor re-centres right away when
-  // only the part or rotation changes. It is stored only when it moves the anchor.
-  const [hit, setHitState] = useState<PickHit | null>(null)
-  const hitRef = useRef<PickHit | null>(null)
-  const setHit = useCallback((next: PickHit | null) => {
-    const prev = hitRef.current
-    if (prev === next) return
-    if (prev && next) {
-      const { partId: p, rot: r } = useEditor.getState()
-      const part = getPart(p)
-      if (sameAnchor(targetAnchor(prev, part, r), targetAnchor(next, part, r))) return
-    }
-    hitRef.current = next
-    setHitState(next)
-  }, [])
-  const anchor = useMemo(() => (hit ? targetAnchor(hit, getPart(partId), rot) : null), [hit, partId, rot])
-
-  const placing = tool === 'place' || carried !== null
-
   const el = useThree((s) => s.gl.domElement)
-  useEffect(() => {
-    // Mouse left the 3D view (e.g. onto the toolbars): drop the hover preview.
-    const onLeave = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') setHit(null)
+  const get = useThree((s) => s.get)
+
+  // Stored only when it moves the ghost, so pointer moves within one cell re-render nothing.
+  const [preview, setPreviewState] = useState<Preview | null>(null)
+  const previewRef = useRef<Preview | null>(null)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const setPreview = useCallback((next: Preview | null) => {
+    if (flashTimer.current !== null) {
+      clearTimeout(flashTimer.current)
+      flashTimer.current = null
     }
-    el.addEventListener('pointerleave', onLeave)
-    return () => el.removeEventListener('pointerleave', onLeave)
-  }, [el, setHit])
+    if (samePreview(previewRef.current, next)) return
+    previewRef.current = next
+    setPreviewState(next)
+  }, [])
+  /** Leaves the current (rejected, red) ghost up for a moment, then hides it. */
+  const flashPreview = useCallback(() => {
+    if (flashTimer.current !== null) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => {
+      flashTimer.current = null
+      previewRef.current = null
+      setPreviewState(null)
+    }, FLASH_MS)
+  }, [])
+  useEffect(() => () => {
+    if (flashTimer.current !== null) clearTimeout(flashTimer.current)
+  }, [])
 
   // A resize that slid the bricks to new coordinates leaves the kept hit (and ghost) stale.
   useEffect(
     () => useEditor.subscribe((s, prev) => {
-      if (s.viewShift !== prev.viewShift) setHit(null)
+      if (s.viewShift !== prev.viewShift) setPreview(null)
     }),
-    [setHit],
+    [setPreview],
   )
+
+  // The plate and the bricks: what a press or a dragged part can land on.
+  const pickRoot = useRef<THREE.Group>(null)
+  const raycaster = useMemo(() => new THREE.Raycaster(), [])
+  const pick = useCallback(
+    (x: number, y: number, excludeId?: string): PickHit | null => {
+      const root = pickRoot.current
+      if (!root) return null
+      const rect = el.getBoundingClientRect()
+      const ndc = new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1)
+      raycaster.setFromCamera(ndc, get().camera)
+      for (const h of raycaster.intersectObject(root, true)) {
+        if (!h.face) continue
+        const brick = brickOfInstance(h.object, h.instanceId) ?? null
+        if (brick && brick.id === excludeId) continue
+        const local: Vec3 = [h.face.normal.x, h.face.normal.y, h.face.normal.z]
+        return { point: [h.point.x, h.point.y, h.point.z], normal: brick ? rotateNormalY(local, brick.r) : local, brick }
+      }
+      return null
+    },
+    [el, get, raycaster],
+  )
+
+  useEffect(() => {
+    plateScreen.project = ([x, y, z]) => {
+      const v = new THREE.Vector3(x, y, z).project(get().camera)
+      const r = el.getBoundingClientRect()
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }
+    }
+    return () => {
+      plateScreen.project = null
+    }
+  }, [el, get])
+
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+
+  useWorkshopGestures(el, {
+    pick,
+    setOrbit: (on) => {
+      const controls = get().controls as ComponentRef<typeof OrbitControls> | null
+      if (controls) controls.enableRotate = on
+    },
+    tapBrick: (brick) => useEditor.getState().select(brick.id),
+    tapPlate: (hit) => {
+      const ed = useEditor.getState()
+      const a = targetAnchor(hit, getPart(ed.partId), ed.rot)
+      ed.place(a.x, a.y, a.z)
+      if (useEditor.getState().lastError === null) {
+        setPreview(null)
+        return
+      }
+      setPreview({ kind: 'part', hit })
+      flashPreview()
+    },
+    tapSky: () => useEditor.getState().deselect(),
+    dragStart: (brick) => {
+      useEditor.getState().select(brick.id)
+      setDraggingId(brick.id)
+      setPreview({ kind: 'move', brick, hit: null })
+    },
+    dragMove: (hit) => {
+      const p = previewRef.current
+      if (p?.kind === 'move') setPreview({ ...p, hit })
+    },
+    dragEnd: (drop) => {
+      const p = previewRef.current
+      setDraggingId(null)
+      const to = drop && p?.kind === 'move' && p.hit ? targetAnchor(p.hit, getPart(p.brick.p), p.brick.r) : null
+      if (p?.kind !== 'move' || !to) {
+        setPreview(null)
+        return
+      }
+      const ed = useEditor.getState()
+      ed.moveBrick(p.brick.id, to)
+      // Rejected: the brick stays where it was and the red ghost shakes for a moment.
+      if (useEditor.getState().lastError === null) setPreview(null)
+      else flashPreview()
+    },
+    hover: (hit) => {
+      if (draggingId !== null) return
+      // Only the empty plate previews a quick-place: a tap on a brick selects it.
+      setPreview(hit && !hit.brick ? { kind: 'part', hit } : null)
+    },
+  })
+
+  // Parts dragged out of the palette: a ghost over the view, placed on release.
+  useEffect(() => {
+    const overView = (p: ClientPoint) => document.elementFromPoint(p.x, p.y) === el
+    return registerPaletteDropTarget({
+      hover: (p) => {
+        const hit = p && overView(p) ? pick(p.x, p.y) : null
+        setPreview(hit ? { kind: 'part', hit } : null)
+      },
+      drop: (p) => {
+        const hit = overView(p) ? pick(p.x, p.y) : null
+        if (!hit) {
+          setPreview(null)
+          return
+        }
+        const ed = useEditor.getState()
+        const a = targetAnchor(hit, getPart(ed.partId), ed.rot)
+        ed.place(a.x, a.y, a.z)
+        if (useEditor.getState().lastError === null) {
+          setPreview(null)
+          return
+        }
+        setPreview({ kind: 'part', hit })
+        flashPreview()
+      },
+    })
+  }, [el, pick, setPreview, flashPreview])
+
+  const moving = preview?.kind === 'move' ? preview.brick : null
+  const anchor = useMemo(() => previewAnchor(preview, partId, rot), [preview, partId, rot])
+  const ghostPart = moving ? moving.p : partId
+  const ghostRot = moving ? moving.r : rot
+  const ghostFig = moving ? moving.fig : fig
 
   // canPlace rebuilds an occupancy grid, so it only runs when the target actually changes.
   const ax = anchor?.x
@@ -303,50 +420,19 @@ function WorkshopWorld() {
   const az = anchor?.z
   const valid = useMemo(() => {
     if (ax === undefined || ay === undefined || az === undefined) return false
-    const probe: Brick = { id: '__ghost__', p: partId, x: ax, y: ay, z: az, r: rot, c: 0 }
-    return canPlace(bricks, probe, baseplate) === null
-  }, [ax, ay, az, partId, rot, bricks, baseplate])
+    const probe: Brick = moving
+      ? { ...moving, x: ax, y: ay, z: az }
+      : { id: '__ghost__', p: ghostPart, x: ax, y: ay, z: az, r: ghostRot, c: 0 }
+    return canPlace(bricks, probe, baseplate, moving?.id) === null
+  }, [ax, ay, az, moving, ghostPart, ghostRot, bricks, baseplate])
 
-  const handlePointer = useCallback(
-    (e: ThreeEvent<PointerEvent>, brick: Brick | null) => {
-      e.stopPropagation() // only the nearest hit counts
-      const type = e.nativeEvent.type
-      const ed = useEditor.getState()
-      const isPlacing = ed.tool === 'place' || ed.carried !== null
-      const pickHit = (): PickHit | null => {
-        if (!e.face) return null
-        const local: Vec3 = [e.face.normal.x, e.face.normal.y, e.face.normal.z]
-        const normal = brick ? rotateNormalY(local, brick.r) : local
-        return { point: [e.point.x, e.point.y, e.point.z], normal, brick }
-      }
-
-      if (type === 'pointermove') {
-        // Hover only: a held button or finger means the camera is being dragged.
-        if (isPlacing && e.pointerType === 'mouse' && e.buttons === 0) setHit(pickHit())
-        return
-      }
-      if (type === 'pointerdown') {
-        if (isPlacing) setHit(pickHit())
-        return
-      }
-      if (type !== 'pointerup' || !consumeTap(e.pointerId)) return
-
-      if (isPlacing) {
-        const h = pickHit()
-        if (!h) return
-        setHit(h)
-        const a = targetAnchor(h, getPart(ed.partId), ed.rot)
-        ed.place(a.x, a.y, a.z)
-        // The ghost would now sit inside the new brick; hide it until the pointer moves again.
-        if (useEditor.getState().lastError === null) setHit(null)
-      } else if (brick) {
-        ed.tapBrick(brick.id)
-      }
-    },
-    [consumeTap, setHit],
+  // The brick being moved stays in the model (nothing is lost if the app closes mid-drag) but is
+  // hidden from view and from picking while its ghost follows the finger.
+  const shown = useMemo(() => (draggingId === null ? bricks : bricks.filter((b) => b.id !== draggingId)), [bricks, draggingId])
+  const selected = useMemo(
+    () => (selectedId === null || selectedId === draggingId ? null : (bricks.find((b) => b.id === selectedId) ?? null)),
+    [bricks, selectedId, draggingId],
   )
-
-  const onBaseplatePointer = useCallback((e: ThreeEvent<PointerEvent>) => handlePointer(e, null), [handlePointer])
 
   return (
     <>
@@ -354,10 +440,13 @@ function WorkshopWorld() {
       <CameraRig key={frameSeq} size={baseplate} model={model} shift={viewShift} fit />
       <Lights size={baseplate} height={modelTop(model)} />
       <Ground size={baseplate} />
-      <Baseplate size={baseplate} kind={kind} onPointer={onBaseplatePointer} />
-      <InstancedBricks bricks={bricks} onBrickPointer={handlePointer} />
+      <group ref={pickRoot}>
+        <Baseplate size={baseplate} kind={kind} />
+        <InstancedBricks bricks={shown} />
+      </group>
+      <SelectionHighlight brick={selected} shakeKey={errorSeq} />
       {/* Always mounted (toggled via `visible`) so placing a brick never remounts it. */}
-      <GhostBrick partId={partId} fig={fig} rot={rot} anchor={anchor} valid={valid} visible={placing} shakeKey={errorSeq} />
+      <GhostBrick partId={ghostPart} fig={ghostFig} rot={ghostRot} anchor={anchor} valid={valid} visible={preview !== null} shakeKey={errorSeq} />
     </>
   )
 }

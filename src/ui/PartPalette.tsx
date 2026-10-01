@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { COLORS } from '../core/colors'
 import { FIG_PRESETS, MINIFIG_PART, figKey } from '../core/figures'
 import { PART_CATEGORIES, PARTS } from '../core/parts/catalog'
 import type { PartCategory, PartDef, PartShape } from '../core/types'
+import { usePaletteDrag } from '../input/paletteDrag'
 import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
 import { getPartThumbnail } from '../render/thumbnails'
@@ -127,18 +128,33 @@ function ColoredPartImage({ part, color, hex }: { part: PartDef; color: number; 
 
 const sizeLabel = (p: PartDef) => `${p.w}×${p.d}`
 
+type PaletteButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'onPointerDown'> & {
+  /** Makes this button's part the current one (on a tap, and when a drag begins). */
+  select: () => void
+  /** The part can be dragged out onto the 3D view (Workshop). */
+  dragToPlace: boolean
+}
+
+/** A palette button that selects its part on a tap and, when `dragToPlace`, can be dragged onto the view. */
+function PaletteButton({ select, dragToPlace, className, ...rest }: PaletteButtonProps) {
+  const startDrag = usePaletteDrag(select)
+  return (
+    <button
+      {...rest}
+      className={dragToPlace ? `${className} bt-part-drag` : className}
+      onPointerDown={dragToPlace ? startDrag : undefined}
+      onClick={select}
+    />
+  )
+}
+
 /** The figure tab: ✏️ (customise the figure to place, shown in its current look), then the ready-made figures. */
-function FigureButtons() {
+function FigureButtons({ dragToPlace }: { dragToPlace: boolean }) {
   const t = useT()
   const lang = useApp((s) => s.lang)
   const partId = useEditor((s) => s.partId)
   const fig = useEditor((s) => s.fig)
-  const carried = useEditor((s) => s.carried)
-  const select = () => {
-    const ed = useEditor.getState()
-    ed.setPart(MINIFIG_PART)
-    ed.setTool('place')
-  }
+  const select = () => useEditor.getState().setPart(MINIFIG_PART)
   const current = partId === MINIFIG_PART ? figKey(fig) : null
   return (
     <>
@@ -146,7 +162,6 @@ function FigureButtons() {
         className="bt-btn bt-part-btn bt-fig-btn bt-fig-edit-btn"
         data-testid="fig-edit"
         aria-label={t('figEdit')}
-        disabled={carried !== null}
         onClick={() => {
           select()
           useEditor.getState().openFigEditor()
@@ -156,20 +171,20 @@ function FigureButtons() {
         <span className="bt-fig-edit-badge" aria-hidden="true">✏️</span>
       </button>
       {FIG_PRESETS.map((p) => (
-        <button
+        <PaletteButton
           key={p.id}
           className="bt-btn bt-part-btn bt-fig-btn"
           data-testid={`fig-preset-${p.id}`}
           aria-label={p.name[lang]}
           aria-pressed={current === figKey(p.style)}
-          disabled={carried !== null}
-          onClick={() => {
+          dragToPlace={dragToPlace}
+          select={() => {
             useEditor.getState().setFig(p.style)
             select()
           }}
         >
           <FigureImage fig={p.style} />
-        </button>
+        </PaletteButton>
       ))}
     </>
   )
@@ -178,19 +193,19 @@ function FigureButtons() {
 interface Props {
   /** Show only these parts (no category tabs), e.g. the parts of a Guided Build step. */
   allowedParts?: string[]
+  /** Parts can be dragged out onto the 3D view to place them (Workshop). */
+  dragToPlace?: boolean
 }
 
 /** Bottom drawer: category tabs, the current-part rotate button and the parts of that category. */
-export default function PartPalette({ allowedParts }: Props = {}) {
+export default function PartPalette({ allowedParts, dragToPlace = false }: Props = {}) {
   const t = useT()
   const category = useEditor((s) => s.category)
   const partId = useEditor((s) => s.partId)
   const color = useEditor((s) => s.color)
   const rot = useEditor((s) => s.rot)
-  const carried = useEditor((s) => s.carried)
   const setCategory = useEditor((s) => s.setCategory)
   const setPart = useEditor((s) => s.setPart)
-  const setTool = useEditor((s) => s.setTool)
   const rotateCurrent = useEditor((s) => s.rotateCurrent)
   const hex = COLORS[color]?.hex ?? '#ffffff'
   const current = PARTS.find((p) => p.id === partId)
@@ -232,23 +247,20 @@ export default function PartPalette({ allowedParts }: Props = {}) {
             </span>
           )}
         </button>
-        {!allowedParts && category === 'figure' && <FigureButtons />}
+        {!allowedParts && category === 'figure' && <FigureButtons dragToPlace={dragToPlace} />}
         {(allowedParts || category !== 'figure') && parts.map((p) => (
-          <button
+          <PaletteButton
             key={p.id}
             className="bt-btn bt-part-btn"
             data-testid={`part-${p.id}`}
             aria-label={sizeLabel(p)}
             aria-pressed={partId === p.id}
-            disabled={carried !== null}
-            onClick={() => {
-              setPart(p.id)
-              setTool('place')
-            }}
+            dragToPlace={dragToPlace}
+            select={() => setPart(p.id)}
           >
             <PartButtonImage part={p} color={color} hex={hex} />
             <span className="bt-part-label">{sizeLabel(p)}</span>
-          </button>
+          </PaletteButton>
         ))}
       </div>
     </div>

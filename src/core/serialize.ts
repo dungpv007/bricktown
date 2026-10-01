@@ -1,7 +1,8 @@
 import { COLORS } from './colors'
 import { parseFig } from './figures'
-import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, type Cell, type Maze } from './maze'
-import type { Baseplate, Blueprint, Brick, MazeRecord, SaveData } from './types'
+import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, isBorder, isCorner, type Cell, type Maze } from './maze'
+import { validateTemplate } from './template'
+import type { Baseplate, Blueprint, Brick, MazeChallenge, MazeRecord, SaveData, Template } from './types'
 
 export const SCHEMA_VERSION = 3
 
@@ -13,8 +14,10 @@ export function createEmptySave(): SaveData {
     workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
     guided: null,
     completedTemplates: [],
+    sharedTemplates: [],
     mazes: [],
     mazeRecords: {},
+    mazeChallenges: {},
   }
 }
 
@@ -28,8 +31,18 @@ export const MIGRATIONS: Record<number, Migration> = {
    * so there is nothing to rewrite: a missing plate colour means the kind's default.
    */
   1: (data) => data,
-  /** v3 added the maze mode: the kid's mazes and the best runs. */
-  2: (data) => ({ ...data, mazes: [], mazeRecords: {} }),
+  /**
+   * v3 made the maze mode and sharing fields required: the kid's mazes, the best runs, shared
+   * templates and challenges. A late v2 save may already carry some of them (sharing wrote them as
+   * optional fields), so they are kept; `normalize` then checks every value.
+   */
+  2: (data) => ({
+    ...data,
+    sharedTemplates: Array.isArray(data.sharedTemplates) ? data.sharedTemplates : [],
+    mazes: Array.isArray(data.mazes) ? data.mazes : [],
+    mazeRecords: isRecord(data.mazeRecords) ? data.mazeRecords : {},
+    mazeChallenges: isRecord(data.mazeChallenges) ? data.mazeChallenges : {},
+  }),
 }
 // `Brick.fig` (minifigure styles) was added during v2 without its own bump: it is optional and purely
 // additive, older saves simply have no figures, and `normalize` drops any style it cannot read.
@@ -97,16 +110,56 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
         ? (guided as unknown as SaveData['guided'])
         : null,
     completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
+    sharedTemplates: arrayOr<unknown>(data.sharedTemplates, [])
+      .filter(isTemplateLike)
+      .map((t) => ({ ...t, bricks: normalizeBricks(t.bricks) }) as unknown as Template)
+      .filter(isSoundTemplate),
     mazes: normalizeMazes(arrayOr(data.mazes, [])),
     mazeRecords: normalizeMazeRecords(data.mazeRecords),
+    mazeChallenges: normalizeChallenges(data.mazeChallenges),
   }
+}
+
+/** A template Guided mode can build: one that a hand-edited file broke is dropped. */
+function isSoundTemplate(t: Template): boolean {
+  try {
+    return validateTemplate(t).length === 0
+  } catch {
+    return false // a shape validateTemplate does not expect (it assumes the template's types)
+  }
+}
+
+/** Enough of a template's shape for `validateTemplate` to make sense of it. */
+function isTemplateLike(v: unknown): v is Record<string, unknown> & { bricks: unknown[] } {
+  return (
+    isRecord(v) && typeof v.id === 'string' && isRecord(v.name) && isRecord(v.baseplate) &&
+    Array.isArray(v.bricks) && Array.isArray(v.steps)
+  )
+}
+
+/** Keys that must never become own properties of a record built from a file. */
+const isUnsafeKey = (key: string) => key === '__proto__' || key === 'constructor' || key === 'prototype'
+
+function normalizeChallenges(v: unknown): Record<string, MazeChallenge> {
+  const out: Record<string, MazeChallenge> = {}
+  if (!isRecord(v)) return out
+  for (const [id, c] of Object.entries(v)) {
+    if (isUnsafeKey(id) || !isRecord(c) || typeof c.timeMs !== 'number' || !Number.isFinite(c.timeMs) || c.timeMs <= 0) continue
+    out[id] = typeof c.from === 'string' ? { timeMs: c.timeMs, from: c.from } : { timeMs: c.timeMs }
+  }
+  return out
 }
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isMazeSize = (v: unknown): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v % 2 === 1 && v >= MAZE_MIN_SIZE && v <= MAZE_MAX_SIZE
 
-/** Mazes with an id and a valid size; their cell lists keep only distinct in-grid keys. Duplicate ids keep the first. */
+/**
+ * Mazes with an id and a valid size, held to the maze rules (see core/maze): cell lists keep only
+ * distinct in-grid keys; a door must be on the outer ring, not on a corner, not a wall and not the
+ * other door, else it is dropped; the rest of the outer ring is wall; coins only lie on floor
+ * cells that are not doors. Duplicate ids keep the first.
+ */
 function normalizeMazes(raw: unknown[]): Maze[] {
   const seen = new Set<string>()
   const out: Maze[] = []
@@ -114,10 +167,6 @@ function normalizeMazes(raw: unknown[]): Maze[] {
     if (!isRecord(m) || typeof m.id !== 'string' || m.id === '' || seen.has(m.id) || !isMazeSize(m.w) || !isMazeSize(m.h)) continue
     seen.add(m.id)
     const dims = { w: m.w, h: m.h }
-    const cellOf = (v: unknown): Cell | null =>
-      isRecord(v) && Number.isInteger(v.cx) && Number.isInteger(v.cz) && inBounds(dims, v as unknown as Cell)
-        ? { cx: v.cx as number, cz: v.cz as number }
-        : null
     const keys = (v: unknown): string[] => {
       const valid = arrayOr<unknown>(v, []).filter((k): k is string => {
         if (typeof k !== 'string' || !/^\d+,\d+$/.test(k)) return false
@@ -126,15 +175,33 @@ function normalizeMazes(raw: unknown[]): Maze[] {
       })
       return [...new Set(valid)]
     }
+    const walls = new Set(keys(m.walls))
+    const door = (v: unknown, other: Cell | null): Cell | null => {
+      if (!isRecord(v) || !Number.isInteger(v.cx) || !Number.isInteger(v.cz)) return null
+      const cell = { cx: v.cx as number, cz: v.cz as number }
+      const ok =
+        isBorder(dims, cell) && !isCorner(dims, cell) && !walls.has(cellKey(cell)) &&
+        !(other && other.cx === cell.cx && other.cz === cell.cz)
+      return ok ? cell : null
+    }
+    const entry = door(m.entry, null)
+    const exit = door(m.exit, entry)
+    const doors = new Set([entry, exit].filter((c): c is Cell => c !== null).map(cellKey))
+    for (let cz = 0; cz < m.h; cz++) {
+      for (let cx = 0; cx < m.w; cx++) {
+        const k = cellKey({ cx, cz })
+        if (isBorder(dims, { cx, cz }) && !doors.has(k)) walls.add(k)
+      }
+    }
     out.push({
       id: m.id,
       name: typeof m.name === 'string' ? m.name : '',
       w: m.w,
       h: m.h,
-      walls: keys(m.walls),
-      entry: cellOf(m.entry),
-      exit: cellOf(m.exit),
-      coins: keys(m.coins),
+      walls: [...walls],
+      entry,
+      exit,
+      coins: keys(m.coins).filter((k) => !walls.has(k) && !doors.has(k)),
       wallColor: isColor(m.wallColor) ? m.wallColor : DEFAULT_MAZE_WALL_COLOR,
       ...(isColor(m.floorColor) ? { floorColor: m.floorColor } : {}),
       createdAt: isFiniteNumber(m.createdAt) ? m.createdAt : 0,
@@ -149,7 +216,7 @@ function normalizeMazeRecords(raw: unknown): Record<string, MazeRecord> {
   const out: Record<string, MazeRecord> = {}
   if (!isRecord(raw)) return out
   for (const [key, r] of Object.entries(raw)) {
-    if (!isRecord(r)) continue
+    if (isUnsafeKey(key) || !isRecord(r)) continue
     const { timeMs, stars, coins } = r
     if (!isFiniteNumber(timeMs) || timeMs < 0) continue
     if (stars !== 1 && stars !== 2 && stars !== 3) continue

@@ -136,16 +136,18 @@ export function validateTemplate(t: Template): string[] {
   // Kids may place a step's bricks in any order, so each brick must fit using only the bricks of
   // earlier steps (support, bounds, collisions), and must not overlap another brick of its step.
   const earlier: Brick[] = []
+  const earlierOcc = new Occupancy() // kept in step with `earlier`: linear, not quadratic, in bricks
   t.steps.forEach((step, s) => {
     if (step.length === 0) problems.push(`step ${s}: empty`)
     const stepBricks = step.map((i) => t.bricks[i]).filter((b) => b !== undefined && PART_BY_ID[b.p] !== undefined)
     const sameStep = new Occupancy()
     for (const b of stepBricks) {
-      const error = canPlace(earlier, b, t.baseplate) ?? (sameStep.collides(b) ? 'collision' : null)
+      const error = canPlace(earlier, b, t.baseplate, undefined, earlierOcc) ?? (sameStep.collides(b) ? 'collision' : null)
       if (error) problems.push(`brick ${b.id}: cannot be placed in step order (${error})`)
       sameStep.add(b)
     }
     earlier.push(...stepBricks)
+    for (const b of stepBricks) earlierOcc.add(b)
   })
   return problems
 }
