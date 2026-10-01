@@ -338,7 +338,9 @@ export function drawPrintAtlas(ctx: CanvasRenderingContext2D): void {
     ctx.save()
     ctx.translate(r.x * px, r.y * px)
     ctx.beginPath()
-    ctx.rect(0, 0, r.w * px, r.h * px)
+    // Torso prints span the whole torso (bands, stripes): clipped to the margin like the others.
+    const m = p.id.startsWith('fig_torso_') ? M : 0
+    ctx.rect(m, m, r.w * px - 2 * m, r.h * px - 2 * m)
     ctx.clip()
     draw(ctx, r.w * px, r.h * px)
     ctx.restore()
