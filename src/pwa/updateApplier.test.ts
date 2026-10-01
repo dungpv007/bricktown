@@ -7,7 +7,7 @@ describe('createUpdateApplier', () => {
     const apply = vi.fn()
     const reload = vi.fn()
     const flush = vi.fn(async () => flushOk)
-    const applier = createUpdateApplier({ isSafe: () => state.safe, flush, apply, reload })
+    const applier = createUpdateApplier({ isSafe: () => state.safe, flush, apply, reload, snapshot: () => 'data' })
     return { state, apply, reload, flush, applier }
   }
 
@@ -46,6 +46,7 @@ describe('createUpdateApplier', () => {
       flush: async () => flushResults.shift()!,
       apply,
       reload: vi.fn(),
+      snapshot: () => 'data',
     })
     await applier.updateReady()
     expect(apply).not.toHaveBeenCalled()
@@ -89,6 +90,7 @@ describe('createUpdateApplier', () => {
       flush: async () => flushResults.shift() ?? true,
       apply: vi.fn(),
       reload,
+      snapshot: () => 'data',
     })
     await applier.controlling() // e.g. another tab activated the new version
     expect(reload).not.toHaveBeenCalled()
@@ -107,8 +109,63 @@ describe('createUpdateApplier', () => {
       },
       apply: vi.fn(),
       reload,
+      snapshot: () => 'data',
     })
     await applier.controlling()
     expect(reload).not.toHaveBeenCalled()
+  })
+
+  it('saves again when the game changed while saving, and reloads only once a save caught every change', async () => {
+    const game = { data: 1 }
+    const reload = vi.fn()
+    const flush = vi.fn(async () => {
+      if (flush.mock.calls.length === 1) game.data++ // an edit lands while the first save is in flight
+      return true
+    })
+    const applier = createUpdateApplier({ isSafe: () => true, flush, apply: vi.fn(), reload, snapshot: () => game.data })
+    await applier.controlling()
+    expect(flush).toHaveBeenCalledTimes(2)
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('gives up for now (no reload) when the game keeps changing during every save', async () => {
+    const game = { data: 1 }
+    const reload = vi.fn()
+    const flush = vi.fn(async () => {
+      game.data++
+      return true
+    })
+    const applier = createUpdateApplier({ isSafe: () => true, flush, apply: vi.fn(), reload, snapshot: () => game.data })
+    await applier.controlling()
+    expect(reload).not.toHaveBeenCalled()
+    expect(flush.mock.calls.length).toBeLessThanOrEqual(5)
+  })
+
+  it('controlling() during an in-flight check: reloads straight away instead of activating', async () => {
+    let finishFlush!: (ok: boolean) => void
+    const apply = vi.fn()
+    const reload = vi.fn()
+    const flush = vi.fn(() => new Promise<boolean>((r) => (finishFlush = r)))
+    const applier = createUpdateApplier({ isSafe: () => true, flush, apply, reload, snapshot: () => 'data' })
+    const checking = applier.updateReady()
+    const controlling = applier.controlling() // e.g. another tab activated the new version meanwhile
+    finishFlush(true)
+    await Promise.all([checking, controlling])
+    expect(apply).not.toHaveBeenCalled()
+    expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('a check asked for during an in-flight check is not dropped (it runs once that one ends)', async () => {
+    const results: Array<(ok: boolean) => void> = []
+    const reload = vi.fn()
+    const flush = vi.fn(() => new Promise<boolean>((r) => results.push(r)))
+    const applier = createUpdateApplier({ isSafe: () => true, flush, apply: vi.fn(), reload, snapshot: () => 'data' })
+    const first = applier.controlling()
+    const again = applier.check() // e.g. the app came back to the front while saving
+    results[0](false) // this save failed...
+    await vi.waitFor(() => expect(results).toHaveLength(2)) // ...so the queued check saves again
+    results[1](true)
+    await Promise.all([first, again])
+    expect(reload).toHaveBeenCalledTimes(1)
   })
 })

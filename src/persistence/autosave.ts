@@ -25,6 +25,12 @@ export function markClean(data: SaveData | null): void {
   clearTimer()
 }
 
+/** True when the game changed since it was loaded or last written (that change is not on disk). */
+export function hasUnsavedChanges(): boolean {
+  const { data, loaded } = useGame.getState()
+  return loaded && data !== cleanData
+}
+
 /**
  * Writes the current game data to the current slot now, if it changed since the last write.
  * Resolves false only when a write was attempted and failed. While writes are blocked (the slot

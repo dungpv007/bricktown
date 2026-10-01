@@ -7,23 +7,30 @@ export interface UpdateApplierDeps {
   apply: () => void
   /** Reloads the page into the new version. */
   reload: () => void
+  /** The current game data (compared by identity): a change during a save means that save missed it. */
+  snapshot: () => unknown
 }
+
+/** Saves attempted per check while the game keeps changing under them; then wait for the next check. */
+const MAX_FLUSHES = 3
 
 /**
  * Applies a downloaded app update only at a safe moment. Once an update is waiting, every `check`
  * (call it whenever the screen changes) saves and activates it if the kid is on a safe screen. When
  * the new version takes control (`controlling`), the page reloads the same way: saved first, and only
- * while still safe; otherwise later checks reload once the app is safe again.
+ * while still safe; otherwise later checks reload once the app is safe again. A save only counts when
+ * nothing changed while it ran, and the final safety check and the action happen with no wait between.
  */
-export function createUpdateApplier({ isSafe, flush, apply, reload }: UpdateApplierDeps) {
+export function createUpdateApplier({ isSafe, flush, apply, reload, snapshot }: UpdateApplierDeps) {
   let phase: 'idle' | 'waiting' | 'activating' | 'needsReload' | 'reloaded' = 'idle'
   let busy = false
+  let rerun = false
 
-  const check = async (): Promise<void> => {
-    if ((phase !== 'waiting' && phase !== 'needsReload') || busy || !isSafe()) return
-    busy = true
-    try {
+  const attempt = async (): Promise<void> => {
+    for (let i = 0; i < MAX_FLUSHES; i++) {
+      const before = snapshot()
       if (!(await flush())) return // keep waiting; try again on the next check
+      if (snapshot() !== before) continue // changed while saving: save again
       if (!isSafe()) return
       // Read the phase now: the new version may have taken control while saving.
       if (phase === 'needsReload') {
@@ -33,8 +40,25 @@ export function createUpdateApplier({ isSafe, flush, apply, reload }: UpdateAppl
         phase = 'activating'
         apply()
       }
+      return
+    }
+  }
+
+  const check = async (): Promise<void> => {
+    if (busy) {
+      rerun = true // run again once the current check ends, so this trigger is not lost
+      return
+    }
+    if ((phase !== 'waiting' && phase !== 'needsReload') || !isSafe()) return
+    busy = true
+    try {
+      await attempt()
     } finally {
       busy = false
+    }
+    if (rerun) {
+      rerun = false
+      await check()
     }
   }
 

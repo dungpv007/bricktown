@@ -4,7 +4,7 @@ import { createEmptySave } from '../core/serialize'
 import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
-import { AUTOSAVE_DELAY_MS, flushAutosave, startAutosave } from './autosave'
+import { AUTOSAVE_DELAY_MS, flushAutosave, hasUnsavedChanges, startAutosave } from './autosave'
 import { db } from './db'
 import { loadSlot as loadSlotResult } from './saves'
 import { applySave, switchSlot } from './session'
@@ -136,5 +136,15 @@ describe('slot switching', () => {
 
     await switchSlot(1)
     expect(useGame.getState().data.workshop.bricks).toHaveLength(1)
+  })
+})
+
+describe('hasUnsavedChanges', () => {
+  it('is false after a load, true after an edit, false again once written', async () => {
+    expect(hasUnsavedChanges()).toBe(false)
+    addBrick()
+    expect(hasUnsavedChanges()).toBe(true)
+    expect(await flushAutosave()).toBe(true)
+    expect(hasUnsavedChanges()).toBe(false)
   })
 })

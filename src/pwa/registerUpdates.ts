@@ -1,5 +1,6 @@
 import { registerSW } from 'virtual:pwa-register'
 import { flushAutosave } from '../persistence/autosave'
+import { useGame } from '../state/useGame'
 import { isSafeToReload, onSafetyChange } from './safeMoment'
 import { createUpdateApplier } from './updateApplier'
 
@@ -14,6 +15,7 @@ export function registerUpdates(): void {
     flush: flushAutosave,
     apply: () => void updateSW(true), // only called after registration (from onNeedRefresh)
     reload: () => window.location.reload(),
+    snapshot: () => useGame.getState().data,
   })
   const updateSW = registerSW({
     onNeedRefresh: () => void applier.updateReady(),
@@ -26,5 +28,6 @@ export function registerUpdates(): void {
       })
     },
   })
+  // Includes coming back to the front: retries an update whose save failed while on the menu.
   onSafetyChange(() => void applier.check())
 }

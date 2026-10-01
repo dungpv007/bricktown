@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Mode } from '../state/useApp'
-import { usePersistStatus } from '../persistence/status'
+import { persistWarning, usePersistStatus } from '../persistence/status'
 import { snap } from '../audio/sfx'
 import { useApp } from '../state/useApp'
 import { useT, type TKey } from './i18n'
@@ -24,7 +24,7 @@ export default function MainMenu() {
   const setMode = useApp((s) => s.setMode)
   const muted = useApp((s) => s.muted)
   const setMuted = useApp((s) => s.setMuted)
-  const persistError = usePersistStatus((s) => s.error)
+  const saveWarning = usePersistStatus(persistWarning)
   const [slotsOpen, setSlotsOpen] = useState(false)
 
   return (
@@ -73,12 +73,12 @@ export default function MainMenu() {
         >
           {muted ? '🔇' : '🔊'}
         </button>
-        {persistError && (
+        {saveWarning && (
           <span
             className="bt-warning"
             data-testid="persist-warning"
             role="img"
-            aria-label={persistError === 'load' ? t('loadWarning') : t('saveFailed')}
+            aria-label={saveWarning === 'load' ? t('loadWarning') : t('saveFailed')}
           >
             ⚠️
           </span>
