@@ -744,7 +744,7 @@
 }
 
 .bt-guided-ui {
-  --bt-palette-h: 88px;
+  --bt-palette-h: 112px;
 }
 
 .bt-stepnav {
@@ -772,57 +772,168 @@
   white-space: nowrap;
 }
 
-.bt-needed {
+/* The piece tray (Guided): big cards to drag onto the model. */
+.bt-tray {
   position: absolute;
   left: var(--bt-edge);
-  top: var(--bt-top);
-  max-height: calc(100% - var(--bt-top) - var(--bt-palette-h) - 2 * var(--bt-edge));
+  right: var(--bt-edge);
+  bottom: var(--bt-edge);
+  height: var(--bt-palette-h);
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  box-sizing: border-box;
-  border-radius: var(--bt-radius);
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
   background: rgba(255, 255, 255, 0.75);
-  overflow-y: auto;
-  scrollbar-width: none;
 }
 
-.bt-guided-ui[data-easy='true'] .bt-needed {
-  max-height: calc(100% - var(--bt-top) - 2 * var(--bt-edge));
-}
-
-.bt-needed-title {
+.bt-tray-title {
+  flex: none;
+  max-width: 120px;
   font-size: 18px;
   font-weight: 800;
+  line-height: 1.1;
   text-align: center;
 }
 
-.bt-needed-item {
+.bt-tray-cards {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  border-radius: 18px;
+  gap: 10px;
+  overflow-x: auto;
+  /* Room for the ×count badges: the scroller clips its overflow. */
+  padding: 8px 8px 4px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.bt-tray-card {
+  position: relative;
+  flex: none;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border-radius: 20px;
   background: var(--bt-white);
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+  /* Up drags the piece; sideways scrolls the tray (as the workshop palette). */
+  touch-action: pan-x;
 }
 
-.bt-needed-item svg {
+.bt-tray-card[data-dragging='true'] {
+  opacity: 0.45;
+}
+
+.bt-tray[data-readonly='true'] .bt-tray-card {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.bt-tray-piece {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  transition: transform 0.15s ease-out;
+}
+
+.bt-tray-piece .bt-part-thumb,
+.bt-tray-piece svg {
   display: block;
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
 }
 
-.bt-needed-item .bt-part-emoji {
-  font-size: 36px;
-  line-height: 48px;
+.bt-tray-piece .bt-part-emoji {
+  font-size: 44px;
+  line-height: 64px;
 }
 
-.bt-needed-count {
-  min-width: 40px;
-  font-size: 26px;
+.bt-tray-count {
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  min-width: 34px;
+  padding: 2px 6px;
+  border-radius: 14px;
+  background: var(--bt-red);
+  color: var(--bt-white);
+  font-size: 20px;
   font-weight: 800;
+  line-height: 26px;
+}
+
+.bt-tray-rotate {
+  background: var(--bt-yellow);
+}
+
+.bt-tray-rotate .bt-rotate-arrow {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  font-size: 26px;
+}
+
+/* The piece under the finger while dragging (and on its way back to the tray). */
+.bt-drag-avatar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.bt-drag-avatar[data-shown='true'] {
+  opacity: 1;
+}
+
+/* Centred a little above the finger, so the finger does not hide it. */
+.bt-drag-avatar-inner {
+  width: 80px;
+  height: 80px;
+  margin: -96px 0 0 -40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.3));
+}
+
+.bt-drag-avatar-inner .bt-part-thumb,
+.bt-drag-avatar-inner svg {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+}
+
+.bt-drag-avatar-inner .bt-part-emoji {
+  font-size: 56px;
+}
+
+/* "Drag me": a hand sliding from the first card to its spot on the model. */
+.bt-drag-hint {
+  position: fixed;
+  z-index: 35;
+  margin: -10px 0 0 -18px;
+  font-size: 52px;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.35));
+  animation: bt-drag-hint 2.2s ease-in-out infinite;
+}
+
+@keyframes bt-drag-hint {
+  0%, 12% { transform: translate(0, 0) scale(1); opacity: 0; }
+  20% { transform: translate(0, 0) scale(0.85); opacity: 1; }
+  75% { transform: translate(var(--bt-hint-dx, 0), var(--bt-hint-dy, -120px)) scale(0.85); opacity: 1; }
+  90%, 100% { transform: translate(var(--bt-hint-dx, 0), var(--bt-hint-dy, -120px)) scale(1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-drag-hint { animation: none; }
 }
 
 .bt-celebrate {

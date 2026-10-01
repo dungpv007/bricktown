@@ -22,15 +22,23 @@ export function registerPaletteDropTarget(t: PaletteDropTarget): () => void {
   }
 }
 
+export interface PaletteDragOptions {
+  /** A second finger (any other pointer going down) cancels the drag, leaving that finger to the camera. */
+  cancelOnSecondPointer?: boolean
+}
+
 /**
- * Lets a palette button be dragged onto the 3D view, when a drop target is registered (otherwise,
- * e.g. in Guided Build, the button only clicks). The button captures the pointer and the moves /
- * release are followed on the document, so touch drags work too. `begin` runs once the press has
- * moved far enough to be a drag (it makes the button's part the current one); a press that does
- * not move stays a normal click. Losing the pointer (pointercancel, lost capture), the window
- * losing focus or the page being hidden cancels the drag.
+ * Lets a palette button be dragged onto the 3D view, when a drop target is registered (otherwise
+ * the button only clicks). The button captures the pointer and the moves / release are followed
+ * on the document, so touch drags work too. `begin` runs once the press has moved far enough to be
+ * a drag (it makes the button's part the current one); a press that does not move stays a normal
+ * click. Losing the pointer (pointercancel, lost capture), the window losing focus or the page
+ * being hidden cancels the drag (and, with `cancelOnSecondPointer`, a second pointer going down).
  */
-export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLElement>) => void {
+export function usePaletteDrag(
+  begin: () => void,
+  { cancelOnSecondPointer = false }: PaletteDragOptions = {},
+): (e: ReactPointerEvent<HTMLElement>) => void {
   const beginRef = useRef(begin)
   useEffect(() => {
     beginRef.current = begin
@@ -75,6 +83,9 @@ export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLEle
     const onVisibility = () => {
       if (document.visibilityState === 'hidden') cancel()
     }
+    const onOtherDown = (ev: PointerEvent) => {
+      if (ev.pointerId !== id) cancel()
+    }
     const cleanup = () => {
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
@@ -82,6 +93,7 @@ export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLEle
       button.removeEventListener('lostpointercapture', onCancel)
       window.removeEventListener('blur', cancel)
       document.removeEventListener('visibilitychange', onVisibility)
+      document.removeEventListener('pointerdown', onOtherDown, true)
       setDragActive('palette', false)
       stop.current = null
     }
@@ -92,6 +104,8 @@ export function usePaletteDrag(begin: () => void): (e: ReactPointerEvent<HTMLEle
     button.addEventListener('lostpointercapture', onCancel)
     window.addEventListener('blur', cancel)
     document.addEventListener('visibilitychange', onVisibility)
+    // Capture phase: seen even when the view stops the event.
+    if (cancelOnSecondPointer) document.addEventListener('pointerdown', onOtherDown, true)
     stop.current = cancel
-  }, [])
+  }, [cancelOnSecondPointer])
 }

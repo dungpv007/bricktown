@@ -1,18 +1,11 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
 import { getTemplate } from '../content/templates'
-import { figOf, isFigure } from '../core/figures'
-import { getPart } from '../core/parts/catalog'
-import {
-  findMatch,
-  nextPending,
-  stepComplete,
-  templateToBlueprint,
-  type PlacedCandidate,
-} from '../core/template'
-import type { Brick, GuidedState, Template } from '../core/types'
+import { trayCards, type TrayCard } from '../core/guidedTray'
+import { nextRot } from '../core/rotation'
+import { findMatch, stepComplete, templateToBlueprint, type PlacedCandidate } from '../core/template'
+import type { Brick, GuidedState, Rot, Template } from '../core/types'
 import { useApp } from './useApp'
-import { useEditor } from './useEditor'
 import { useGame } from './useGame'
 
 export interface Celebration {
@@ -27,12 +20,29 @@ export interface GuidedStore {
   errorSeq: number
   /** Set when a template was just finished (progress is already cleared and the blueprint saved). */
   celebration: Celebration | null
+  /** Normal mode: quarter turns of each tray card (by card key; missing = unturned). Cleared on each new step. */
+  cardRots: Record<string, Rot>
+  /** The tray card ↻ turns: the last one tapped or dragged (null: the first card). Cleared on each new step. */
+  selectedCard: string | null
+  /** True once a dragged piece was dropped in place this session (hides the "drag me" hint). Not saved. */
+  dropped: boolean
   /** Begins `templateId` from scratch (replacing any build in progress). */
   start: (templateId: string) => void
-  /** Re-enters the saved build: repairs the step index, views the current step, selects its next brick. */
+  /** Re-enters the saved build: repairs the step index and views the current step with a fresh tray. */
   resume: () => void
   /** Unplaced bricks of the current step (empty without a build). */
   pending: () => Brick[]
+  /** The tray: the current step's unplaced bricks grouped by kind (empty without a build). */
+  cards: () => TrayCard[]
+  /** Quarter turns of tray card `key`. */
+  cardRot: (key: string) => Rot
+  selectCard: (key: string) => void
+  /** Turns the selected tray card (or the first one) a quarter turn. */
+  rotateCard: () => void
+  /** Easy mode: a dragged piece released while snapped onto pending brick `brickId`; returns the placed brick. */
+  dropOn: (brickId: string) => Brick | null
+  /** Normal mode: a dragged piece released as `candidate`; returns the placed template brick, or null (shakes). */
+  dropAt: (candidate: PlacedCandidate) => Brick | null
   /** Normal mode: true when `candidate` matches a pending brick of the current step (which is then placed). */
   tryPlace: (candidate: PlacedCandidate) => boolean
   /** Easy mode: places a pending brick of the current step by id. */
@@ -56,17 +66,8 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     return g && t ? { g, t } : null
   }
 
-  /** Puts the next brick to place into the editor (part, colour, rotation, palette tab; a figure's style). */
-  const selectNext = (t: Template, step: number, placed: readonly string[]) => {
-    const next = nextPending(t, step, placed)
-    if (!next) return
-    const ed = useEditor.getState()
-    ed.setCategory(getPart(next.p).category)
-    ed.setPart(next.p)
-    ed.setColor(next.c)
-    if (isFigure(next)) ed.setFig(figOf(next))
-    useEditor.setState({ rot: next.r })
-  }
+  /** A new step starts with an unturned tray and nothing selected. */
+  const freshTray = { cardRots: {}, selectedCard: null }
 
   const firstIncomplete = (t: Template, from: number, placed: readonly string[]) => {
     let step = from
@@ -93,11 +94,11 @@ export const useGuided = create<GuidedStore>()((set, get) => {
       return
     }
     useGame.getState().setGuided({ ...g, step, placed })
-    set({ viewStep: step })
     if (step !== g.step) {
-      selectNext(t, step, placed)
+      set({ viewStep: step, ...freshTray })
       sfx.success()
     } else {
+      set({ viewStep: step })
       sfx.snap()
     }
   }
@@ -106,13 +107,15 @@ export const useGuided = create<GuidedStore>()((set, get) => {
     viewStep: 0,
     errorSeq: 0,
     celebration: null,
+    cardRots: {},
+    selectedCard: null,
+    dropped: false,
 
     start: (templateId) => {
       const t = getTemplate(templateId)
       if (!t) return
       useGame.getState().setGuided({ templateId, step: 0, placed: [] })
-      set({ viewStep: 0, celebration: null })
-      selectNext(t, 0, [])
+      set({ viewStep: 0, celebration: null, ...freshTray })
     },
 
     resume: () => {
@@ -133,14 +136,43 @@ export const useGuided = create<GuidedStore>()((set, get) => {
       if (step !== g.step || placed.length !== g.placed.length) {
         useGame.getState().setGuided({ ...g, step, placed })
       }
-      set({ viewStep: step, celebration: null })
-      selectNext(t, step, placed)
+      set({ viewStep: step, celebration: null, ...freshTray })
     },
 
     pending: () => {
       const a = active()
       if (!a) return []
       return (a.t.steps[a.g.step] ?? []).map((i) => a.t.bricks[i]).filter((b) => !a.g.placed.includes(b.id))
+    },
+
+    cards: () => trayCards(get().pending()),
+
+    cardRot: (key) => get().cardRots[key] ?? 0,
+
+    selectCard: (key) => {
+      if (get().selectedCard !== key) set({ selectedCard: key })
+    },
+
+    rotateCard: () => {
+      const cards = get().cards()
+      const key = cards.find((c) => c.key === get().selectedCard)?.key ?? cards[0]?.key
+      if (key === undefined) return
+      set((s) => ({ selectedCard: key, cardRots: { ...s.cardRots, [key]: nextRot(s.cardRots[key] ?? 0) } }))
+    },
+
+    dropOn: (brickId) => {
+      const brick = get().pending().find((b) => b.id === brickId)
+      if (!brick || !get().placeGhost(brickId)) return null
+      set({ dropped: true })
+      return brick
+    },
+
+    dropAt: (candidate) => {
+      const a = active()
+      const match = a ? findMatch(a.t, a.g.step, a.g.placed, candidate) : null
+      if (!get().tryPlace(candidate) || !match) return null
+      set({ dropped: true })
+      return match
     },
 
     tryPlace: (candidate) => {
