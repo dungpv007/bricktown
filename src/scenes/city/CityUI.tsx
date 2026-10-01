@@ -3,7 +3,7 @@ import { TEMPLATES } from '../../content/templates'
 import type { Blueprint, Template } from '../../core/types'
 import { usePaletteDrag } from '../../input/paletteDrag'
 import { getThumbnail } from '../../render/thumbnails'
-import { isTemplateSource, templateSource } from '../../render/sources'
+import { isTemplateSource, resolveRenderable, templateSource } from '../../render/sources'
 import { useApp } from '../../state/useApp'
 import { useCityEditor } from '../../state/useCityEditor'
 import { useEditor, workshopHasBricks } from '../../state/useEditor'
@@ -70,9 +70,11 @@ const ACTIONS: Array<{ action: CityAction; icon: string; labelKey: TKey }> = [
 
 /**
  * What can be done to the selected placement, in the Workshop action bar's look. ✏️ shows only for
- * the kid's own blueprints (templates are not editable).
+ * the kid's own blueprints (templates are not editable), 📋 only for models that can be drawn (a grey
+ * placeholder is never copied).
  */
-function CityActionBar({ editable, onEdit }: { editable: Blueprint | null; onEdit: (bp: Blueprint) => void }) {
+function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; onEdit: (bp: Blueprint) => void }) {
+  const { editable, drawable, onEdit } = props
   const t = useT()
   const run = (action: CityAction) => {
     const ed = useCityEditor.getState()
@@ -86,7 +88,7 @@ function CityActionBar({ editable, onEdit }: { editable: Blueprint | null; onEdi
   }
   return (
     <div className="bt-actionbar bt-hud-panel" role="toolbar" aria-orientation="vertical" data-testid="city-action-bar">
-      {ACTIONS.filter(({ action }) => action !== 'edit' || editable).map(({ action, icon, labelKey }) => (
+      {ACTIONS.filter(({ action }) => (action !== 'edit' || editable) && (action !== 'duplicate' || drawable)).map(({ action, icon, labelKey }) => (
         <button
           key={action}
           className={`bt-btn bt-icon-btn bt-act-${action}`}
@@ -219,6 +221,7 @@ export default function CityUI() {
     () => (selected && !isTemplateSource(selected.source) ? (blueprints.find((b) => b.id === selected.source) ?? null) : null),
     [selected, blueprints],
   )
+  const drawable = useMemo(() => selected !== null && resolveRenderable(selected.source, { blueprints }) !== null, [selected, blueprints])
 
   // Undo must not reach back into another visit (or another save slot).
   useEffect(() => useCityEditor.getState().reset(), [])
@@ -244,7 +247,7 @@ export default function CityUI() {
       </div>
       <div className="bt-city-left">
         <CityToolbar />
-        {selected && <CityActionBar editable={editable} onEdit={onEdit} />}
+        {selected && <CityActionBar editable={editable} drawable={drawable} onEdit={onEdit} />}
       </div>
       <SourceDrawer />
       <ErrorBadge errorSeq={errorSeq} testId="city-error" />

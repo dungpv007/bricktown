@@ -130,6 +130,17 @@ describe('useCityEditor placements', () => {
     expect(ed().roadTool).toBe('paint')
   })
 
+  it('a Kho drop leaves road mode; a refused one leaves nothing selected', () => {
+    ed().dropSource('tpl:tree', ...at(4, 4))
+    ed().setRoadMode(true)
+    ed().dropSource('tpl:tree', ...at(8, 8))
+    expect(ed().roadMode).toBe(false)
+    expect(ed().selectedPlacementId).toBe(city().placements[1].id)
+    ed().dropSource('tpl:tree', ...at(8, 8)) // on top of the last one
+    expect(ed().lastError).toBe('overlap')
+    expect(ed().selectedPlacementId).toBeNull()
+  })
+
   it('reset forgets the undo history and leaves road mode', () => {
     ed().setRoadMode(true)
     ed().paintRoad({ cx: 0, cz: 0 }, { cx: 0, cz: 0 })

@@ -6,6 +6,7 @@ import {
   frontRoadCount,
   placementCenter,
   planPlacement,
+  cellsOnLine,
   planMove,
   pointToCell,
   removeRoads,
@@ -108,6 +109,16 @@ describe('placementCenter', () => {
   })
 })
 
+describe('cellsOnLine', () => {
+  const keys = (cells: Array<{ cx: number; cz: number }>) => cells.map((c) => `${c.cx},${c.cz}`)
+  it('follows a straight line between two cells, ends included', () => {
+    expect(keys(cellsOnLine({ cx: 2, cz: 2 }, { cx: 2, cz: 2 }))).toEqual(['2,2'])
+    expect(keys(cellsOnLine({ cx: 0, cz: 0 }, { cx: 3, cz: 0 }))).toEqual(['0,0', '1,0', '2,0', '3,0'])
+    expect(keys(cellsOnLine({ cx: 0, cz: 0 }, { cx: 3, cz: 3 }))).toEqual(['0,0', '1,1', '2,2', '3,3'])
+    expect(keys(cellsOnLine({ cx: 4, cz: 1 }, { cx: 0, cz: 3 }))).toEqual(['4,1', '3,2', '2,2', '1,3', '0,3'])
+  })
+})
+
 describe('removeRoads', () => {
   it('removes the listed road cells and returns null when none of them is a road', () => {
     const c = city(['1,1', '2,1', '3,1'])
@@ -140,14 +151,14 @@ describe('duplicateCell', () => {
     expect(duplicateCell({ size: 11, roads: [], placements: [car] }, car, sizeOf)).toEqual({ cx: 7, cz: 0 })
   })
 
-  it('falls back to the second ring (one footprint further, then the corners)', () => {
+  it('then the corners (+X+Z, -X+Z, +X-Z, -X-Z), then one footprint further out', () => {
     const a = pl('a', 'house', 4, 4)
-    const ring1 = [pl('b', 'house', 6, 4), pl('c', 'house', 2, 4), pl('d', 'house', 4, 6), pl('e', 'house', 4, 2)]
-    expect(duplicateCell({ size: 10, roads: [], placements: [a, ...ring1] }, a, sizeOf)).toEqual({ cx: 8, cz: 4 })
-    // A 6x6 grid: nothing two footprints away fits, the corner +X+Z does.
-    const b = pl('a', 'house', 2, 2)
-    const around = [pl('b', 'house', 4, 2), pl('c', 'house', 0, 2), pl('d', 'house', 2, 4), pl('e', 'house', 2, 0)]
-    expect(duplicateCell({ size: 6, roads: [], placements: [b, ...around] }, b, sizeOf)).toEqual({ cx: 4, cz: 4 })
+    const sides = [pl('b', 'house', 6, 4), pl('c', 'house', 2, 4), pl('d', 'house', 4, 6), pl('e', 'house', 4, 2)]
+    const at = (placements: CityPlacement[]) => duplicateCell({ size: 10, roads: [], placements: [a, ...sides, ...placements] }, a, sizeOf)
+    expect(at([])).toEqual({ cx: 6, cz: 6 })
+    expect(at([pl('f', 'house', 6, 6)])).toEqual({ cx: 2, cz: 6 })
+    const corners = [pl('f', 'house', 6, 6), pl('g', 'house', 2, 6), pl('h', 'house', 6, 2), pl('i', 'house', 2, 2)]
+    expect(at(corners)).toEqual({ cx: 8, cz: 4 })
   })
 
   it('returns null when nothing nearby is free', () => {

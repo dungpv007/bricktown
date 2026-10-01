@@ -83,6 +83,30 @@ export function placementCenter(p: Pick<CityPlacement, 'cx' | 'cz' | 'rot'>, bas
   return { x: (p.cx + cw / 2) * CELL, z: (p.cz + cd / 2) * CELL }
 }
 
+/** The cells on the straight (Bresenham) line from `from` to `to`, both ends included. */
+export function cellsOnLine(from: Cell, to: Cell): Cell[] {
+  const dx = Math.abs(to.cx - from.cx)
+  const dz = -Math.abs(to.cz - from.cz)
+  const sx = Math.sign(to.cx - from.cx)
+  const sz = Math.sign(to.cz - from.cz)
+  let { cx, cz } = from
+  let err = dx + dz
+  const cells: Cell[] = [{ cx, cz }]
+  while (cx !== to.cx || cz !== to.cz) {
+    const e2 = 2 * err
+    if (e2 >= dz) {
+      err += dz
+      cx += sx
+    }
+    if (e2 <= dx) {
+      err += dx
+      cz += sz
+    }
+    cells.push({ cx, cz })
+  }
+  return cells
+}
+
 /** The city without those of `keys` that are roads; null when none of them is. */
 export function removeRoads(city: CityState, keys: Iterable<string>): CityState | null {
   const gone = new Set(keys)
@@ -105,15 +129,15 @@ export function planMove(city: CityState, placement: CityPlacement, x: number, z
 
 /**
  * Where a copy of `placement` (same source and rotation) goes: the first free spot right next to it,
- * trying +X, -X, +Z, -Z, then one footprint further out in the same order, then the four corners.
+ * trying +X, -X, +Z, -Z, then the four corners, then one footprint further out (+X, -X, +Z, -Z).
  * Null when none of them fits.
  */
 export function duplicateCell(city: CityState, placement: CityPlacement, sizeOf: SizeOf): Cell | null {
   const { cw, cd } = footprintCells(sizeOf(placement.source), placement.rot)
   const steps: Array<[number, number]> = [
     [1, 0], [-1, 0], [0, 1], [0, -1],
-    [2, 0], [-2, 0], [0, 2], [0, -2],
     [1, 1], [-1, 1], [1, -1], [-1, -1],
+    [2, 0], [-2, 0], [0, 2], [0, -2],
   ]
   for (const [sx, sz] of steps) {
     const cell = { cx: placement.cx + sx * cw, cz: placement.cz + sz * cd }

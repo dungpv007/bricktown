@@ -23,6 +23,8 @@ export interface CityGestureHandlers {
   roadMode: () => boolean
   /** Lets one finger / the left button pan the camera (off while a press on a placement may move it). */
   setPan: (on: boolean) => void
+  /** A press went down on a placement (it may become a move): stop any camera glide under the finger. */
+  pressPlacement: () => void
   tapPlacement: (id: string) => void
   tapGround: (point: GroundPoint) => void
   tapOutside: () => void
@@ -59,7 +61,7 @@ interface Gesture {
  * The city's canvas gestures (see `cityGestureIntent`), following the Workshop's
  * `useWorkshopGestures`: a tap selects a placement, acts on the empty ground (quick-place or
  * deselect) or deselects outside the city; one finger dragging from a placement moves it while the
- * camera stays still; any other one-finger drag pans and two fingers zoom / turn (MapControls).
+ * camera stays still; any other one-finger drag pans and two fingers zoom / pan (MapControls).
  * In road mode one finger paints or erases roads instead. A second finger, leaving the app or losing
  * the pointer cancels a move (the placement stays) or a road stroke.
  */
@@ -103,7 +105,7 @@ export function useCityGestures(el: HTMLElement, handlers: CityGestureHandlers):
 
     const onDown = (e: PointerEvent) => {
       if (!tracker.down(sampleOf(e))) {
-        // A second finger: zoom / turn the camera, whatever the first finger was doing.
+        // A second finger: zoom / pan the camera, whatever the first finger was doing.
         if (g) {
           g.pointers++
           endEdit(false)
@@ -132,8 +134,10 @@ export function useCityGestures(el: HTMLElement, handlers: CityGestureHandlers):
         g.painting = true
         h.current.roadStart(hit.point)
       }
-      // Pressing a placement may become a move: the camera must not pan under the finger.
-      h.current.setPan(intent !== 'hold-placement')
+      // Pressing a placement may become a move: the camera must not pan (or glide) under the finger.
+      const holding = intent === 'hold-placement'
+      if (holding) h.current.pressPlacement()
+      h.current.setPan(!holding)
     }
 
     const onMove = (e: PointerEvent) => {

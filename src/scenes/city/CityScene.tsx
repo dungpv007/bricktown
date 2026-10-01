@@ -4,7 +4,7 @@ import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { addRoads, CELL, footprintCells } from '../../core/city'
-import { clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
+import { cellsOnLine, clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
 import { paintRoadLine, roadKey } from '../../core/roads'
 import type { Baseplate, Blueprint, CityPlacement, CityState } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
@@ -95,14 +95,31 @@ function contentCenter(city: CityState, blueprints: Blueprint[]): [number, numbe
   return [((minX + maxX) / 2) * CELL, ((minZ + maxZ) / 2) * CELL]
 }
 
-const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }
+// Two fingers always pinch-zoom and pan (in both modes), so the map can still be moved when the
+// screen is full of buildings, where every one-finger drag starts on a building and moves it.
+const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
 const PAN_MOUSE = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
 // Road mode: one finger / the left button paints (no mapping = controls ignore it), so the camera
 // moves with two fingers / the right button.
 const PAINT_TOUCHES = { TWO: THREE.TOUCH.DOLLY_PAN }
 const PAINT_MOUSE = { MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
 
-/** Top-down-ish camera with map controls (one-finger pan, pinch zoom, two-finger rotate), kept over the city. */
+/**
+ * Stops the controls' damping glide right where the camera is now (MapControls has no API for it:
+ * one undamped update consumes the pending motion, then the pose is put back).
+ */
+function stopGlide(controls: MapControlsImpl) {
+  const position = controls.object.position.clone()
+  const target = controls.target.clone()
+  controls.enableDamping = false
+  controls.update()
+  controls.object.position.copy(position)
+  controls.target.copy(target)
+  controls.enableDamping = true
+  controls.update()
+}
+
+/** Top-down-ish camera with map controls (one-finger pan, two-finger pinch zoom + pan), kept over the city. */
 function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
   const [start] = useState(() => {
     const { city, blueprints } = useGame.getState().data
@@ -359,6 +376,10 @@ function CityWorld() {
       const controls = getThree().controls as MapControlsImpl | null
       if (controls) controls.enablePan = on
     },
+    pressPlacement: () => {
+      const controls = getThree().controls as MapControlsImpl | null
+      if (controls) stopGlide(controls)
+    },
     tapPlacement: (id) => useCityEditor.getState().selectPlacement(id),
     tapGround: ({ x, z }) => {
       useCityEditor.getState().tapGround(x, z)
@@ -406,8 +427,10 @@ function CityWorld() {
       if (s.kind === 'paint') {
         if (cell.cx !== s.to.cx || cell.cz !== s.to.cz) setStroke({ ...s, to: cell })
       } else if (cell.cx !== s.last.cx || cell.cz !== s.last.cz) {
-        // Every cell between two samples too, so a fast finger leaves no gaps.
-        setStroke({ kind: 'erase', last: cell, keys: new Set(paintRoadLine([...s.keys], s.last, cell)) })
+        // Every cell on the straight line between two samples too, so a fast finger leaves no gaps.
+        const keys = new Set(s.keys)
+        for (const c of cellsOnLine(s.last, cell)) keys.add(roadKey(c.cx, c.cz))
+        setStroke({ kind: 'erase', last: cell, keys })
       }
     },
     roadEnd: (apply) => {

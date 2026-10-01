@@ -46,7 +46,10 @@ export interface CityEditorState {
    * (facing a road) and selects it, or deselects when no source is picked.
    */
   tapGround: (x: number, z: number) => void
-  /** Drops `source` (dragged out of the Kho) at world point (x, z) like a quick-place, and selects it. */
+  /**
+   * Drops `source` (dragged out of the Kho) at world point (x, z) like a quick-place, and selects it.
+   * Leaves road mode; a refused drop leaves nothing selected.
+   */
   dropSource: (source: string, x: number, z: number) => void
   /** Moves a placement to min-corner cell (cx, cz); rejected (it stays) when it does not fit there. */
   movePlacement: (id: string, cx: number, cz: number) => void
@@ -156,7 +159,12 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
       if (selectedSource !== null) placeAt(selectedSource, x, z)
     },
 
-    dropSource: (source, x, z) => placeAt(source, x, z),
+    dropSource: (source, x, z) => {
+      // Dropping a model is selection work: leave road mode. Nothing stays selected if the drop is
+      // refused, so the refusal cannot shake some other building.
+      set({ roadMode: false, roadTool: 'paint', selectedPlacementId: null })
+      placeAt(source, x, z)
+    },
 
     movePlacement: (id, cx, cz) => {
       const before = city()

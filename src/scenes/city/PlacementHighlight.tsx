@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { bakedGeometries } from '../../core/bake'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { selectionGlowMaterial, selectionRimMaterial } from '../../render/materials'
 import { bakedModelBox, placementMatrix } from '../../render/placementTransform'
 import { resolveRenderable } from '../../render/sources'
+import { useHighlightPulse } from '../../render/useHighlightPulse'
 import { footprintBox, PLACEHOLDER_GAP, PLACEHOLDER_HEIGHT, placeholderGeometry } from './Placements'
 
 interface Props {
@@ -21,7 +21,6 @@ interface Props {
 const THICKNESS = 0.5
 /** Drawn after everything else (the rim ignores depth, so it must come last). */
 const RIM_ORDER = 10
-const SHAKE_SECONDS = 0.35
 const SHAKE_AMPLITUDE = 0.6
 const noRaycast = () => null
 const tmpMatrix = new THREE.Matrix4()
@@ -36,13 +35,8 @@ const grow = (v: number) => (v > 0 ? (v + 2 * THICKNESS) / v : 1)
  * materials and the bake cache are never copied or disposed. A grey placeholder block glows the same.
  */
 export default function PlacementHighlight({ placement, blueprints, sizeOf, shakeKey }: Props) {
-  const shakeRef = useRef<THREE.Group>(null)
+  const shakeRef = useHighlightPulse(shakeKey, SHAKE_AMPLITUDE)
   const modelRef = useRef<THREE.Group>(null)
-  const shakeStart = useRef<number | null>(null)
-  const firstShakeKey = useRef(shakeKey)
-  useEffect(() => {
-    if (shakeKey !== firstShakeKey.current) shakeStart.current = performance.now()
-  }, [shakeKey])
 
   const source = placement?.source ?? null
   const resolved = useMemo(() => (source === null ? null : resolveRenderable(source, { blueprints })), [source, blueprints])
@@ -60,21 +54,6 @@ export default function PlacementHighlight({ placement, blueprints, sizeOf, shak
     if (!group || !placement || !resolved) return
     placementMatrix(tmpMatrix, placement, resolved.baseplate).decompose(group.position, group.quaternion, group.scale)
   }, [placement, resolved, model])
-
-  useFrame(({ clock }) => {
-    const group = shakeRef.current
-    if (!group) return
-    const pulse = 0.5 + 0.5 * Math.sin(clock.elapsedTime * 6)
-    selectionGlowMaterial.opacity = 0.35 + 0.45 * pulse
-    selectionRimMaterial.opacity = 0.2 + 0.2 * pulse
-    let offset = 0
-    if (shakeStart.current !== null) {
-      const t = (performance.now() - shakeStart.current) / 1000
-      if (t < SHAKE_SECONDS) offset = Math.sin(t * 60) * SHAKE_AMPLITUDE * (1 - t / SHAKE_SECONDS)
-      else shakeStart.current = null
-    }
-    group.position.x = offset
-  })
 
   if (!placement) return null
   if (model) {
