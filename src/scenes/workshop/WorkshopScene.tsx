@@ -201,7 +201,7 @@ function WorkshopWorld() {
 
 export default function WorkshopScene() {
   return (
-    <Canvas shadows dpr={[1, 1.75]} data-testid="workshop-canvas">
+    <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="workshop-canvas">
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 80, 220]} />
       <WorkshopWorld />

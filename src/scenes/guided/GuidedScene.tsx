@@ -226,7 +226,7 @@ function GuidedWorld() {
 /** 3D view of a Guided Build: placed bricks, pulsing ghosts for the bricks of the current step. */
 export default function GuidedScene() {
   return (
-    <Canvas shadows dpr={[1, 1.75]} data-testid="guided-canvas">
+    <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="guided-canvas">
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 80, 220]} />
       <GuidedWorld />

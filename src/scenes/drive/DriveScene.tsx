@@ -149,7 +149,7 @@ export default function DriveScene({ source, onChangeVehicle }: { source: string
 
   return (
     <>
-      <Canvas shadows dpr={[1, 1.5]} camera={{ fov: 55, near: 0.5, far: 1500 }} data-testid="drive-canvas">
+      <Canvas shadows="percentage" dpr={[1, 1.5]} camera={{ fov: 55, near: 0.5, far: 1500 }} data-testid="drive-canvas">
         <color attach="background" args={[SKY]} />
         <fog attach="fog" args={[SKY, 250, 700]} />
         <DriveWorld setup={setup} spawn={spawn} />

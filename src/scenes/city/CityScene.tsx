@@ -417,7 +417,7 @@ function CityWorld() {
 export default function CityScene() {
   useEvictStaleBakesOnUnmount()
   return (
-    <Canvas shadows dpr={[1, 1.5]} data-testid="city-canvas">
+    <Canvas shadows="percentage" dpr={[1, 1.5]} data-testid="city-canvas">
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 450, 900]} />
       <CityWorld />
