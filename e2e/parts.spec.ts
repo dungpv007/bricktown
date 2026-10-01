@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { waitForCameraStill } from './support'
 
 interface Brick { p: string; x: number; y: number; z: number; c: number }
 interface BtWindow {
@@ -36,7 +37,7 @@ test('parts: the decor tab lists the printed tiles with rendered pictures; one p
     ed.place(2, 0, 2)
   })
   expect(await bricks(page)).toEqual([expect.objectContaining({ p: 'print_clock_2x2', x: 2, y: 0, z: 2, c: 16 })])
-  await page.waitForTimeout(300) // a few frames with the print drawn
+  await waitForCameraStill(page) // a few frames with the print drawn
   expect(errors).toEqual([])
 })
 

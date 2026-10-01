@@ -67,6 +67,13 @@ function positionEdges(
     b.bottom = Math.max(b.bottom, s.y)
   }
   plateScreen.bounds = b
+  if (import.meta.env.DEV) {
+    const round = (v: number) => Math.round(v * 1000) / 1000
+    plateScreen.pose = {
+      frame: (plateScreen.pose?.frame ?? 0) + 1,
+      camera: [...camera.position.toArray(), ...camera.quaternion.toArray()].map(round),
+    }
+  }
 
   for (const side of SIDES) {
     const el = edges[side]

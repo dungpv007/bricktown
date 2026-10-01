@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { waitForCameraStill } from './support'
 
 interface Fig { torso: number; hat: string; face: string; print: string }
 interface Brick { id: string; p: string; x: number; y: number; z: number; c: number; fig?: Fig }
@@ -43,11 +44,12 @@ test('figures: the figure tab lists ready-made figures; one places with its look
   expect(await bricks(page)).toEqual([
     expect.objectContaining({ p: 'minifig', x: 3, y: 0, z: 3, fig: expect.objectContaining({ print: 'stripes', hat: 'robber_cap' }) }),
   ])
-  await page.waitForTimeout(300) // a few frames with the figure drawn
+  await waitForCameraStill(page) // a few frames with the figure drawn
   expect(errors).toEqual([])
 })
 
 test('figures: ✏️ customises the figure to place, with a live preview', async ({ page }) => {
+  test.slow() // renders a full-size figure preview for every look tried, on software GL
   await page.getByTestId('category-figure').click()
   await page.getByTestId('fig-preset-chef').click()
   await page.getByTestId('fig-edit').click()
@@ -73,6 +75,7 @@ test('figures: ✏️ customises the figure to place, with a live preview', asyn
 })
 
 test('figures: recolouring a selected figure paints its torso and opens the editor; edits undo', async ({ page }) => {
+  test.slow() // opens the figure editor (full-size preview renders) on software GL
   await page.getByTestId('category-figure').click()
   await page.getByTestId('fig-preset-police').click()
   await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().place(2, 0, 2))

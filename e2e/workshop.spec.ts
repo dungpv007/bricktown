@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { waitForCameraStill } from './support'
 
 type Vec3 = [number, number, number]
 interface Brick { id: string; p: string; x: number; y: number; z: number; r: number; c: number }
@@ -33,7 +34,7 @@ const openWorkshop = async (page: Page) => {
   await expect(page.getByTestId('mode-workshop').locator('canvas')).toBeVisible()
   // The canvas sizes itself and the camera fits the plate right after it appears.
   await expect.poll(() => page.evaluate(() => (window as unknown as BtWindow).__bt.plateScreen.project !== null)).toBe(true)
-  await page.waitForTimeout(500)
+  await waitForCameraStill(page)
 }
 
 /** Places `part` (default 2x4) at (x, y, z) through the store, then clears the selection it makes. */
@@ -113,7 +114,7 @@ test('workshop: a press that starts on the UI and ends over the plate never plac
   await page.mouse.down()
   await page.mouse.move(540, 420)
   await page.mouse.up()
-  await page.waitForTimeout(200)
+  await waitForCameraStill(page)
   expect(await brickCount(page)).toBe(0)
 })
 
@@ -208,7 +209,7 @@ test('workshop: the selected brick stands out in the middle of a wall', async ({
     return bt.useGame.getState().data.workshop.bricks.find((b) => b.id === id) ?? null
   })
   expect(picked).toMatchObject({ x: 4, y: 3, z: 6 })
-  await page.waitForTimeout(300)
+  await waitForCameraStill(page)
   await page.screenshot({ path: 'test-results/w1-selected-wall.png' })
 })
 
@@ -274,7 +275,7 @@ test('workshop: a mid-drag ghost follows the finger while the brick stays in the
     await touch('touchMove', [{ x: from.x + ((to.x - from.x) * i) / 10, y: from.y + ((to.y - from.y) * i) / 10 }])
     await page.waitForTimeout(16)
   }
-  await page.waitForTimeout(200)
+  await waitForCameraStill(page)
   // Mid-drag the brick is still saved where it was: backgrounding the app now loses nothing.
   expect(await bricks(page)).toMatchObject([{ x: 2, y: 0, z: 2 }])
   await page.screenshot({ path: 'test-results/w1-mid-drag.png' })
@@ -305,7 +306,7 @@ test('workshop: a second finger during a brick drag cancels the move and pinches
   }
   await touch('touchEnd', [])
   await cdp.detach()
-  await page.waitForTimeout(400)
+  await waitForCameraStill(page)
   expect(await bricks(page)).toMatchObject([{ x: 2, y: 0, z: 2 }])
   await expect(page.getByTestId('place-error')).toHaveCount(0)
   expect(await plateBounds(page)).not.toEqual(bounds)
@@ -331,7 +332,7 @@ test('workshop: dragging on empty space turns the camera and leaves the bricks a
   const bounds = await plateBounds(page)
   const from = await screenOf(page, [12.5, 0, 12.5])
   await touchDrag(page, from, { x: from.x - 200, y: from.y - 40 })
-  await page.waitForTimeout(400)
+  await waitForCameraStill(page)
   expect(await bricks(page)).toEqual(before)
   expect(await plateBounds(page)).not.toEqual(bounds)
   expect(await selectedId(page)).toBeNull()
@@ -354,7 +355,7 @@ test('workshop: dragging a part from the palette onto a brick stacks it there', 
     await touch('touchMove', [{ x: from.x + ((to.x - from.x) * i) / 12, y: from.y + ((to.y - from.y) * i) / 12 }])
     await page.waitForTimeout(16)
   }
-  await page.waitForTimeout(200)
+  await waitForCameraStill(page)
   await page.screenshot({ path: 'test-results/w1-palette-drag.png' })
   expect(await brickCount(page)).toBe(1) // nothing placed until the finger lifts
   await touch('touchEnd', [])
@@ -374,7 +375,7 @@ test('workshop: a palette drag released over the palette or the sky places nothi
   const from = { x: button.x + button.width / 2, y: button.y + button.height / 2 }
   await touchDrag(page, from, { x: from.x, y: tabs.y + tabs.height / 2 }, 6)
   await touchDrag(page, from, { x: 540, y: 130 }, 10)
-  await page.waitForTimeout(300)
+  await waitForCameraStill(page)
   expect(await brickCount(page)).toBe(0)
   await expect(page.getByTestId('place-error')).toHaveCount(0)
 })
@@ -395,7 +396,7 @@ test('workshop: a palette drag cancelled by the system (pointercancel) places no
   }
   await touch('touchCancel', [])
   await cdp.detach()
-  await page.waitForTimeout(300)
+  await waitForCameraStill(page)
   expect(await brickCount(page)).toBe(0)
   // Nothing is left half-dragged: a tap on the plate still quick-places.
   await page.touchscreen.tap(to.x, to.y)

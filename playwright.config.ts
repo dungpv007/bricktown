@@ -1,7 +1,13 @@
 import { defineConfig, devices } from '@playwright/test'
 
+// No @types/node in this project: read the environment without it.
+const CI = Boolean((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CI)
+
 export default defineConfig({
   testDir: 'e2e',
+  // Every worker runs a software (SwiftShader) WebGL context: more workers than this saturate the
+  // CPU and make frame timing (camera glides, long presses) flaky.
+  workers: CI ? 2 : 3,
   // Scenes are lazy chunks and the dev server transforms them on first use: allow for that under parallel load.
   expect: { timeout: 15_000 },
   // These need a production build: run by `npm run e2e:offline` (playwright.offline.config.ts).

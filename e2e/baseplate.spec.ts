@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { waitForCameraStill } from './support'
 
 interface Workshop {
   kind: string
@@ -80,7 +81,7 @@ test('baseplate: ➕ on the W edge grows the plate and keeps the brick on its st
   expect(ws.bricks).toHaveLength(1)
   expect(ws.bricks[0].x).toBe(8)
   // Pressing the button must not also place a brick on the plate behind it.
-  await page.waitForTimeout(200)
+  await waitForCameraStill(page)
   expect((await workshop(page)).bricks).toHaveLength(1)
 
   await page.getByTestId('undo').tap()
