@@ -326,3 +326,21 @@ test('drive: sideways wheels and wheels on top of a tall body get their own hint
   await expect(onTop).toBeDisabled()
   await expect(onTop.getByTestId('veh-wheels-low')).toBeVisible()
 })
+
+test('drive: a blueprint with an unknown part neither crashes the city nor the picker', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.evaluate(
+    (bp) => (window as unknown as BtWindow).__bt.useGame.getState().upsertBlueprint(bp),
+    { ...blueprint('e2e-future', [{ id: 'x', p: 'jetpack_9000', x: 0, y: 0, z: 0, r: 0, c: 1 }]), baseplate: { w: 8, d: 8 } },
+  )
+  await setUpCity(page, [{ id: 'future', source: 'e2e-future', cx: 22, cz: 22, rot: 0 }])
+  await page.getByTestId('menu-drive').click()
+  await expect(page.getByTestId('veh-e2e-future').getByTestId('veh-unknown-part')).toBeVisible()
+  await page.getByTestId('veh-tpl:car').click()
+  await expect(page.getByTestId('drive-gas')).toBeVisible()
+  await expect.poll(() => carState(page)).not.toBeNull()
+  await hold(page, 'drive-gas', 500)
+  await expect(page.getByTestId('scene-error')).toHaveCount(0)
+  expect(errors).toEqual([])
+})

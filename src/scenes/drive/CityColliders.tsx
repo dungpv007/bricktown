@@ -1,11 +1,11 @@
 import { useMemo } from 'react'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import * as THREE from 'three'
-import { bakeBricks } from '../../core/bake'
+import type { BakedModel } from '../../core/bake'
 import { CELL } from '../../core/city'
 import { placementWorldBox, type Box } from '../../core/drive'
 import type { Blueprint, CityState } from '../../core/types'
-import { resolveSource } from '../../render/sources'
+import { resolveRenderable } from '../../render/sources'
 
 /** How far the ground reaches past the city plate (matches the land drawn by CityGround). */
 const GROUND_BORDER = 200
@@ -15,9 +15,8 @@ const WALL_THICKNESS = 2
 /** Low friction on buildings so a car scrapes along a wall instead of climbing it. */
 const BUILDING_FRICTION = 0.2
 
-/** Model-space bounding box of a baked model; null when it has no geometry. */
-function modelBox(bricks: Parameters<typeof bakeBricks>[0]): Box | null {
-  const baked = bakeBricks(bricks) // shared cache: never dispose
+/** Model-space bounding box of a baked model (shared cache: never dispose); null when it has no geometry. */
+function modelBox(baked: BakedModel): Box | null {
   const box = new THREE.Box3()
   for (const g of [baked.opaque, baked.glass]) {
     if (!g || g.getAttribute('position').count === 0) continue
@@ -44,8 +43,9 @@ export default function CityColliders({ city, blueprints }: { city: CityState; b
     const boxes = new Map<string, { box: Box; baseplate: { w: number; d: number } } | null>()
     const boxOf = (source: string) => {
       if (!boxes.has(source)) {
-        const r = resolveSource(source, { blueprints })
-        const box = r ? modelBox(r.bricks) : null
+        // Safe resolver: a model with a part this version does not know gets no collider (the city shows a placeholder).
+        const r = resolveRenderable(source, { blueprints })
+        const box = r ? modelBox(r.baked) : null
         boxes.set(source, r && box ? { box, baseplate: r.baseplate } : null)
       }
       return boxes.get(source) ?? null
@@ -53,7 +53,7 @@ export default function CityColliders({ city, blueprints }: { city: CityState; b
     const out: Solid[] = []
     for (const p of city.placements) {
       const m = boxOf(p.source)
-      if (!m) continue // deleted blueprint / unknown template: nothing drawn, nothing to hit
+      if (!m) continue // deleted blueprint / unknown template or part: nothing drawn, nothing to hit
       const { min, max } = placementWorldBox(p, m.baseplate, m.box)
       out.push({
         id: p.id,

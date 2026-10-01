@@ -40,7 +40,44 @@ export function migrate(raw: unknown): SaveData {
   if (!Array.isArray(data.blueprints) || !isRecord(data.city) || !isRecord(data.workshop)) {
     throw new Error(UNSUPPORTED)
   }
-  return data as unknown as SaveData
+  return normalize(data, data.city, data.workshop)
+}
+
+const KINDS: readonly string[] = ['building', 'vehicle', 'prop']
+const isPositiveInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0
+const arrayOr = <T>(v: unknown, fallback: T[]): T[] => (Array.isArray(v) ? (v as T[]) : fallback)
+
+/**
+ * Fills in whatever a hand-edited or older file left out with the empty-save defaults, so the rest
+ * of the app can trust the shape (a missing `guided` or `city.roads` must not crash a scene).
+ */
+function normalize(data: Record<string, unknown>, city: Record<string, unknown>, workshop: Record<string, unknown>): SaveData {
+  const empty = createEmptySave()
+  const baseplate = workshop.baseplate
+  const guided = data.guided
+  return {
+    ...(data as unknown as SaveData),
+    schemaVersion: SCHEMA_VERSION,
+    city: {
+      size: isPositiveInt(city.size) ? city.size : empty.city.size,
+      roads: arrayOr<string>(city.roads, []).filter((r) => typeof r === 'string'),
+      placements: arrayOr(city.placements, []),
+    },
+    workshop: {
+      kind: typeof workshop.kind === 'string' && KINDS.includes(workshop.kind) ? (workshop.kind as SaveData['workshop']['kind']) : empty.workshop.kind,
+      baseplate:
+        isRecord(baseplate) && isPositiveInt(baseplate.w) && isPositiveInt(baseplate.d)
+          ? { w: baseplate.w, d: baseplate.d }
+          : empty.workshop.baseplate,
+      bricks: arrayOr(workshop.bricks, []),
+      ...(typeof workshop.editingBlueprintId === 'string' ? { editingBlueprintId: workshop.editingBlueprintId } : {}),
+    },
+    guided:
+      isRecord(guided) && typeof guided.templateId === 'string' && typeof guided.step === 'number' && Array.isArray(guided.placed)
+        ? (guided as unknown as SaveData['guided'])
+        : null,
+    completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
+  }
 }
 
 export function exportSave(data: SaveData): string {

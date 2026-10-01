@@ -42,6 +42,31 @@ describe('serialize', () => {
       expect(() => importSave(JSON.stringify({ app: 'bricktown', ...partial }))).toThrow('unsupported save')
     }
   })
+  it('fills in missing optional parts of a save with the defaults', () => {
+    const out = migrate({ schemaVersion: SCHEMA_VERSION, blueprints: [], city: {}, workshop: {} })
+    expect(out).toEqual(createEmptySave())
+  })
+  it('replaces malformed fields with defaults and keeps the valid ones', () => {
+    const brick = { id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0, c: 1 }
+    const out = migrate({
+      schemaVersion: SCHEMA_VERSION,
+      blueprints: [],
+      city: { size: 'big', roads: 'nope', placements: [{ id: 'p', source: 'tpl:tree', cx: 1, cz: 2, rot: 0 }] },
+      workshop: { kind: 'spaceship', baseplate: { w: 8 }, bricks: [brick], editingBlueprintId: 7 },
+      guided: { templateId: 'house_small' }, // incomplete
+      completedTemplates: ['tree', 3],
+    })
+    expect(out.city).toEqual({ size: 48, roads: [], placements: [{ id: 'p', source: 'tpl:tree', cx: 1, cz: 2, rot: 0 }] })
+    expect(out.workshop).toEqual({ kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [brick] })
+    expect(out.guided).toBeNull()
+    expect(out.completedTemplates).toEqual(['tree'])
+  })
+  it('keeps a valid guided build and editing id', () => {
+    const save = createEmptySave()
+    save.guided = { templateId: 'tree', step: 2, placed: ['a'] }
+    save.workshop.editingBlueprintId = 'bp1'
+    expect(migrate(save)).toEqual(save)
+  })
   it('migrate accepts current version', () => {
     const save = createEmptySave()
     expect(migrate(save)).toEqual(save)
