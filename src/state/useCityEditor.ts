@@ -5,7 +5,7 @@ import { clampCell, planPlacement, pointToCell, removeRoad, type Cell } from '..
 import { newId } from '../core/ids'
 import { paintRoadLine } from '../core/roads'
 import type { CityState } from '../core/types'
-import { makeSizeOf } from '../render/sources'
+import { makeSizeOf, resolveRenderable } from '../render/sources'
 import { createHistory } from './history'
 import { useGame } from './useGame'
 
@@ -35,7 +35,7 @@ export interface CityEditorState {
   /** Tap on an existing placement. */
   tapPlacement: (id: string) => void
   undo: () => void
-  /** Forget undo history and selection (entering the city, after loading another save). */
+  /** Forget undo history and selection, and drop a picked source that no longer exists (entering the city). */
   reset: () => void
 }
 
@@ -44,6 +44,8 @@ const history = createHistory<CityState>()
 const game = () => useGame.getState()
 const city = () => game().data.city
 const sizeOf = () => makeSizeOf(game().data)
+/** False once a blueprint was deleted (or another slot loaded) or it cannot be drawn. */
+const canDraw = (source: string) => resolveRenderable(source, game().data) !== null
 
 export const useCityEditor = create<CityEditorState>()((set, get) => {
   const reject = (error: CityError) => {
@@ -91,6 +93,12 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
       if (tool === 'place') {
         set({ selectedPlacementId: null })
         if (selectedSource === null) return
+        if (!canDraw(selectedSource)) {
+          // Never add a placement nothing could draw or tap: drop the stale pick instead.
+          set({ selectedSource: null })
+          reject('nothing')
+          return
+        }
         const sizes = sizeOf()
         const plan = planPlacement(before, selectedSource, x, z, sizes)
         if (plan.error !== null) {
@@ -136,7 +144,13 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
 
     reset: () => {
       history.clear()
-      set({ lastError: null, canUndo: false, selectedPlacementId: null })
+      const { selectedSource } = get()
+      set({
+        lastError: null,
+        canUndo: false,
+        selectedPlacementId: null,
+        selectedSource: selectedSource !== null && canDraw(selectedSource) ? selectedSource : null,
+      })
     },
   }
 })

@@ -108,3 +108,53 @@ describe('useCityEditor placements', () => {
     expect(city().roads).toEqual(['0,0'])
   })
 })
+
+describe('useCityEditor stale sources', () => {
+  const blueprint = (id: string, part = 'brick_2x4') => ({
+    id,
+    name: id,
+    kind: 'building' as const,
+    tags: [],
+    baseplate: { w: 16, d: 16 },
+    bricks: [{ id: 'a', p: part, x: 0, y: 0, z: 0, r: 0 as const, c: 1 }],
+    createdAt: 1,
+    updatedAt: 1,
+  })
+
+  it('a deleted blueprint is dropped from the place tool instead of adding an invisible placement', () => {
+    useGame.getState().upsertBlueprint(blueprint('bpX'))
+    ed().selectSource('bpX')
+    useGame.getState().deleteBlueprint('bpX')
+    const seq = ed().errorSeq
+    ed().tapGround(...at(5, 5))
+    expect(city().placements).toHaveLength(0)
+    expect(ed().selectedSource).toBeNull()
+    expect(ed().errorSeq).toBe(seq + 1)
+    expect(ed().canUndo).toBe(false)
+  })
+
+  it('a blueprint with an unknown part id cannot be placed', () => {
+    useGame.getState().upsertBlueprint(blueprint('bpBad', 'no_such_part'))
+    ed().selectSource('bpBad')
+    ed().tapGround(...at(5, 5))
+    expect(city().placements).toHaveLength(0)
+    expect(ed().selectedSource).toBeNull()
+  })
+
+  it('reset drops a selected source that no longer exists and keeps one that does', () => {
+    useGame.getState().upsertBlueprint(blueprint('bpY'))
+    ed().selectSource('bpY')
+    ed().reset()
+    expect(ed().selectedSource).toBe('bpY')
+    useGame.setState({ data: createEmptySave() }) // e.g. another save slot was loaded
+    ed().reset()
+    expect(ed().selectedSource).toBeNull()
+  })
+
+  it('the erase tool removes a placement whose source is gone', () => {
+    useGame.getState().setCity({ size: 48, roads: [], placements: [{ id: 'ghost', source: 'gone', cx: 3, cz: 3, rot: 0 }] })
+    ed().setTool('erase')
+    ed().tapPlacement('ghost')
+    expect(city().placements).toHaveLength(0)
+  })
+})

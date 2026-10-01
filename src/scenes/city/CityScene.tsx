@@ -3,18 +3,17 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { MapControls, PerspectiveCamera, Stats } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
-import { bakeBricks } from '../../core/bake'
 import { addRoads, CELL, footprintCells } from '../../core/city'
 import { clampCell, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
 import { paintRoadLine } from '../../core/roads'
 import type { Blueprint, CityState } from '../../core/types'
 import { TAP_MAX_MS, TAP_MAX_PX } from '../../input/tapGesture'
 import { createGhostMaterial } from '../../render/materials'
-import { makeSizeOf, resolveSource } from '../../render/sources'
+import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useCityEditor, type CityTool } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
 import CityGround from './CityGround'
-import Placements, { bakedHeight, placementMatrix } from './Placements'
+import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT, placementMatrix } from './Placements'
 import Roads from './Roads'
 
 const SKY = '#87ceeb'
@@ -161,9 +160,8 @@ const ghostMatrix = new THREE.Matrix4()
 
 /** Preview of the model the place tool would drop, tinted green (fits) or red (does not). */
 function PlacementGhost({ source, plan, blueprints }: { source: string; plan: PlacementPlan; blueprints: Blueprint[] }) {
-  const resolved = useMemo(() => resolveSource(source, { blueprints }), [source, blueprints])
-  const bricks = resolved?.bricks
-  const baked = useMemo(() => (bricks ? bakeBricks(bricks) : null), [bricks])
+  const resolved = useMemo(() => resolveRenderable(source, { blueprints }), [source, blueprints])
+  const baked = resolved?.baked
   const material = useMemo(() => createGhostMaterial(), [])
   useEffect(() => () => material.dispose(), [material])
   const valid = plan.error === null
@@ -257,29 +255,23 @@ function CityWorld() {
     if (hover.current) updatePlan(hover.current)
   }, [city, tool, selectedSource, blueprints, updatePlan])
 
-  // Tap targets: footprint x model height boxes (cheaper and easier to hit than triangles).
+  // Tap targets: footprint x model height boxes (cheaper and easier to hit than triangles). Placements
+  // that cannot be drawn get their placeholder block's box, so the erase tool can still remove them.
   const hitBoxes = useMemo<HitBox[]>(() => {
     const heights = new Map<string, number>()
     const heightOf = (source: string) => {
       let h = heights.get(source)
       if (h === undefined) {
-        const r = resolveSource(source, { blueprints })
-        h = r ? bakedHeight(bakeBricks(r.bricks)) : 0
+        const r = resolveRenderable(source, { blueprints })
+        h = r ? bakedHeight(r.baked) : PLACEHOLDER_HEIGHT
         heights.set(source, h)
       }
       return h
     }
-    const boxes: HitBox[] = []
-    for (const p of city.placements) {
-      const h = heightOf(p.source)
-      if (h === 0) continue
-      const { cw, cd } = footprintCells(sizeOf(p.source), p.rot)
-      boxes.push({
-        id: p.id,
-        box: new THREE.Box3(new THREE.Vector3(p.cx * CELL, 0, p.cz * CELL), new THREE.Vector3((p.cx + cw) * CELL, h, (p.cz + cd) * CELL)),
-      })
-    }
-    return boxes
+    return city.placements.map((p) => {
+      const b = footprintBox(p, sizeOf(p.source))
+      return { id: p.id, box: new THREE.Box3(new THREE.Vector3(b.x0, 0, b.z0), new THREE.Vector3(b.x1, heightOf(p.source), b.z1)) }
+    })
   }, [city.placements, blueprints, sizeOf])
   const hitBoxesRef = useRef(hitBoxes)
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { getTemplate } from '../content/templates'
+import { bakeBricks, type BakedModel } from '../core/bake'
 import type { Baseplate, BlueprintKind, Brick, SaveData } from '../core/types'
 import type { Lang } from '../state/useApp'
 
@@ -30,6 +31,31 @@ export function resolveSource(
   }
   const bp = data.blueprints.find((b) => b.id === source)
   return bp ? { name: bp.name, kind: bp.kind, baseplate: bp.baseplate, bricks: bp.bricks } : null
+}
+
+/** A source the city can actually draw: resolved and baked. */
+export interface RenderableSource extends ResolvedSource {
+  /** Shared bake-cache geometry: never dispose or mutate. */
+  baked: BakedModel
+}
+
+/**
+ * Like `resolveSource`, plus the baked model. Null when the source is missing or cannot be baked
+ * (e.g. a blueprint using a part id this version does not know): such placements get a placeholder
+ * instead of crashing the scene, and such sources cannot be placed.
+ */
+export function resolveRenderable(
+  source: string,
+  data: Pick<SaveData, 'blueprints'>,
+  lang: Lang = 'vi',
+): RenderableSource | null {
+  const resolved = resolveSource(source, data, lang)
+  if (!resolved) return null
+  try {
+    return { ...resolved, baked: bakeBricks(resolved.bricks) }
+  } catch {
+    return null
+  }
 }
 
 const UNKNOWN_SIZE: Baseplate = { w: 8, d: 8 }

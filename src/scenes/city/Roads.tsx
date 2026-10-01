@@ -142,15 +142,9 @@ function TileMesh({ tile, instances }: { tile: RoadTile; instances: TileInstance
     mesh.computeBoundingSphere()
   }, [instances, capacity])
 
-  return (
-    <instancedMesh
-      key={capacity}
-      ref={ref}
-      args={[tileGeometry(tile), roadMaterial, capacity]}
-      receiveShadow
-      dispose={null}
-    />
-  )
+  // Shared geometry/material go in through `args`: R3F's unmount dispose only frees the instance buffers.
+  return <instancedMesh key={capacity} ref={ref} args={[tileGeometry(tile), roadMaterial, capacity]} receiveShadow />
+
 }
 
 /** All road cells ("cx,cz" keys), auto-tiled from their neighbours. */

@@ -156,3 +156,43 @@ test('city: a placed blueprint opens in the workshop, asking before replacing wo
   expect(ws.editingBlueprintId).toBe('bp-e2e')
   expect(ws.bricks).toHaveLength(1)
 })
+
+test('city: placements whose blueprint is gone or broken show as blocks the erase tool removes', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByTestId('main-menu').waitFor()
+  // The camera starts centred on what is built: here, one placement whose blueprint no longer exists.
+  await page.evaluate(() => {
+    const game = (window as unknown as EditBt).__bt.useGame.getState()
+    game.setCity({ size: 48, roads: [], placements: [{ id: 'gone', source: 'deleted-bp', cx: 20, cz: 20, rot: 0 }] })
+  })
+  await page.getByTestId('menu-city').click()
+  const canvas = page.getByTestId('mode-city').locator('canvas')
+  await expect(canvas).toBeVisible()
+  const box = (await canvas.boundingBox())!
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  await page.getByTestId('city-tool-erase').click()
+  await page.mouse.click(centre.x, centre.y)
+  expect((await cityData(page)).placements).toHaveLength(0)
+
+  // A blueprint using a part id this version does not know: still no crash, still erasable.
+  await page.evaluate(() => {
+    const game = (window as unknown as EditBt).__bt.useGame.getState()
+    game.upsertBlueprint({
+      id: 'bp-broken',
+      name: 'broken',
+      kind: 'prop',
+      tags: [],
+      baseplate: { w: 8, d: 8 },
+      bricks: [{ id: 'a', p: 'part_from_the_future', x: 0, y: 0, z: 0, r: 0, c: 1 }],
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    game.setCity({ size: 48, roads: [], placements: [{ id: 'broken', source: 'bp-broken', cx: 20, cz: 20, rot: 0 }] })
+  })
+  await expect(page.getByTestId('src-bp-broken')).toBeVisible()
+  await page.mouse.click(centre.x, centre.y)
+  expect((await cityData(page)).placements).toHaveLength(0)
+  expect(errors).toEqual([])
+})
