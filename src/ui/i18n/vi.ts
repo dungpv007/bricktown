@@ -191,4 +191,5 @@ export const vi = {
   mazeEditMaze: 'Sửa mê cung',
   mazeToMenu: 'Về trang chính',
   mazeStars: 'Sao',
+  mazeSeconds: '{n}s',
 } as const

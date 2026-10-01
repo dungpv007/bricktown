@@ -3,11 +3,10 @@ import { HINT_COOLDOWN_MS } from '../../core/mazeRun'
 import { useMazeRun } from '../../state/useMazeRun'
 import Confetti from '../../ui/Confetti'
 import { useT } from '../../ui/i18n'
+import { formatSeconds } from './formatTime'
 
 /** How often the clock on screen (and the hint's time-out) is refreshed. */
 const TICK_MS = 100
-
-const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`
 
 /** `performance.now()`, refreshed every TICK_MS; also lets the hint arrows time out. */
 function useNow(): number {
@@ -61,7 +60,7 @@ function Hud() {
     <>
       <div className="bt-maze-hud-top">
         <span className="bt-maze-chip" data-testid="maze-timer" role="timer" aria-label={t('mazeTime')}>
-          ⏱️ {seconds(elapsed(now))}
+          ⏱️ {formatSeconds(elapsed(now), t)}
         </span>
         {total > 0 && (
           <span className="bt-maze-chip" data-testid="maze-coins" aria-label={t('mazeCoins')}>
@@ -123,7 +122,7 @@ function WinOverlay({ onRetry, onEdit, onMenu }: Actions) {
         <Stars stars={result.stars} />
         <div className="bt-maze-win-stats">
           <span className="bt-maze-chip" data-testid="maze-win-time" aria-label={t('mazeTime')}>
-            ⏱️ {seconds(result.timeMs)}
+            ⏱️ {formatSeconds(result.timeMs, t)}
           </span>
           {result.totalCoins > 0 && (
             <span className="bt-maze-chip" data-testid="maze-win-coins" aria-label={t('mazeCoins')}>
@@ -137,8 +136,8 @@ function WinOverlay({ onRetry, onEdit, onMenu }: Actions) {
           </div>
         ) : (
           best && (
-            <div className="bt-maze-record" data-testid="maze-win-record" data-new="false" aria-label={`${t('mazeBest')}: ${seconds(best.timeMs)}`}>
-              🏆 {seconds(best.timeMs)} {'★'.repeat(best.stars)}
+            <div className="bt-maze-record" data-testid="maze-win-record" data-new="false" aria-label={`${t('mazeBest')}: ${formatSeconds(best.timeMs, t)}`}>
+              🏆 {formatSeconds(best.timeMs, t)} {'★'.repeat(best.stars)}
               {'☆'.repeat(3 - best.stars)}
             </div>
           )

@@ -193,4 +193,5 @@ export const en: Record<keyof typeof vi, string> = {
   mazeEditMaze: 'Change the maze',
   mazeToMenu: 'Main menu',
   mazeStars: 'Stars',
+  mazeSeconds: '{n}s',
 }
