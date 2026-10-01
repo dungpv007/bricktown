@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
 import { plateColor, plateShift, resizeBaseplate, type PlateSide, type ResizeDir, type ResizeError } from '../core/baseplate'
 import { DEFAULT_COLOR } from '../core/colors'
-import { DEFAULT_FIG, figKey, figOf, isFigure, MINIFIG_PART } from '../core/figures'
+import { DEFAULT_FIG, figColor, figKey, figOf, isFigure, MINIFIG_PART } from '../core/figures'
 import { newId } from '../core/ids'
 import { duplicateSpot, type Spot } from '../core/duplicate'
 import { addBrick, moveBrick, paintBrick, removeBrick, restyleFigure, rotateBrick, type PlaceError, type PlaceResult } from '../core/model'
@@ -230,7 +230,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       const bricks = workshop().bricks
       if (isFigure(target)) {
         // Painting a figure recolours its torso, then shows it in the figure editor for more.
-        if (figOf(target).torso !== color) commit(bricks, { bricks: paintBrick(bricks, target.id, color), error: null }, sfx.paint)
+        if (figOf(target).torso !== figColor(color)) commit(bricks, { bricks: paintBrick(bricks, target.id, color), error: null }, sfx.paint)
         set({ figEditor: { brickId: target.id } })
         return
       }

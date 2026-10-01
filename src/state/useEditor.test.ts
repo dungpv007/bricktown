@@ -489,6 +489,13 @@ describe('useEditor figures', () => {
     ed().paintSelected(figPreset('chef').torso)
     expect(ed().canRedo).toBe(true)
     expect(ed().figEditor).toEqual({ brickId: f.id })
+    // Trans red on a red torso: the nearest solid is the same red, so nothing to paint either.
+    ed().paintSelected(2)
+    ed().paintSelected(5)
+    ed().undo()
+    ed().paintSelected(16)
+    expect(bricks()[0].fig?.torso).toBe(2)
+    expect(ed().canRedo).toBe(true)
   })
 
   it('opens the figure editor for the figure about to be placed', () => {
