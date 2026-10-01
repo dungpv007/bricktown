@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { COLORS, colorMaterialKind } from '../core/colors'
+import { COLORS } from '../core/colors'
 import {
-  DEFAULT_HAT_COLOR, FIG_ACCESSORIES, FIG_FACES, FIG_HATS, FIG_PRESETS, FIG_PRINTS, canonicalFig, figKey, figOf, isFigure,
+  DEFAULT_HAT_COLOR, FIG_ACCESSORIES, FIG_FACES, FIG_HATS, FIG_PRESETS, FIG_PRINTS, canonicalFig, figKey, figOf, isFigColor, isFigure,
 } from '../core/figures'
 import type { FigAccessory, FigFace, FigHat, FigPrint, FigStyle } from '../core/types'
 import { getFigureThumbnail } from '../render/thumbnails'
@@ -11,8 +11,8 @@ import { useGame } from '../state/useGame'
 import { useT, type TKey } from './i18n'
 import { useThumbnail } from './useThumbnail'
 
-/** Figures render opaque, so they get the solid colours only. */
-const FIG_COLORS = COLORS.filter((c) => colorMaterialKind(c.id) === 'opaque')
+/** Solid and metallic colours (see `isFigColor`): a gold crown shows as picked. */
+const FIG_COLORS = COLORS.filter((c) => isFigColor(c.id))
 
 const HAT_ICON: Record<FigHat, string> = {
   none: '⭕', hair_short: '💇', hair_long: '👩', hair_ponytail: '👧', cap: '🧢', police: '👮', chef: '👨‍🍳',

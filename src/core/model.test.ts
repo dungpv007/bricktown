@@ -83,6 +83,9 @@ describe('model operations', () => {
     // A figure without a style starts from the default one.
     const bare: Brick = { ...b('g', 0, 0, 0, 'minifig'), c: DEFAULT_FIG.torso }
     expect(paintBrick([bare], 'g', 5)[0].fig).toEqual({ ...DEFAULT_FIG, torso: 5 })
+    // See-through paint gives the nearest solid colour (trans red: red); metal is worn as is.
+    expect(paintBrick([fig], 'f', 16)[0]).toMatchObject({ c: 2, fig: { torso: 2 } })
+    expect(paintBrick([fig], 'f', 29)[0]).toMatchObject({ c: 29, fig: { torso: 29 } })
   })
   it('restyleFigure sets a figure style immutably, c following the torso', () => {
     const input: Brick[] = [{ ...b('f', 0, 0, 0, 'minifig'), fig: figPreset('chef') }, b('a', 4, 0, 4)]

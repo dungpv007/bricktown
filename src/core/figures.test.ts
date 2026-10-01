@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COLORS } from './colors'
+import { COLORS, colorMaterialKind } from './colors'
 import {
   DEFAULT_FIG,
   FIG_ACCESSORIES,
@@ -9,9 +9,11 @@ import {
   FIG_PRINTS,
   MINIFIG_PART,
   canonicalFig,
+  figColor,
   figKey,
   figOf,
   figPreset,
+  isFigColor,
   isFigure,
   parseFig,
   withTorso,
@@ -137,6 +139,22 @@ describe('figure bricks', () => {
   it('figOf falls back to the default figure', () => {
     expect(figOf(brick())).toEqual(DEFAULT_FIG)
     expect(figOf(brick(figPreset('chef')))).toEqual(figPreset('chef'))
+  })
+
+  it('figure colours: solids and metals are worn as is, a see-through colour becomes the nearest solid', () => {
+    for (const c of COLORS) {
+      const kind = colorMaterialKind(c.id)
+      expect(isFigColor(c.id)).toBe(kind !== 'trans')
+      if (kind !== 'trans') expect(figColor(c.id)).toBe(c.id)
+      expect(colorMaterialKind(figColor(c.id))).not.toBe('trans')
+    }
+    expect([16, 17, 18, 19].map(figColor)).toEqual([2, 3, 4, 5]) // same hex as red, blue, yellow, green
+    expect(withTorso(figPreset('chef'), 17).torso).toBe(3)
+    // Every ready-made figure and default hat colour follows the rule.
+    for (const p of FIG_PRESETS) for (const k of ['torso', 'legs', 'hatColor'] as const) {
+      const c = canonicalFig(p.style)[k]
+      expect(isFigColor(c), `${p.id}.${k}`).toBe(true)
+    }
   })
 
   it('withTorso recolours only the torso (arms that followed the torso follow it)', () => {

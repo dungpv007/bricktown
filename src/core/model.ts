@@ -47,11 +47,13 @@ export function removeBrick(bricks: Brick[], id: string): Brick[] {
   return bricks.filter((b) => b.id !== id)
 }
 
-/** Recolours a brick; painting a figure recolours its torso. */
+/** Recolours a brick; painting a figure recolours its torso (a see-through colour: the nearest solid). */
 export function paintBrick(bricks: Brick[], id: string, c: number): Brick[] {
   return bricks.map((b) => {
     if (b.id !== id) return b
-    return isFigure(b) ? { ...b, c, fig: withTorso(figOf(b), c) } : { ...b, c }
+    if (!isFigure(b)) return { ...b, c }
+    const fig = withTorso(figOf(b), c)
+    return { ...b, c: fig.torso, fig }
   })
 }
 

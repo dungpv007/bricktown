@@ -1,4 +1,4 @@
-import { COLORS } from './colors'
+import { COLORS, colorMaterialKind } from './colors'
 import type { Brick, FigAccessory, FigFace, FigHat, FigPrint, FigStyle, LocalizedText } from './types'
 
 /**
@@ -167,5 +167,34 @@ export const isFigure = (b: Pick<Brick, 'p'>): boolean => b.p === MINIFIG_PART
 /** The look of a minifigure brick. */
 export const figOf = (b: Pick<Brick, 'fig'>): FigStyle => b.fig ?? DEFAULT_FIG
 
-/** The style with a new torso colour (what painting a figure does). */
-export const withTorso = (s: FigStyle, torso: number): FigStyle => ({ ...s, torso })
+/**
+ * Figure colour rule: a figure wears solid and metallic colours (a gold crown, a silver helmet).
+ * Its body is one vertex-coloured mesh, so a metallic colour shows as its flat colour everywhere
+ * (Workshop, Guided, City, thumbnails), never with the shiny material. See-through colours are not
+ * figure colours: painting a figure with one gives it the nearest solid colour instead.
+ */
+export const isFigColor = (c: number): boolean => COLORS[c] !== undefined && colorMaterialKind(c) !== 'trans'
+
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+
+/** `c` if a figure can wear it, otherwise the solid colour closest to it (see `isFigColor`). */
+export function figColor(c: number): number {
+  const color = COLORS[c]
+  if (!color || isFigColor(c)) return c
+  const [r, g, b] = rgb(color.hex)
+  let best = c
+  let bestDist = Infinity
+  for (const other of COLORS) {
+    if (colorMaterialKind(other.id) !== 'opaque') continue
+    const [r2, g2, b2] = rgb(other.hex)
+    const dist = (r - r2) ** 2 + (g - g2) ** 2 + (b - b2) ** 2
+    if (dist < bestDist) {
+      best = other.id
+      bestDist = dist
+    }
+  }
+  return best
+}
+
+/** The style with a new torso colour (what painting a figure does), following `figColor`. */
+export const withTorso = (s: FigStyle, torso: number): FigStyle => ({ ...s, torso: figColor(torso) })

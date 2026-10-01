@@ -60,6 +60,7 @@ test('figures: ✏️ customises the figure to place, with a live preview', asyn
 
   await page.getByTestId('fig-tab-hat').click()
   await page.getByTestId('fig-hat-crown').click()
+  await expect(page.getByTestId('fig-hatcolor-29')).toHaveAttribute('aria-pressed', 'true') // gold is a figure colour
   await page.getByTestId('fig-tab-face').click()
   await page.getByTestId('fig-face-wink').click()
   await page.getByTestId('fig-tab-torso').click()
