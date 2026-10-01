@@ -125,9 +125,11 @@ export default function WorkshopUI() {
     setLibraryOpen(false)
   }
   const onPick = (bp: Blueprint) => {
-    // Opening replaces the model being built, so ask first unless there is nothing to lose.
     const { workshop } = useGame.getState().data
-    if (workshopHasBricks() && workshop.editingBlueprintId !== bp.id) setPendingOpen(bp)
+    // Already open here: keep the unsaved edits (and their undo history) instead of reloading the saved copy.
+    if (workshop.editingBlueprintId === bp.id) setLibraryOpen(false)
+    // Opening replaces the model being built, so ask first unless there is nothing to lose.
+    else if (workshopHasBricks()) setPendingOpen(bp)
     else open(bp)
   }
 

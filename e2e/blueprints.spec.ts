@@ -86,3 +86,34 @@ test('blueprints: opening asks before replacing the model in progress; delete as
   await expect(page.getByTestId('blueprint-library-empty')).toBeVisible()
   expect(await blueprints(page)).toHaveLength(0)
 })
+
+test('blueprints: tapping the blueprint already being edited keeps the unsaved bricks', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('menu-workshop').click()
+  await expect(page.getByTestId('mode-workshop').locator('canvas')).toBeVisible()
+  await buildSmallModel(page)
+  await page.getByTestId('save-blueprint').click()
+  await page.getByTestId('save-blueprint-confirm').click()
+  const [bp] = await blueprints(page)
+  expect(bp.bricks).toHaveLength(3)
+
+  // Two more bricks that are not saved yet.
+  await page.evaluate(() => {
+    const ed = (window as unknown as BtWindow).__bt.useEditor.getState()
+    ed.setPart('brick_2x4')
+    ed.place(8, 0, 0)
+    ed.place(8, 0, 4)
+  })
+  const workshopBricks = () =>
+    page.evaluate(() => (window as unknown as BtWindow).__bt.useGame.getState().data.workshop.bricks.length)
+  expect(await workshopBricks()).toBe(5)
+
+  await page.getByTestId('open-library').click()
+  await page.getByTestId(`blueprint-card-${bp.id}`).click()
+  await expect(page.getByTestId('blueprint-library')).toHaveCount(0)
+  await expect(page.getByTestId('confirm-yes')).toHaveCount(0)
+  expect(await workshopBricks()).toBe(5)
+  // Undo history survived too: the last brick comes off.
+  await page.getByTestId('undo').click()
+  expect(await workshopBricks()).toBe(4)
+})
