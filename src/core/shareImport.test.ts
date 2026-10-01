@@ -3,7 +3,7 @@ import { figPreset } from './figures'
 import { createEmptyMaze, setEntry, setExit, type Maze } from './maze'
 import { createEmptySave } from './serialize'
 import { buildCityPackage, buildMazePackage, buildModelPackage, decodeShare, encodeShare, type SharePackage } from './share'
-import { SHARE_LIMITS, applyImport, planImport, sanitizeName, validatePackage } from './shareImport'
+import { DEFAULT_SHARE_NAMES, SHARE_LIMITS, applyImport, planImport, sanitizeName, validatePackage } from './shareImport'
 import { validateTemplate } from './template'
 import type { Blueprint, Brick, CityState, SaveData } from './types'
 
@@ -74,6 +74,24 @@ describe('sanitizeName', () => {
     expect(sanitizeName(42)).toBe('')
     expect(sanitizeName(null)).toBe('')
   })
+  it('strips soft hyphens, line separators, the Arabic letter mark and tag characters', () => {
+    const hidden = [0xad, 0x61c, 0x2028, 0x2029, 0xe0041, 0xe007f, 0x200b, 0xfeff]
+    expect(sanitizeName(`a${String.fromCodePoint(...hidden)}b`)).toBe('ab')
+  })
+  it('keeps emoji sequences whole and counts them as one character each', () => {
+    const family = String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467) // joined by ZWJ
+    expect(sanitizeName(`Nhà ${family}`)).toBe(`Nhà ${family}`)
+    const cut = sanitizeName(family.repeat(50))
+    expect(cut).toBe(family.repeat(40))
+    const flag = String.fromCodePoint(0x1f1fb, 0x1f1f3) // a flag: two code points, one character
+    expect(sanitizeName('x'.repeat(39) + flag + 'yyy')).toBe('x'.repeat(39) + flag)
+  })
+  it('falls back to the given name when nothing is left', () => {
+    expect(sanitizeName('   ', 'Mô hình')).toBe('Mô hình')
+    expect(sanitizeName(String.fromCodePoint(0x200b, 0x202e), 'Mê cung')).toBe('Mê cung')
+    expect(sanitizeName(7, 'Thành phố')).toBe('Thành phố')
+    expect(sanitizeName('An', 'Mô hình')).toBe('An')
+  })
   it('keeps markup as plain text (names are only ever rendered as text)', () => {
     expect(sanitizeName('<script>alert(1)</script>')).toBe('<script>alert(1)</script>')
     expect(sanitizeName('<img src=x onerror=alert(1)>'.padEnd(60, 'y'))).toHaveLength(40)
@@ -93,6 +111,15 @@ describe('validatePackage', () => {
     expect(out.model?.blueprint.name).toBe('<b>Xe</b>')
     const m = withMaze({ name: 'Mê\ncung' }) as SharePackage
     expect(m.maze?.maze.name).toBe('Mêcung')
+  })
+  it('names creations left without a name, by kind, overridable in the kid language', () => {
+    const empty = validatePackage({ ...modelPkg(tower, { name: ' ' }), name: '' }) as SharePackage
+    expect(empty.name).toBe(DEFAULT_SHARE_NAMES.model)
+    expect(empty.model?.blueprint.name).toBe(DEFAULT_SHARE_NAMES.model)
+    const en = validatePackage({ ...modelPkg(), name: '' }, { names: { model: 'Model' } }) as SharePackage
+    expect(en.name).toBe('Model')
+    expect((validatePackage({ ...buildMazePackage(maze()), name: '' }) as SharePackage).name).toBe('Mê cung')
+    expect((validatePackage({ ...cityPkg(), name: '' }) as SharePackage).name).toBe('Thành phố')
   })
   it('rejects anything that is not a package', () => {
     for (const raw of [null, 1, 'x', [], {}]) expect(validatePackage(raw)).toHaveProperty('error')
@@ -142,6 +169,10 @@ describe('validatePackage', () => {
       expect(withModel({ baseplate: { w: 0, d: 16 } })).toEqual({ error: 'invalid' })
       expect(withModel({ baseplate: { w: 8, d: 16, c: 99 } })).toEqual({ error: 'invalid' })
     })
+    it('rejects a model without bricks, with or without steps', () => {
+      expect(withModel({ bricks: [] })).toEqual({ error: 'invalid' })
+      expect(withModel({ bricks: [] }, [])).toEqual({ error: 'invalid' })
+    })
     it('rejects a bad kind and drops tags that are not simple words', () => {
       expect(withModel({ kind: 'spaceship' as Blueprint['kind'] })).toEqual({ error: 'invalid' })
       const out = withModel({ tags: ['car', '<script>', 5 as unknown as string, 'fast'] }) as SharePackage
@@ -176,8 +207,21 @@ describe('validatePackage', () => {
       expect(withMaze({ wallColor: 77 })).toEqual({ error: 'invalid' })
       expect(withMaze({ walls: 'everywhere' as unknown as string[] })).toEqual({ error: 'invalid' })
     })
-    it('accepts a maze without doors and rejects a bad best run', () => {
-      expect(withMaze({ entry: null, exit: null })).not.toHaveProperty('error')
+    it('rejects a maze that cannot be played: a missing door or no way through', () => {
+      expect(withMaze({ entry: null })).toEqual({ error: 'invalid' })
+      expect(withMaze({ exit: null })).toEqual({ error: 'invalid' })
+      expect(withMaze({ entry: null, exit: null })).toEqual({ error: 'invalid' })
+      const blocked = [...maze().walls, '1,1', '1,2', '1,3', '1,4', '1,5']
+      expect(withMaze({ walls: blocked, coins: [] })).toEqual({ error: 'invalid' })
+    })
+    it('drops a best run faster than the maze allows, keeping the maze', () => {
+      const out = withMaze({}, { timeMs: 100, stars: 3 }) as SharePackage
+      expect(out.maze?.maze).toBeDefined()
+      expect(out.maze?.best).toBeUndefined()
+      const fair = withMaze({}, { timeMs: 5000, stars: 3 }) as SharePackage
+      expect(fair.maze?.best).toEqual({ timeMs: 5000, stars: 3 })
+    })
+    it('rejects a malformed best run', () => {
       expect(withMaze({}, { timeMs: 5000, stars: 4 })).toEqual({ error: 'invalid' })
       expect(withMaze({}, { timeMs: -5, stars: 1 })).toEqual({ error: 'invalid' })
       expect(withMaze({}, { timeMs: 'fast', stars: 1 })).toEqual({ error: 'invalid' })
@@ -200,6 +244,32 @@ describe('validatePackage', () => {
       expect(withCity({ placements: [{ id: 'p', source: 'tpl:<script>', cx: 0, cz: 0, rot: 0 }] })).toEqual({ error: 'invalid' })
       expect(withCity({ placements: [{ id: 'p', source: 'tpl:tree', cx: -1, cz: 0, rot: 0 }] })).toEqual({ error: 'invalid' })
       expect(withCity({ placements: [{ id: 'p', source: 'tpl:tree', cx: 0, cz: 0, rot: 7 as 0 }] })).toEqual({ error: 'invalid' })
+    })
+    it('rejects placements that overlap, sit on a road or stick out of the map', () => {
+      const pkg = cityPkg()
+      const [p1] = pkg.city!.city.placements // bp_a: an 8x16 plate, 1 x 2 cells at (2, 2)
+      expect(withCity({ placements: [p1, { ...p1, id: 'p9', cz: 3 }] })).toEqual({ error: 'invalid' })
+      expect(withCity({ placements: [p1, { id: 'p9', source: 'tpl:tree', cx: 2, cz: 3, rot: 0 }] })).toEqual({ error: 'invalid' })
+      expect(withCity({ roads: ['2,3'], placements: [p1] })).toEqual({ error: 'invalid' })
+      expect(withCity({ placements: [{ ...p1, cz: 23 }] })).toEqual({ error: 'invalid' }) // 2 cells deep
+      expect(withCity({ placements: [{ ...p1, cx: 23, rot: 1 }] })).toEqual({ error: 'invalid' }) // turned: 2 cells wide
+      expect(withCity({ placements: [{ ...p1, cx: 22, rot: 1 }] })).not.toHaveProperty('error')
+    })
+    it('sizes template placements with templateSize and unknown templates as one cell', () => {
+      const tpl = { id: 'p8', source: 'tpl:garage', cx: 21, cz: 21, rot: 0 as const }
+      const pkg = cityPkg()
+      const raw = { ...pkg, city: { ...pkg.city!, city: { ...pkg.city!.city, placements: [tpl] } } }
+      expect(validatePackage(raw)).not.toHaveProperty('error') // unknown here: a one-cell placeholder
+      const big = { templateSize: (id: string) => (id === 'garage' ? { w: 32, d: 32 } : undefined) }
+      expect(validatePackage(raw, big)).toEqual({ error: 'invalid' }) // 4 x 4 cells from (21, 21) stick out of a 24 map
+      const fits = { ...raw, city: { ...raw.city, city: { ...raw.city.city, placements: [{ ...tpl, cx: 20, cz: 20 }] } } }
+      expect(validatePackage(fits, big)).not.toHaveProperty('error')
+    })
+    it('keeps only the blueprints a placement uses', () => {
+      const pkg = cityPkg()
+      const extra = blueprint([brick()], { id: 'bp_extra' })
+      const out = withCity({}, [...pkg.city!.blueprints, extra]) as SharePackage
+      expect(out.city?.blueprints.map((b) => b.id)).toEqual(pkg.city!.blueprints.map((b) => b.id))
     })
     it('rejects a city whose blueprint is broken or whose blueprint ids repeat', () => {
       const pkg = cityPkg()

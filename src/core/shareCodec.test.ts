@@ -2,6 +2,7 @@ import { deflateSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { figPreset } from './figures'
 import type { SharePackage } from './share'
+import { SHARE_LIMITS } from './shareImport'
 import {
   MAX_DECOMPRESSED_BYTES,
   compress,
@@ -116,10 +117,17 @@ describe('packShare', () => {
   })
 })
 
+/** The unpacked package (failing the test when it is refused as too big). */
+function unpacked(raw: unknown): SharePackage {
+  const out = unpackShare(raw)
+  if ('error' in out) throw new Error(out.error)
+  return out.value as SharePackage
+}
+
 describe('unpackShare', () => {
   it('restores the package with local ids and the package time', () => {
     const pkg = modelPkg([[0, 1], [2], [3]])
-    const out = unpackShare(packShare(pkg)) as SharePackage
+    const out = unpacked(packShare(pkg))
     expect(out.model?.steps).toEqual([[0, 1], [2], [3]])
     expect(out.model?.blueprint).toEqual({
       ...bp(),
@@ -128,7 +136,7 @@ describe('unpackShare', () => {
       updatedAt: 1000,
       bricks: bp().bricks.map((b, i) => ({ ...b, id: `b${i}` })),
     })
-    const plain = unpackShare(packShare(modelPkg([[1, 0], [2, 3]]))) as SharePackage
+    const plain = unpacked(packShare(modelPkg([[1, 0], [2, 3]])))
     expect(plain.model?.steps).toEqual([[1, 0], [2, 3]])
   })
   it('restores mazes, including missing doors and coins', () => {
@@ -143,7 +151,7 @@ describe('unpackShare', () => {
         best: { timeMs: 4200, stars: 3 },
       },
     }
-    const out = unpackShare(packShare(pkg)) as SharePackage
+    const out = unpacked(packShare(pkg))
     expect(out.maze?.best).toEqual({ timeMs: 4200, stars: 3 })
     expect(out.maze?.maze).toEqual({
       ...pkg.maze!.maze,
@@ -168,7 +176,7 @@ describe('unpackShare', () => {
         blueprints: [bp()],
       },
     }
-    const out = unpackShare(packShare(pkg)) as SharePackage
+    const out = unpacked(packShare(pkg))
     expect(out.city?.city).toEqual({
       size: 12,
       roads: ['0,0', '1,0'],
@@ -192,16 +200,38 @@ describe('unpackShare', () => {
     const c = packShare(modelPkg([[0, 1], [2], [3]]))
     const huge = { ...c, m: { ...c.m!, s: [1e12] } }
     const started = Date.now()
-    const out = unpackShare(huge) as SharePackage
+    const out = unpacked(huge)
     expect(Date.now() - started).toBeLessThan(200)
     expect(out.model?.steps).toBeNull() // malformed: rejected by validation
-    const short = unpackShare({ ...c, m: { ...c.m!, s: [1, 1] } }) as SharePackage
+    const short = unpacked({ ...c, m: { ...c.m!, s: [1, 1] } })
     expect(short.model?.steps).toBeNull()
-    const fractional = unpackShare({ ...c, m: { ...c.m!, s: [1.5, 2.5] } }) as SharePackage
+    const fractional = unpacked({ ...c, m: { ...c.m!, s: [1.5, 2.5] } })
     expect(fractional.model?.steps).toBeNull()
   })
+  it('refuses lists longer than any share allows before building anything from them', () => {
+    const base = { a: 'bricktown', v: 1, n: '', t: 0 }
+    const many = (n: number, item: unknown = 0) => Array.from({ length: n }, () => item)
+    const huge: unknown[] = [
+      { ...base, k: 'city', c: { s: 8, r: [], p: [], b: many(SHARE_LIMITS.cityBlueprints + 1, {}) } },
+      { ...base, k: 'city', c: { s: 8, r: [], p: many(48 * 48 + 1, []), b: [] } },
+      { ...base, k: 'city', c: { s: 8, r: many(2 * 48 * 48 + 2), p: [], b: [] } },
+      { ...base, k: 'city', c: { s: 8, r: [], p: [], b: [{ b: many(SHARE_LIMITS.bricks + 1, []) }] } },
+      { ...base, k: 'model', m: { b: { b: many(SHARE_LIMITS.bricks + 1, []) } } },
+      { ...base, k: 'model', m: { b: { b: [], g: many(SHARE_LIMITS.tagList + 1, 'x') } } },
+      { ...base, k: 'model', m: { b: { b: [] }, S: many(SHARE_LIMITS.bricks + 1, []) } },
+      { ...base, k: 'model', m: { b: { b: [] }, S: [many(SHARE_LIMITS.bricks + 1)] } },
+      { ...base, k: 'model', m: { b: { b: [] }, s: many(SHARE_LIMITS.bricks + 1, 1) } },
+      { ...base, k: 'model', P: many(SHARE_LIMITS.partTable + 1, 'x'), m: { b: { b: [] } } },
+      { ...base, k: 'model', F: many(SHARE_LIMITS.bricks + 1, {}), m: { b: { b: [] } } },
+    ]
+    for (const h of huge) expect(unpackShare(h)).toEqual({ error: 'too_big' })
+  })
+  it('does not walk the grid of a maze larger than the largest maze', () => {
+    const out = unpacked({ a: 'bricktown', v: 1, k: 'maze', n: '', t: 0, z: { m: { n: '', w: 1000, h: 1, g: '#'.repeat(1000), c: 6 } } })
+    expect(out.maze?.maze.walls).toBeNull()
+  })
   it('drops a maze grid that does not match its size', () => {
-    const out = unpackShare({ a: 'bricktown', v: 1, k: 'maze', n: '', t: 0, z: { m: { n: '', w: 7, h: 7, g: '#', c: 6 } } }) as SharePackage
+    const out = unpacked({ a: 'bricktown', v: 1, k: 'maze', n: '', t: 0, z: { m: { n: '', w: 7, h: 7, g: '#', c: 6 } } })
     expect(out.maze?.maze.walls).toBeNull()
   })
 })

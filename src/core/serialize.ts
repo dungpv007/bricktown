@@ -1,5 +1,6 @@
 import { COLORS } from './colors'
 import { parseFig } from './figures'
+import { validateTemplate } from './template'
 import type { Maze } from './maze'
 import type { Baseplate, Blueprint, Brick, MazeChallenge, SaveData, Template } from './types'
 
@@ -100,13 +101,23 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
     completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
     sharedTemplates: arrayOr<unknown>(data.sharedTemplates, [])
       .filter(isTemplateLike)
-      .map((t) => ({ ...t, bricks: normalizeBricks(t.bricks) }) as unknown as Template),
+      .map((t) => ({ ...t, bricks: normalizeBricks(t.bricks) }) as unknown as Template)
+      .filter(isSoundTemplate),
     mazes: arrayOr<unknown>(data.mazes, []).filter(isRecord) as unknown as Maze[],
     mazeChallenges: normalizeChallenges(data.mazeChallenges),
   }
 }
 
-/** Enough of a template's shape that Guided mode can rely on it (templates are validated on import). */
+/** A template Guided mode can build: one that a hand-edited file broke is dropped. */
+function isSoundTemplate(t: Template): boolean {
+  try {
+    return validateTemplate(t).length === 0
+  } catch {
+    return false // a shape validateTemplate does not expect (it assumes the template's types)
+  }
+}
+
+/** Enough of a template's shape for `validateTemplate` to make sense of it. */
 function isTemplateLike(v: unknown): v is Record<string, unknown> & { bricks: unknown[] } {
   return (
     isRecord(v) && typeof v.id === 'string' && isRecord(v.name) && isRecord(v.baseplate) &&

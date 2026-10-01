@@ -1,6 +1,6 @@
 import type { Maze } from './maze'
 import { compress, decompress, packShare, unpackShare } from './shareCodec'
-import { validatePackage } from './shareImport'
+import { validatePackage, type ShareImportOptions } from './shareImport'
 import { autoSteps, validateTemplate } from './template'
 import type { Blueprint, CityState } from './types'
 
@@ -42,6 +42,8 @@ export const QR_MAX_LINK_CHARS = 2300
 
 /** A payload longer than this cannot be a share (the decompressed cap is far smaller): not decoded. */
 const MAX_PAYLOAD_CHARS = 3_000_000
+/** Room around the payload in pasted text or a file (`{"bricktown":"..."}`, a link's base). */
+const MAX_TEXT_CHARS = MAX_PAYLOAD_CHARS + 64
 
 const pkgHeader = (kind: ShareKind, name: string, createdAt: number) =>
   ({ app: 'bricktown', v: 1, kind, name, createdAt }) as const
@@ -103,8 +105,11 @@ export function encodeShare(pkg: SharePackage): string {
   return compress(JSON.stringify(packShare(pkg)))
 }
 
-/** A validated package from an untrusted payload, or why it was refused. Never throws. */
-export function decodeShare(payload: string): SharePackage | ShareError {
+/**
+ * A validated package from an untrusted payload, or why it was refused. Never throws. `opts` gives
+ * built-in template sizes (city placements) and fallback names in the kid's language.
+ */
+export function decodeShare(payload: string, opts?: ShareImportOptions): SharePackage | ShareError {
   if (payload.length > MAX_PAYLOAD_CHARS) return { error: 'too_big' }
   const inflated = decompress(payload)
   if ('error' in inflated) return inflated
@@ -115,7 +120,8 @@ export function decodeShare(payload: string): SharePackage | ShareError {
     return { error: 'corrupt' }
   }
   try {
-    return validatePackage(unpackShare(json))
+    const unpacked = unpackShare(json)
+    return 'error' in unpacked ? unpacked : validatePackage(unpacked.value, opts)
   } catch {
     return { error: 'invalid' } // a safety net: validation is written not to throw
   }
@@ -127,9 +133,10 @@ export function shareLink(pkg: SharePackage, base: string): string {
 }
 
 /** The package in a location hash (`#s=...`), an error for a broken one, null when there is none. */
-export function parseShareHash(hash: string): SharePackage | ShareError | null {
+export function parseShareHash(hash: string, opts?: ShareImportOptions): SharePackage | ShareError | null {
+  if (hash.length > MAX_TEXT_CHARS) return { error: 'too_big' }
   const payload = new URLSearchParams(hash.replace(/^#/, '')).get('s')
-  return payload === null ? null : decodeShare(payload)
+  return payload === null ? null : decodeShare(payload, opts)
 }
 
 /** Contents of a `.bricktown` file. */
@@ -137,7 +144,8 @@ export function shareFileText(pkg: SharePackage): string {
   return JSON.stringify({ bricktown: encodeShare(pkg) })
 }
 
-export function parseShareFile(text: string): SharePackage | ShareError {
+export function parseShareFile(text: string, opts?: ShareImportOptions): SharePackage | ShareError {
+  if (text.length > MAX_TEXT_CHARS) return { error: 'too_big' } // refused before parsing
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
@@ -145,16 +153,21 @@ export function parseShareFile(text: string): SharePackage | ShareError {
     return { error: 'corrupt' }
   }
   const payload = typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>).bricktown : undefined
-  return typeof payload === 'string' ? decodeShare(payload) : { error: 'corrupt' }
+  return typeof payload === 'string' ? decodeShare(payload, opts) : { error: 'corrupt' }
 }
 
-/** Whatever was pasted or opened: file text, a link, a hash or a bare payload. */
-export function parseShareText(text: string): SharePackage | ShareError {
+/**
+ * Whatever was pasted or opened: file text, a link, a hash or a bare payload. Whitespace inside a
+ * link or payload is ignored (chat apps and e-mail wrap long links).
+ */
+export function parseShareText(text: string, opts?: ShareImportOptions): SharePackage | ShareError {
+  if (text.length > MAX_TEXT_CHARS) return { error: 'too_big' }
   const t = text.trim()
-  if (t.startsWith('{')) return parseShareFile(t)
-  const hashAt = t.indexOf('#')
-  if (hashAt >= 0) return parseShareHash(t.slice(hashAt)) ?? { error: 'corrupt' }
-  return decodeShare(t)
+  if (t.startsWith('{')) return parseShareFile(t, opts)
+  const compact = t.replace(/\s+/g, '')
+  const hashAt = compact.indexOf('#')
+  if (hashAt >= 0) return parseShareHash(compact.slice(hashAt), opts) ?? { error: 'corrupt' }
+  return decodeShare(compact, opts)
 }
 
 /** A file name safe on every system: letters (any script), digits, spaces, `-` and `_`. */

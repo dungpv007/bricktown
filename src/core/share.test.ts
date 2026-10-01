@@ -226,6 +226,18 @@ describe('encodeShare / decodeShare', () => {
     const bomb = compress(JSON.stringify({ a: 'bricktown', v: 1, k: 'model', n: 'x'.repeat(3 * 1024 * 1024), t: 0 }))
     expect(decodeShare(bomb)).toEqual({ error: 'too_big' })
   })
+  it('refuses a tiny payload that unpacks to hundreds of thousands of blueprints, quickly', () => {
+    const blueprints = '{},'.repeat(690_000).slice(0, -1)
+    const payload = compress(`{"a":"bricktown","v":1,"k":"city","n":"","t":0,"c":{"s":8,"r":[],"p":[],"b":[${blueprints}]}}`)
+    expect(payload.length).toBeLessThan(4000)
+    const started = performance.now()
+    expect(decodeShare(payload)).toEqual({ error: 'too_big' })
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+  it('refuses a model without bricks', () => {
+    const empty = buildModelPackage(blueprint([]), { withSteps: true })
+    expect(decodeShare(encodeShare(empty))).toEqual({ error: 'invalid' })
+  })
   it('reports unknown parts in a crafted payload as invalid', () => {
     const pkg = buildModelPackage(blueprint(showcase), { withSteps: false }, 1)
     const evil = encodeShare({ ...pkg, model: { blueprint: { ...pkg.model!.blueprint, bricks: [{ id: 'q', p: 'death_star', x: 0, y: 0, z: 0, r: 0, c: 0 }] } } })
@@ -267,8 +279,16 @@ describe('links and files', () => {
     for (const text of [link, `  ${link}\n`, new URL(link).hash, encodeShare(pkg), shareFileText(pkg)]) {
       expect(comparable(parseShareText(text) as SharePackage)).toEqual(comparable(pkg))
     }
+    const wrapped = link.replace(/(.{60})/g, '$1\n ') // as a chat app or e-mail wraps it
+    expect(comparable(parseShareText(wrapped) as SharePackage)).toEqual(comparable(pkg))
     expect(parseShareText('hello')).toEqual({ error: 'corrupt' })
     expect(parseShareText(`${BASE}/#menu`)).toEqual({ error: 'corrupt' })
+  })
+  it('refuses text far longer than any share before parsing it', () => {
+    const huge = 'x'.repeat(3_000_100)
+    expect(parseShareText(huge)).toEqual({ error: 'too_big' })
+    expect(parseShareFile(`{"bricktown":"${huge}"}`)).toEqual({ error: 'too_big' })
+    expect(parseShareHash(`#s=${huge}`)).toEqual({ error: 'too_big' })
   })
   it('names the file after the creation, keeping only safe characters', () => {
     expect(shareFileName(pkg)).toBe('Nhà của bé.bricktown')
@@ -335,5 +355,29 @@ describe('the brick limit', () => {
     const out = roundTrip(pkg)
     expect(out.model?.blueprint.bricks).toHaveLength(SHARE_LIMITS.bricks)
     expect(performance.now() - started).toBeLessThan(1500)
+  })
+})
+
+describe('worst case', () => {
+  it('checks a city of 60 full blueprints in reasonable time', () => {
+    const bricks: Brick[] = []
+    for (let y = 0; bricks.length < SHARE_LIMITS.bricks; y += 3) {
+      for (let x = 0; x < 48 && bricks.length < SHARE_LIMITS.bricks; x += 4) {
+        for (let z = 0; z < 48 && bricks.length < SHARE_LIMITS.bricks; z += 2) {
+          bricks.push({ id: `b${bricks.length}`, p: 'brick_2x4', x, y, z, r: 1, c: (x + y + z) % 30 })
+        }
+      }
+    }
+    const bps = Array.from({ length: SHARE_LIMITS.cityBlueprints }, (_, i) =>
+      blueprint(bricks, { id: `bp_${i}`, name: `B${i}`, baseplate: { w: 48, d: 48 } }))
+    const placements = bps.map((b, i) => ({ id: `p${i}`, source: b.id, cx: (i % 8) * 6, cz: Math.floor(i / 8) * 6, rot: 0 as const }))
+    const pkg = buildCityPackage({ size: 48, roads: [], placements }, bps, { now: 1 })
+    const payload = encodeShare(pkg)
+    const started = performance.now()
+    const out = decodeShare(payload)
+    const ms = performance.now() - started
+    expect(out).not.toHaveProperty('error')
+    expect((out as SharePackage).city?.blueprints).toHaveLength(SHARE_LIMITS.cityBlueprints)
+    expect(ms).toBeLessThan(3000) // a few hundred ms on a desktop: see the S1 report for tablets
   })
 })

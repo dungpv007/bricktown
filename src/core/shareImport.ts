@@ -1,10 +1,10 @@
 import { PLATE_MAX } from './baseplate'
+import { CELL, canPlaceInCity } from './city'
 import { COLORS } from './colors'
 import { isFigure, parseFig } from './figures'
 import { newId } from './ids'
 import { MAX_BRICKS, MAX_HEIGHT_PLATES } from './model'
-import { MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, isBorder, isCorner, type Cell, type Maze } from './maze'
-import { Occupancy } from './occupancy'
+import { MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, isBorder, isCorner, solve, type Cell, type Maze } from './maze'
 import { PART_BY_ID } from './parts/catalog'
 import { footprint } from './rotation'
 import type { MazeBest, ShareErrorCode, ShareError, ShareKind, SharePackage } from './share'
@@ -25,24 +25,68 @@ export const SHARE_LIMITS = {
   citySize: 48,
   nameLength: 40,
   tags: 8,
+  /** Tags sent per blueprint (only `tags` of them are kept). */
+  tagList: 64,
+  /** Distinct part ids a package can use. */
+  partTable: 256,
   /** A best run longer than a day is not a run. */
   bestTimeMs: 24 * 60 * 60 * 1000,
 } as const
 
+/** A shared best run faster than this per cell of the shortest path is not believable: dropped. */
+export const MIN_BEST_MS_PER_CELL = 250
+
+/** Names given to creations whose name is empty after cleaning (Vietnamese, the default language). */
+export const DEFAULT_SHARE_NAMES: Record<ShareKind, string> = { model: 'Mô hình', maze: 'Mê cung', city: 'Thành phố' }
+
+export interface ShareImportOptions {
+  /** Baseplate of a built-in template (for city placements); unknown templates count as one cell. */
+  templateSize?: (templateId: string) => Baseplate | undefined
+  /** Replacement names for empty ones, e.g. in the kid's language. */
+  names?: Partial<Record<ShareKind, string>>
+}
+
 const KINDS: readonly ShareKind[] = ['model', 'maze', 'city']
 const BLUEPRINT_KINDS: readonly BlueprintKind[] = ['building', 'vehicle', 'prop']
 const TAG = /^[a-z0-9_-]{1,24}$/
+const TEMPLATE_PREFIX = 'tpl:'
 const TEMPLATE_SOURCE = /^tpl:[a-z0-9_]{1,40}$/
 const CELL_KEY = /^(\d{1,3}),(\d{1,3})$/
-// Control characters, zero-width and text-direction characters (they can disguise a name).
+/** What an unknown template placement occupies: one city cell. */
+const PLACEHOLDER_PLATE: Baseplate = { w: CELL, d: CELL }
+/**
+ * Characters that can hide or disguise text: controls, soft hyphen, zero-width and direction marks,
+ * line/paragraph separators, invisible operators, BOM and tag characters. The zero-width joiner is
+ * kept: emoji sequences (families, professions) need it.
+ */
 // eslint-disable-next-line no-control-regex
-const UNSAFE_CHARS = /[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g
+const UNSAFE_CHARS = /[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u200B-\u200C\u200E-\u200F\u2028-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u{E0000}-\u{E007F}]/gu
+/** Longest input looked at: far more than 40 characters, even with many combining marks. */
+const NAME_SCAN = 4096
 
-/** A name to show as text: trimmed, without control or direction characters, at most 40 characters. */
-export function sanitizeName(v: unknown): string {
-  if (typeof v !== 'string') return ''
-  const clean = v.replace(UNSAFE_CHARS, '').trim()
-  return Array.from(clean).slice(0, SHARE_LIMITS.nameLength).join('')
+const graphemes: Intl.Segmenter | null =
+  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null
+
+/** The first `n` user-perceived characters (code points where Intl.Segmenter is missing). */
+function firstChars(s: string, n: number): string {
+  if (!graphemes) return Array.from(s).slice(0, n).join('')
+  let out = ''
+  let count = 0
+  for (const { segment } of graphemes.segment(s)) {
+    if (count++ === n) break
+    out += segment
+  }
+  return out
+}
+
+/**
+ * A name to show as text: without hiding characters, trimmed, at most 40 characters (never cutting
+ * an emoji apart); `fallback` when nothing is left.
+ */
+export function sanitizeName(v: unknown, fallback = ''): string {
+  if (typeof v !== 'string') return fallback
+  const clean = firstChars(v.slice(0, NAME_SCAN).replace(UNSAFE_CHARS, '').trim(), SHARE_LIMITS.nameLength)
+  return clean || fallback
 }
 
 class Refusal {
@@ -71,20 +115,20 @@ function list(v: unknown, max: number): unknown[] {
   return v
 }
 
-function text(v: unknown): string {
-  return typeof v === 'string' ? sanitizeName(v) : fail('invalid')
+function text(v: unknown, fallback: string): string {
+  return typeof v === 'string' ? sanitizeName(v, fallback) : fail('invalid')
 }
 
 /** The package rebuilt from validated values only, or why it is refused. Never throws. */
-export function validatePackage(raw: unknown): SharePackage | ShareError {
+export function validatePackage(raw: unknown, opts: ShareImportOptions = {}): SharePackage | ShareError {
   try {
-    return checkPackage(raw)
+    return checkPackage(raw, opts)
   } catch (e) {
     return { error: e instanceof Refusal ? e.code : 'invalid' }
   }
 }
 
-function checkPackage(raw: unknown): SharePackage {
+function checkPackage(raw: unknown, opts: ShareImportOptions): SharePackage {
   const pkg = record(raw)
   if (pkg.app !== 'bricktown') fail('unsupported')
   if (pkg.v !== 1) fail(isInt(pkg.v) && pkg.v > 1 ? 'unsupported' : 'invalid')
@@ -92,14 +136,15 @@ function checkPackage(raw: unknown): SharePackage {
   if (typeof kind !== 'string' || !(KINDS as readonly string[]).includes(kind)) fail('unsupported')
   if (!isTime(pkg.createdAt)) fail('invalid')
   const createdAt = pkg.createdAt
-  const header = { app: 'bricktown', v: 1, kind: kind as ShareKind, name: text(pkg.name), createdAt } as const
+  const names = { ...DEFAULT_SHARE_NAMES, ...opts.names }
+  const header = { app: 'bricktown', v: 1, kind: kind as ShareKind, name: text(pkg.name, names[kind as ShareKind]), createdAt } as const
   switch (kind as ShareKind) {
     case 'model':
-      return { ...header, model: checkModel(record(pkg.model), createdAt) }
+      return { ...header, model: checkModel(record(pkg.model), createdAt, names.model) }
     case 'maze':
-      return { ...header, maze: checkMazeSection(record(pkg.maze), createdAt) }
+      return { ...header, maze: checkMazeSection(record(pkg.maze), createdAt, names.maze) }
     case 'city':
-      return { ...header, city: checkCity(record(pkg.city), createdAt) }
+      return { ...header, city: checkCity(record(pkg.city), createdAt, names.model, opts) }
   }
 }
 
@@ -132,22 +177,40 @@ function checkBrick(v: unknown, i: number, plate: Baseplate): Brick {
   return brick
 }
 
-function checkBlueprint(v: unknown, time: number): Blueprint {
+/**
+ * True when two bricks share a voxel. Bricks are already inside the plate (x, z < 48, y < 72), so a
+ * voxel is one number: much cheaper than Occupancy's string keys for 60 blueprints of 1500 bricks.
+ */
+function anyOverlap(bricks: Brick[]): boolean {
+  const voxels = new Set<number>()
+  for (const b of bricks) {
+    const part = PART_BY_ID[b.p]
+    const { fx, fz } = footprint(part, b.r)
+    for (let dy = 0; dy < part.h; dy++) {
+      for (let dx = 0; dx < fx; dx++) {
+        for (let dz = 0; dz < fz; dz++) {
+          const key = ((b.y + dy) * 64 + b.x + dx) * 64 + b.z + dz
+          if (voxels.has(key)) return true
+          voxels.add(key)
+        }
+      }
+    }
+  }
+  return false
+}
+
+function checkBlueprint(v: unknown, time: number, fallbackName: string): Blueprint {
   const bp = record(v)
   if (typeof bp.id !== 'string') fail('invalid')
   const kind = bp.kind
   if (typeof kind !== 'string' || !(BLUEPRINT_KINDS as readonly string[]).includes(kind)) fail('invalid')
-  const tags = bp.tags === undefined ? [] : list(bp.tags, Infinity)
+  const tags = bp.tags === undefined ? [] : list(bp.tags, SHARE_LIMITS.tagList)
   const baseplate = checkBaseplate(bp.baseplate)
   const bricks = list(bp.bricks, SHARE_LIMITS.bricks).map((b, i) => checkBrick(b, i, baseplate))
-  const occupied = new Occupancy()
-  for (const b of bricks) {
-    if (occupied.collides(b)) fail('invalid')
-    occupied.add(b)
-  }
+  if (anyOverlap(bricks)) fail('invalid')
   return {
     id: bp.id,
-    name: text(bp.name),
+    name: text(bp.name, fallbackName),
     kind: kind as BlueprintKind,
     tags: tags.filter((t): t is string => typeof t === 'string' && TAG.test(t)).slice(0, SHARE_LIMITS.tags),
     baseplate,
@@ -163,11 +226,12 @@ function checkSteps(v: unknown, bp: Blueprint): number[][] {
   const sized = (a: unknown): a is unknown[] => Array.isArray(a) && a.length <= n
   if (!sized(v) || !v.every(sized)) fail('invalid')
   const steps = v
+  const total = steps.reduce((sum, s) => sum + s.length, 0)
+  if (total !== n) fail('invalid')
   const seen = new Set<unknown>()
   for (const step of steps) for (const i of step) seen.add(i)
-  const total = steps.reduce((n, s) => n + s.length, 0)
   // Every index once (checked cheaply first, so validateTemplate only ever sees n distinct bricks).
-  if (total !== bp.bricks.length || seen.size !== total) fail('invalid')
+  if (seen.size !== total) fail('invalid')
   const checked = steps as number[][]
   const problems = validateTemplate({
     id: 'import', name: { vi: '', en: '' }, difficulty: 1, kind: bp.kind, tags: [],
@@ -176,8 +240,9 @@ function checkSteps(v: unknown, bp: Blueprint): number[][] {
   return problems.length === 0 ? checked.map((s) => [...s]) : fail('invalid')
 }
 
-function checkModel(m: Loose, time: number): NonNullable<SharePackage['model']> {
-  const blueprint = checkBlueprint(m.blueprint, time)
+function checkModel(m: Loose, time: number, fallbackName: string): NonNullable<SharePackage['model']> {
+  const blueprint = checkBlueprint(m.blueprint, time, fallbackName)
+  if (blueprint.bricks.length === 0) fail('invalid') // nothing to see or build
   return 'steps' in m ? { blueprint, steps: checkSteps(m.steps, blueprint) } : { blueprint }
 }
 
@@ -195,16 +260,16 @@ function checkKeys(v: unknown, w: number, h: number): string[] {
   return [...new Set(list(v, w * h).map((k) => checkCellKey(k, w, h)))]
 }
 
-function checkDoor(v: unknown, dims: { w: number; h: number }, walls: Set<string>): Cell | null {
-  if (v === null) return null
-  const d = record(v)
+function checkDoor(v: unknown, dims: { w: number; h: number }, walls: Set<string>): Cell {
+  const d = record(v) // a shared maze must be playable: both doors present
   if (!isInt(d.cx) || !isInt(d.cz)) fail('invalid')
   const cell = { cx: d.cx, cz: d.cz }
   if (!isBorder(dims, cell) || isCorner(dims, cell) || walls.has(cellKey(cell))) fail('invalid')
   return cell
 }
 
-function checkMaze(v: unknown, time: number): Maze {
+/** A playable maze (both doors, a path between them) and the length of its shortest path. */
+function checkMaze(v: unknown, time: number, fallbackName: string): { maze: Maze; pathLength: number } {
   const m = record(v)
   const { w, h } = m
   const okSize = (n: unknown): n is number => isInt(n) && n % 2 === 1 && n >= MAZE_MIN_SIZE && n <= MAZE_MAX_SIZE
@@ -213,53 +278,69 @@ function checkMaze(v: unknown, time: number): Maze {
   const wallSet = new Set(walls)
   const entry = checkDoor(m.entry, { w, h }, wallSet)
   const exit = checkDoor(m.exit, { w, h }, wallSet)
-  if (entry && exit && cellKey(entry) === cellKey(exit)) fail('invalid')
-  const doors = new Set([entry, exit].filter((c): c is Cell => c !== null).map(cellKey))
+  if (cellKey(entry) === cellKey(exit)) fail('invalid')
+  const doors = new Set([cellKey(entry), cellKey(exit)])
   const coins = checkKeys(m.coins, w, h)
   if (coins.some((k) => wallSet.has(k) || doors.has(k))) fail('invalid')
   if (!isColor(m.wallColor) || (m.floorColor !== undefined && !isColor(m.floorColor))) fail('invalid')
   const maze: Maze = {
-    id: m.id, name: text(m.name), w, h, walls, entry, exit, coins, wallColor: m.wallColor,
+    id: m.id, name: text(m.name, fallbackName), w, h, walls, entry, exit, coins, wallColor: m.wallColor,
     createdAt: time, updatedAt: time,
   }
   if (m.floorColor !== undefined) maze.floorColor = m.floorColor
-  return maze
+  const path = solve(maze)
+  if (!path) fail('invalid')
+  return { maze, pathLength: path.length }
 }
 
-function checkBest(v: unknown): MazeBest {
+/** The best run, or null when it is faster than the maze allows (an impossible challenge). */
+function checkBest(v: unknown, pathLength: number): MazeBest | null {
   const b = record(v)
   const { timeMs, stars } = b
   if (typeof timeMs !== 'number' || !Number.isFinite(timeMs) || timeMs <= 0 || timeMs > SHARE_LIMITS.bestTimeMs) fail('invalid')
   if (stars !== 1 && stars !== 2 && stars !== 3) fail('invalid')
-  return { timeMs, stars }
+  return timeMs < pathLength * MIN_BEST_MS_PER_CELL ? null : { timeMs, stars }
 }
 
-function checkMazeSection(z: Loose, time: number): NonNullable<SharePackage['maze']> {
-  const maze = checkMaze(z.maze, time)
-  return 'best' in z ? { maze, best: checkBest(z.best) } : { maze }
+function checkMazeSection(z: Loose, time: number, fallbackName: string): NonNullable<SharePackage['maze']> {
+  const { maze, pathLength } = checkMaze(z.maze, time, fallbackName)
+  const best = 'best' in z ? checkBest(z.best, pathLength) : null
+  return best ? { maze, best } : { maze }
 }
 
 // ---------------------------------------------------------------------------------------------
 // cities
 
-function checkCity(c: Loose, time: number): NonNullable<SharePackage['city']> {
+/**
+ * Roads and placements on the map; each placement fits where it is (inside the city, not on a road,
+ * not overlapping an earlier one), sized by its blueprint's plate or the template's (`templateSize`).
+ * Only the blueprints a placement uses are kept.
+ */
+function checkCity(c: Loose, time: number, fallbackName: string, opts: ShareImportOptions): NonNullable<SharePackage['city']> {
   const city = record(c.city)
   const { size } = city
   if (!isInt(size) || size < 1) fail('invalid')
   if (size > SHARE_LIMITS.citySize) fail('too_big')
-  const blueprints = list(c.blueprints, SHARE_LIMITS.cityBlueprints).map((b) => checkBlueprint(b, time))
-  const ids = new Set(blueprints.map((b) => b.id))
-  if (ids.size !== blueprints.length) fail('invalid')
-  const roads = checkKeys(city.roads, size, size)
-  const placements = list(city.placements, size * size).map((v): CityPlacement => {
+  const blueprints = list(c.blueprints, SHARE_LIMITS.cityBlueprints).map((b) => checkBlueprint(b, time, fallbackName))
+  const byId = new Map(blueprints.map((b) => [b.id, b]))
+  if (byId.size !== blueprints.length) fail('invalid')
+  const sizeOf = (source: string): Baseplate =>
+    source.startsWith(TEMPLATE_PREFIX)
+      ? (opts.templateSize?.(source.slice(TEMPLATE_PREFIX.length)) ?? PLACEHOLDER_PLATE)
+      : (byId.get(source)?.baseplate ?? PLACEHOLDER_PLATE)
+  const placed: CityState = { size, roads: checkKeys(city.roads, size, size), placements: [] }
+  for (const v of list(city.placements, size * size)) {
     const p = record(v)
     const { id, source, cx, cz, rot } = p
     if (typeof id !== 'string' || typeof source !== 'string') fail('invalid')
-    if (!TEMPLATE_SOURCE.test(source) && !ids.has(source)) fail('invalid')
-    if (!isInt(cx) || !isInt(cz) || cx < 0 || cz < 0 || cx >= size || cz >= size || !isRot(rot)) fail('invalid')
-    return { id, source, cx, cz, rot }
-  })
-  return { city: { size, roads, placements }, blueprints }
+    if (!TEMPLATE_SOURCE.test(source) && !byId.has(source)) fail('invalid')
+    if (!isInt(cx) || !isInt(cz) || !isRot(rot)) fail('invalid')
+    const placement: CityPlacement = { id, source, cx, cz, rot }
+    if (canPlaceInCity(placed, placement, sizeOf) !== null) fail('invalid')
+    placed.placements.push(placement)
+  }
+  const used = new Set(placed.placements.map((p) => p.source))
+  return { city: placed, blueprints: blueprints.filter((b) => used.has(b.id)) }
 }
 
 // ---------------------------------------------------------------------------------------------

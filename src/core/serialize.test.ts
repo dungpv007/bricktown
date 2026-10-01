@@ -165,7 +165,12 @@ describe('serialize', () => {
     it('drops malformed shared templates, mazes and challenges', () => {
       const out = migrate({
         ...base,
-        sharedTemplates: [template, { id: 'x' }, null, { ...template, bricks: [{ ...template.bricks[0], fig: 'chef' }] }],
+        sharedTemplates: [
+          template, { id: 'x' }, null, { ...template, bricks: [{ ...template.bricks[0], fig: 'chef' }] },
+          { ...template, id: 'no_steps', steps: [] }, // a brick in no step: Guided could never finish it
+          { ...template, id: 'floating', bricks: [{ ...template.bricks[0], y: 5 }] },
+          { ...template, id: 'odd_steps', steps: [5] }, // a shape validateTemplate does not expect
+        ],
         mazes: [{ id: 'm' }, 'maze', null],
         mazeChallenges: { a: { timeMs: 10 }, b: { timeMs: -1 }, c: 'fast', d: { timeMs: 5, from: 7 }, e: { timeMs: NaN } },
       })

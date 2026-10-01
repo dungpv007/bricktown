@@ -1,6 +1,7 @@
 import { Inflate, deflateSync } from 'fflate'
-import { cellKey, parseCellKey, type Cell, type Maze } from './maze'
+import { MAZE_MAX_SIZE, cellKey, parseCellKey, type Cell, type Maze } from './maze'
 import type { MazeBest, ShareKind, SharePackage } from './share'
+import { SHARE_LIMITS } from './shareImport'
 import type { Blueprint, BlueprintKind, CityPlacement, FigStyle } from './types'
 
 /**
@@ -12,7 +13,8 @@ import type { Blueprint, BlueprintKind, CityPlacement, FigStyle } from './types'
  *
  * `unpackShare` turns compact JSON back into the canonical `SharePackage` shape WITHOUT validating
  * it: anything malformed comes out as a value validation rejects (`null`, a missing part...). It
- * never throws on junk and never expands a size it has not checked.
+ * never throws on junk, and it measures every list against `SHARE_LIMITS` before building anything
+ * from it (a longer list means `too_big`), so a small payload cannot make it allocate much.
  */
 
 /** Hard cap on the decompressed JSON: guards against zip bombs. */
@@ -253,6 +255,17 @@ type Loose = Record<string, unknown>
 const isLoose = (v: unknown): v is Loose => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isIndex = (v: unknown, length: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < length
 
+/** Thrown when a list is longer than any valid share allows; caught in `unpackShare`. */
+class TooBig {}
+
+/** `v` itself when it is not an array; an array only when it is at most `max` long. */
+function capped(v: unknown, max: number): unknown {
+  if (Array.isArray(v) && v.length > max) throw new TooBig()
+  return v
+}
+
+const MAX_CITY_CELLS = SHARE_LIMITS.citySize * SHARE_LIMITS.citySize
+
 function unpackBrick(t: unknown, i: number, parts: unknown[], figs: unknown[]): unknown {
   if (!Array.isArray(t) || t.length < 6 || t.length > 7) return null
   const brick: Loose = {
@@ -269,13 +282,14 @@ function unpackBlueprint(raw: unknown, i: number, time: unknown, parts: unknown[
   const p = Array.isArray(raw.p) ? raw.p : []
   const baseplate: Loose = { w: p[0], d: p[1] }
   if (p.length > 2) baseplate.c = p[2]
+  const bricks = capped(raw.b, SHARE_LIMITS.bricks)
   return {
     id: `bp${i}`,
     name: raw.n,
     kind: raw.k,
-    tags: raw.g ?? [],
+    tags: capped(raw.g, SHARE_LIMITS.tagList) ?? [],
     baseplate,
-    bricks: Array.isArray(raw.b) ? raw.b.map((t, j) => unpackBrick(t, j, parts, figs)) : null,
+    bricks: Array.isArray(bricks) ? bricks.map((t, j) => unpackBrick(t, j, parts, figs)) : null,
     createdAt: time,
     updatedAt: time,
   } satisfies Partial<Record<keyof Blueprint, unknown>>
@@ -283,16 +297,23 @@ function unpackBlueprint(raw: unknown, i: number, time: unknown, parts: unknown[
 
 /** Steps from run lengths, or null unless they are whole positive numbers adding up to the bricks. */
 function stepsFromRuns(runs: unknown, brickCount: number): number[][] | null {
-  if (!Array.isArray(runs)) return null
+  if (!Array.isArray(capped(runs, SHARE_LIMITS.bricks))) return null
   let sum = 0
-  for (const n of runs) {
+  for (const n of runs as unknown[]) {
     if (typeof n !== 'number' || !Number.isInteger(n) || n < 1) return null
     sum += n
     if (sum > brickCount) return null
   }
   if (sum !== brickCount) return null
   let next = 0
-  return runs.map((n: number) => Array.from({ length: n }, () => next++))
+  return (runs as number[]).map((n) => Array.from({ length: n }, () => next++))
+}
+
+/** Full steps as sent, once neither the list nor any step is longer than the brick limit. */
+function cappedSteps(steps: unknown): unknown {
+  const list = capped(steps, SHARE_LIMITS.bricks)
+  if (Array.isArray(list)) for (const s of list) capped(s, SHARE_LIMITS.bricks)
+  return list
 }
 
 function unpackCell(v: unknown): Cell | null | undefined {
@@ -300,13 +321,15 @@ function unpackCell(v: unknown): Cell | null | undefined {
   return Array.isArray(v) && v.length === 2 ? { cx: v[0], cz: v[1] } : undefined
 }
 
+const isMazeSize = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0 && n <= MAZE_MAX_SIZE
+
 function unpackMaze(raw: unknown, time: unknown): unknown {
   if (!isLoose(raw)) return null
   const { w, h, g } = raw
   let walls: string[] | null = null
   let coins: string[] | null = null
-  const sized = typeof w === 'number' && typeof h === 'number' && Number.isInteger(w) && Number.isInteger(h) && w > 0 && h > 0
-  if (sized && typeof g === 'string' && g.length === w * h && /^[#.o]*$/.test(g)) {
+  // The size is checked before the grid is walked: the grid is at most 21 x 21 cells.
+  if (isMazeSize(w) && isMazeSize(h) && typeof g === 'string' && g.length === w * h && /^[#.o]*$/.test(g)) {
     walls = []
     coins = []
     for (let i = 0; i < g.length; i++) {
@@ -334,6 +357,7 @@ function unpackPlacement(raw: unknown, i: number): unknown {
 }
 
 function unpackRoads(flat: unknown): unknown {
+  capped(flat, 2 * MAX_CITY_CELLS)
   if (!Array.isArray(flat) || flat.length % 2 !== 0) return null
   const roads: unknown[] = []
   for (let i = 0; i < flat.length; i += 2) {
@@ -343,46 +367,56 @@ function unpackRoads(flat: unknown): unknown {
   return roads
 }
 
-export function unpackShare(raw: unknown): unknown {
-  if (!isLoose(raw)) return raw
-  const parts = Array.isArray(raw.P) ? raw.P : []
-  const figs = Array.isArray(raw.F) ? raw.F : []
-  const time = raw.t
-  const out: Loose = { app: raw.a, v: raw.v, kind: raw.k, name: raw.n, createdAt: time }
-  if (raw.m !== undefined) {
-    const m = raw.m
-    if (!isLoose(m)) out.model = null
-    else {
-      const blueprint = unpackBlueprint(m.b, 0, time, parts, figs)
-      const model: Loose = { blueprint }
-      const count = isLoose(blueprint) && Array.isArray(blueprint.bricks) ? blueprint.bricks.length : 0
-      if (m.s !== undefined) model.steps = stepsFromRuns(m.s, count)
-      else if (m.S !== undefined) model.steps = m.S
-      out.model = model
-    }
+function unpackCity(c: unknown, time: unknown, parts: unknown[], figs: unknown[]): unknown {
+  if (!isLoose(c)) return null
+  const placements = capped(c.p, MAX_CITY_CELLS)
+  const blueprints = capped(c.b, SHARE_LIMITS.cityBlueprints)
+  return {
+    city: {
+      size: c.s,
+      roads: unpackRoads(c.r),
+      placements: Array.isArray(placements) ? placements.map(unpackPlacement) : null,
+    },
+    blueprints: Array.isArray(blueprints) ? blueprints.map((b, i) => unpackBlueprint(b, i, time, parts, figs)) : null,
   }
-  if (raw.z !== undefined) {
-    const z = raw.z
-    if (!isLoose(z)) out.maze = null
-    else {
-      const maze: Loose = { maze: unpackMaze(z.m, time) }
-      if (z.b !== undefined) maze.best = Array.isArray(z.b) ? ({ timeMs: z.b[0], stars: z.b[1] } satisfies Record<keyof MazeBest, unknown>) : null
-      out.maze = maze
-    }
-  }
-  if (raw.c !== undefined) {
-    const c = raw.c
-    out.city = !isLoose(c)
-      ? null
-      : {
-          city: {
-            size: c.s,
-            roads: unpackRoads(c.r),
-            placements: Array.isArray(c.p) ? c.p.map(unpackPlacement) : null,
-          },
-          blueprints: Array.isArray(c.b) ? c.b.map((b, i) => unpackBlueprint(b, i, time, parts, figs)) : null,
-        }
-  }
-  return out
 }
 
+function unpackModel(m: unknown, time: unknown, parts: unknown[], figs: unknown[]): unknown {
+  if (!isLoose(m)) return null
+  const blueprint = unpackBlueprint(m.b, 0, time, parts, figs)
+  const model: Loose = { blueprint }
+  const count = isLoose(blueprint) && Array.isArray(blueprint.bricks) ? blueprint.bricks.length : 0
+  if (m.s !== undefined) model.steps = stepsFromRuns(m.s, count)
+  else if (m.S !== undefined) model.steps = cappedSteps(m.S)
+  return model
+}
+
+function unpackMazeSection(z: unknown, time: unknown): unknown {
+  if (!isLoose(z)) return null
+  const maze: Loose = { maze: unpackMaze(z.m, time) }
+  if (z.b !== undefined) maze.best = Array.isArray(z.b) ? ({ timeMs: z.b[0], stars: z.b[1] } satisfies Record<keyof MazeBest, unknown>) : null
+  return maze
+}
+
+/**
+ * Compact JSON back in the canonical package shape (unvalidated), or `too_big` as soon as a list is
+ * longer than any valid share allows: every list is measured before anything is built from it.
+ */
+export function unpackShare(raw: unknown): { value: unknown } | { error: 'too_big' } {
+  try {
+    if (!isLoose(raw)) return { value: raw }
+    const parts = capped(raw.P, SHARE_LIMITS.partTable)
+    const figs = capped(raw.F, SHARE_LIMITS.bricks)
+    const P = Array.isArray(parts) ? parts : []
+    const F = Array.isArray(figs) ? figs : []
+    const time = raw.t
+    const out: Loose = { app: raw.a, v: raw.v, kind: raw.k, name: raw.n, createdAt: time }
+    if (raw.m !== undefined) out.model = unpackModel(raw.m, time, P, F)
+    if (raw.z !== undefined) out.maze = unpackMazeSection(raw.z, time)
+    if (raw.c !== undefined) out.city = unpackCity(raw.c, time, P, F)
+    return { value: out }
+  } catch (e) {
+    if (e instanceof TooBig) return { error: 'too_big' }
+    throw e
+  }
+}
