@@ -12,9 +12,14 @@ export function useThumbnail(key: string, load: () => Promise<string>): string {
   })
   useEffect(() => {
     let alive = true
-    void loadRef.current().then((next) => {
-      if (alive) setUrl(next)
-    })
+    loadRef.current().then(
+      (next) => {
+        if (alive) setUrl(next)
+      },
+      () => {
+        if (alive) setUrl('') // icon fallback
+      },
+    )
     return () => {
       alive = false
     }

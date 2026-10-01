@@ -56,6 +56,10 @@ export const vi = {
   defaultNameVehicle: 'Xe của bé',
   defaultNameProp: 'Đồ của bé',
   libraryEmpty: 'Chưa có mô hình nào',
-  confirmDeleteBlueprint: 'Xóa mô hình này?',
+  confirmDeleteBlueprint: 'Xóa mô hình này? Nó cũng sẽ biến mất khỏi thành phố.',
   confirmReplaceModel: 'Mở mô hình này và bỏ cái đang làm?',
+  cityToolRoad: 'Vẽ đường',
+  cityToolPlace: 'Đặt nhà',
+  cityDrawer: 'Kho',
+  cityEdit: 'Sửa trong xưởng',
 } as const
