@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { figPreset } from './figures'
 import { createEmptyMaze, setEntry, setExit, type Maze } from './maze'
+import { MAX_HEIGHT_PLATES } from './model'
 import { createEmptySave } from './serialize'
 import { buildCityPackage, buildMazePackage, buildModelPackage, decodeShare, encodeShare, type SharePackage } from './share'
 import { DEFAULT_SHARE_NAMES, SHARE_LIMITS, applyImport, planImport, sanitizeName, validatePackage } from './shareImport'
@@ -157,7 +158,7 @@ describe('validatePackage', () => {
       expect(withModel({ bricks: [brick({ y: -3 })] })).toEqual({ error: 'invalid' })
       expect(withModel({ bricks: [brick({ x: 7 })] })).toEqual({ error: 'invalid' }) // 2 wide on an 8 plate
       expect(withModel({ bricks: [brick({ x: 0.5 })] })).toEqual({ error: 'invalid' })
-      expect(withModel({ bricks: [brick({ y: 70 })] })).toEqual({ error: 'invalid' })
+      expect(withModel({ bricks: [brick({ y: MAX_HEIGHT_PLATES - 2 })] })).toEqual({ error: 'invalid' })
       expect(withModel({ bricks: [brick({ r: 4 as Brick['r'] })] })).toEqual({ error: 'invalid' })
       expect(withModel({ bricks: [brick({ x: Infinity })] })).toEqual({ error: 'invalid' })
       expect(withModel({ bricks: [brick({ id: 'a' }), brick({ id: 'b', x: 1 })] })).toEqual({ error: 'invalid' })
