@@ -1,0 +1,50 @@
+import * as THREE from 'three'
+
+/**
+ * Shared brick materials. Colours come from per-instance colours (`setColorAt`), so one material
+ * serves every opaque brick. These are app-wide singletons: never dispose or mutate them.
+ */
+export const brickMaterial = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0 })
+
+/** Glass colour bricks (see `COLORS[].glass`) render with this in their own instanced group. */
+export const glassMaterial = new THREE.MeshStandardMaterial({
+  roughness: 0.1,
+  metalness: 0,
+  transparent: true,
+  opacity: 0.45,
+  depthWrite: false,
+})
+
+export const GHOST_OPACITY = 0.5
+
+/**
+ * The placement preview material, shared like the others (compiled once, never disposed).
+ * Only one ghost is shown at a time; GhostBrick sets its tint and emissive pulse each frame.
+ */
+export const ghostMaterial = new THREE.MeshStandardMaterial({
+  roughness: 0.4,
+  metalness: 0,
+  transparent: true,
+  opacity: GHOST_OPACITY,
+  depthWrite: false,
+})
+
+/**
+ * A copy of `ghostMaterial` for callers that need several differently tinted previews at once
+ * (same shader settings, so three reuses the compiled program). The caller disposes it.
+ */
+export function createGhostMaterial(): THREE.MeshStandardMaterial {
+  return ghostMaterial.clone()
+}
+
+/** For baked models (`bakeBricks`): colours live in the geometry's `color` attribute. Never dispose. */
+export const bakedMaterial = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0, vertexColors: true })
+
+export const bakedGlassMaterial = new THREE.MeshStandardMaterial({
+  roughness: 0.1,
+  metalness: 0,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.45,
+  depthWrite: false,
+})

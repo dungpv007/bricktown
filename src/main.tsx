@@ -1,10 +1,22 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import App from './App'
+import { installAudioUnlock } from './audio/sfx'
+import { registerUpdates } from './pwa/registerUpdates'
+import Boot from './ui/Boot'
+import { retryFailedScenesOnMenu } from './ui/SceneBoundary'
 import './index.css'
+import './ui/theme.css'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+async function start() {
+  if (import.meta.env.DEV) await import('./devHandle')
+  installAudioUnlock()
+  registerUpdates()
+  retryFailedScenesOnMenu()
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <Boot />
+    </StrictMode>,
+  )
+}
+
+void start()

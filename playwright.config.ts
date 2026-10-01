@@ -2,7 +2,26 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: 'e2e',
-  use: { baseURL: 'http://localhost:5173' },
+  // Scenes are lazy chunks and the dev server transforms them on first use: allow for that under parallel load.
+  expect: { timeout: 15_000 },
+  // These need a production build: run by `npm run e2e:offline` (playwright.offline.config.ts).
+  testIgnore: ['offline.spec.ts', '*.prod.spec.ts'],
+  use: {
+    baseURL: 'http://localhost:5173',
+    // First-launch onboarding is off by default so specs reach the menu; its own spec turns it on.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: 'http://localhost:5173',
+          localStorage: [
+            { name: 'bricktown-onboarded', value: '1' },
+            { name: 'bricktown-install-hint-dismissed', value: '1' },
+          ],
+        },
+      ],
+    },
+  },
   projects: [{ name: 'tablet', use: { ...devices['iPad (gen 7) landscape'], browserName: 'chromium' } }],
   webServer: { command: 'npm run dev', url: 'http://localhost:5173', reuseExistingServer: true },
 })

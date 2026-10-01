@@ -1,0 +1,93 @@
+import type { SaveData } from './types'
+
+export const SCHEMA_VERSION = 1
+
+export function createEmptySave(): SaveData {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    blueprints: [],
+    city: { size: 48, roads: [], placements: [] },
+    workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
+    guided: null,
+    completedTemplates: [],
+  }
+}
+
+export type Migration = (data: Record<string, unknown>) => Record<string, unknown>
+
+/** Key N migrates a save from schema version N to N + 1. */
+export const MIGRATIONS: Record<number, Migration> = {}
+
+const UNSUPPORTED = 'unsupported save'
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+export function migrate(raw: unknown): SaveData {
+  if (!isRecord(raw)) throw new Error(UNSUPPORTED)
+  let version = raw.schemaVersion
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 1 || version > SCHEMA_VERSION) {
+    throw new Error(UNSUPPORTED)
+  }
+  let data: Record<string, unknown> = { ...raw }
+  while (version < SCHEMA_VERSION) {
+    const step = MIGRATIONS[version]
+    if (!step) throw new Error(UNSUPPORTED)
+    data = { ...step(data), schemaVersion: version + 1 }
+    version += 1
+  }
+  if (!Array.isArray(data.blueprints) || !isRecord(data.city) || !isRecord(data.workshop)) {
+    throw new Error(UNSUPPORTED)
+  }
+  return normalize(data, data.city, data.workshop)
+}
+
+const KINDS: readonly string[] = ['building', 'vehicle', 'prop']
+const isPositiveInt = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0
+const arrayOr = <T>(v: unknown, fallback: T[]): T[] => (Array.isArray(v) ? (v as T[]) : fallback)
+
+/**
+ * Fills in whatever a hand-edited or older file left out with the empty-save defaults, so the rest
+ * of the app can trust the shape (a missing `guided` or `city.roads` must not crash a scene).
+ */
+function normalize(data: Record<string, unknown>, city: Record<string, unknown>, workshop: Record<string, unknown>): SaveData {
+  const empty = createEmptySave()
+  const baseplate = workshop.baseplate
+  const guided = data.guided
+  return {
+    ...(data as unknown as SaveData),
+    schemaVersion: SCHEMA_VERSION,
+    city: {
+      size: isPositiveInt(city.size) ? city.size : empty.city.size,
+      roads: arrayOr<string>(city.roads, []).filter((r) => typeof r === 'string'),
+      placements: arrayOr(city.placements, []),
+    },
+    workshop: {
+      kind: typeof workshop.kind === 'string' && KINDS.includes(workshop.kind) ? (workshop.kind as SaveData['workshop']['kind']) : empty.workshop.kind,
+      baseplate:
+        isRecord(baseplate) && isPositiveInt(baseplate.w) && isPositiveInt(baseplate.d)
+          ? { w: baseplate.w, d: baseplate.d }
+          : empty.workshop.baseplate,
+      bricks: arrayOr(workshop.bricks, []),
+      ...(typeof workshop.editingBlueprintId === 'string' ? { editingBlueprintId: workshop.editingBlueprintId } : {}),
+    },
+    guided:
+      isRecord(guided) && typeof guided.templateId === 'string' && typeof guided.step === 'number' && Array.isArray(guided.placed)
+        ? (guided as unknown as SaveData['guided'])
+        : null,
+    completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
+  }
+}
+
+export function exportSave(data: SaveData): string {
+  return JSON.stringify({ app: 'bricktown', ...data }, null, 2)
+}
+
+export function importSave(json: string): SaveData {
+  const parsed: unknown = JSON.parse(json)
+  if (!isRecord(parsed) || parsed.app !== 'bricktown') throw new Error(UNSUPPORTED)
+  const { app: _app, ...rest } = parsed
+  void _app
+  return migrate(rest)
+}
