@@ -1,3 +1,5 @@
+import type { Maze } from './maze'
+
 /** Rotation in quarter turns counter-clockwise around +Y (viewed from above). */
 export type Rot = 0 | 1 | 2 | 3
 
@@ -121,6 +123,14 @@ export interface GuidedState {
   placed: string[] // brick ids of the template already placed
 }
 
+/** Best run through a maze. */
+export interface MazeRecord {
+  timeMs: number
+  stars: 1 | 2 | 3
+  /** Coins collected on that run. */
+  coins: number
+}
+
 export interface SaveData {
   schemaVersion: number
   blueprints: Blueprint[]
@@ -128,4 +138,8 @@ export interface SaveData {
   workshop: WorkshopState
   guided: GuidedState | null
   completedTemplates: string[]
+  /** The kid's own mazes. */
+  mazes: Maze[]
+  /** Best runs by maze id (`tpl:<templateId>` for an unchanged ready-made maze). */
+  mazeRecords: Record<string, MazeRecord>
 }

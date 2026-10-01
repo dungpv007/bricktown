@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import type { Maze } from '../core/maze'
 import { createEmptySave } from '../core/serialize'
-import type { Blueprint, CityState, GuidedState, SaveData, WorkshopState } from '../core/types'
+import type { Blueprint, CityState, GuidedState, MazeRecord, SaveData, WorkshopState } from '../core/types'
 
 export interface GameState {
   data: SaveData
@@ -14,6 +15,12 @@ export interface GameState {
   setCity: (city: CityState) => void
   setGuided: (g: GuidedState | null) => void
   markTemplateCompleted: (id: string) => void
+  /** Adds the kid's maze, or replaces the one with the same id (keeping its place in the list). */
+  upsertMaze: (maze: Maze) => void
+  /** Also forgets the maze's best run. */
+  deleteMaze: (id: string) => void
+  /** Stores a run as the maze's record (`key`: maze id, or `tpl:<id>`); deciding what is "best" is the caller's job. */
+  setMazeRecord: (key: string, record: MazeRecord) => void
 }
 
 export const useGame = create<GameState>()((set) => {
@@ -43,5 +50,17 @@ export const useGame = create<GameState>()((set) => {
       update((d) =>
         d.completedTemplates.includes(id) ? d : { ...d, completedTemplates: [...d.completedTemplates, id] },
       ),
+    upsertMaze: (maze) =>
+      update((d) => ({
+        ...d,
+        mazes: d.mazes.some((m) => m.id === maze.id) ? d.mazes.map((m) => (m.id === maze.id ? maze : m)) : [...d.mazes, maze],
+      })),
+    deleteMaze: (id) =>
+      update((d) => {
+        const { [id]: _gone, ...mazeRecords } = d.mazeRecords
+        void _gone
+        return { ...d, mazes: d.mazes.filter((m) => m.id !== id), mazeRecords }
+      }),
+    setMazeRecord: (key, record) => update((d) => ({ ...d, mazeRecords: { ...d.mazeRecords, [key]: record } })),
   }
 })

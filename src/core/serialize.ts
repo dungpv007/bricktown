@@ -1,8 +1,9 @@
 import { COLORS } from './colors'
 import { parseFig } from './figures'
-import type { Baseplate, Blueprint, Brick, SaveData } from './types'
+import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, type Cell, type Maze } from './maze'
+import type { Baseplate, Blueprint, Brick, MazeRecord, SaveData } from './types'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export function createEmptySave(): SaveData {
   return {
@@ -12,6 +13,8 @@ export function createEmptySave(): SaveData {
     workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
     guided: null,
     completedTemplates: [],
+    mazes: [],
+    mazeRecords: {},
   }
 }
 
@@ -25,8 +28,10 @@ export const MIGRATIONS: Record<number, Migration> = {
    * so there is nothing to rewrite: a missing plate colour means the kind's default.
    */
   1: (data) => data,
+  /** v3 added the maze mode: the kid's mazes and the best runs. */
+  2: (data) => ({ ...data, mazes: [], mazeRecords: {} }),
 }
-// `Brick.fig` (minifigure styles) was added later without a version bump: it is optional and purely
+// `Brick.fig` (minifigure styles) was added during v2 without its own bump: it is optional and purely
 // additive, older saves simply have no figures, and `normalize` drops any style it cannot read.
 
 const UNSUPPORTED = 'unsupported save'
@@ -92,7 +97,66 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
         ? (guided as unknown as SaveData['guided'])
         : null,
     completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
+    mazes: normalizeMazes(arrayOr(data.mazes, [])),
+    mazeRecords: normalizeMazeRecords(data.mazeRecords),
   }
+}
+
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isMazeSize = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v % 2 === 1 && v >= MAZE_MIN_SIZE && v <= MAZE_MAX_SIZE
+
+/** Mazes with an id and a valid size; their cell lists keep only distinct in-grid keys. Duplicate ids keep the first. */
+function normalizeMazes(raw: unknown[]): Maze[] {
+  const seen = new Set<string>()
+  const out: Maze[] = []
+  for (const m of raw) {
+    if (!isRecord(m) || typeof m.id !== 'string' || m.id === '' || seen.has(m.id) || !isMazeSize(m.w) || !isMazeSize(m.h)) continue
+    seen.add(m.id)
+    const dims = { w: m.w, h: m.h }
+    const cellOf = (v: unknown): Cell | null =>
+      isRecord(v) && Number.isInteger(v.cx) && Number.isInteger(v.cz) && inBounds(dims, v as unknown as Cell)
+        ? { cx: v.cx as number, cz: v.cz as number }
+        : null
+    const keys = (v: unknown): string[] => {
+      const valid = arrayOr<unknown>(v, []).filter((k): k is string => {
+        if (typeof k !== 'string' || !/^\d+,\d+$/.test(k)) return false
+        const [cx, cz] = k.split(',').map(Number)
+        return inBounds(dims, { cx, cz }) && cellKey({ cx, cz }) === k
+      })
+      return [...new Set(valid)]
+    }
+    out.push({
+      id: m.id,
+      name: typeof m.name === 'string' ? m.name : '',
+      w: m.w,
+      h: m.h,
+      walls: keys(m.walls),
+      entry: cellOf(m.entry),
+      exit: cellOf(m.exit),
+      coins: keys(m.coins),
+      wallColor: isColor(m.wallColor) ? m.wallColor : DEFAULT_MAZE_WALL_COLOR,
+      ...(isColor(m.floorColor) ? { floorColor: m.floorColor } : {}),
+      createdAt: isFiniteNumber(m.createdAt) ? m.createdAt : 0,
+      updatedAt: isFiniteNumber(m.updatedAt) ? m.updatedAt : 0,
+      ...(typeof m.templateId === 'string' ? { templateId: m.templateId } : {}),
+    })
+  }
+  return out
+}
+
+function normalizeMazeRecords(raw: unknown): Record<string, MazeRecord> {
+  const out: Record<string, MazeRecord> = {}
+  if (!isRecord(raw)) return out
+  for (const [key, r] of Object.entries(raw)) {
+    if (!isRecord(r)) continue
+    const { timeMs, stars, coins } = r
+    if (!isFiniteNumber(timeMs) || timeMs < 0) continue
+    if (stars !== 1 && stars !== 2 && stars !== 3) continue
+    if (typeof coins !== 'number' || !Number.isInteger(coins) || coins < 0) continue
+    out[key] = { timeMs, stars, coins }
+  }
+  return out
 }
 
 /** Bricks as stored, except that a figure style that is not valid is dropped (see `parseFig`). */

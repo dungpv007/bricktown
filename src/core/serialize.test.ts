@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { figPreset } from './figures'
+import { DEFAULT_MAZE_WALL_COLOR, createEmptyMaze, type Maze } from './maze'
 import { SCHEMA_VERSION, createEmptySave, exportSave, importSave, migrate } from './serialize'
 
 describe('serialize', () => {
@@ -11,6 +12,8 @@ describe('serialize', () => {
       workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
       guided: null,
       completedTemplates: [],
+      mazes: [],
+      mazeRecords: {},
     })
   })
   it('export -> import round-trips deep-equal', () => {
@@ -72,8 +75,8 @@ describe('serialize', () => {
     const save = createEmptySave()
     expect(migrate(save)).toEqual(save)
   })
-  it('is schema version 2', () => {
-    expect(SCHEMA_VERSION).toBe(2)
+  it('is schema version 3', () => {
+    expect(SCHEMA_VERSION).toBe(3)
   })
   it('loads a v1 save unchanged apart from the version', () => {
     const brick = { id: 'a', p: 'brick_2x4', x: 1, y: 0, z: 2, r: 1 as const, c: 15 }
@@ -91,8 +94,9 @@ describe('serialize', () => {
       completedTemplates: ['tree'],
     }
     const json = JSON.stringify({ app: 'bricktown', ...v1 })
-    expect(importSave(json)).toEqual({ ...v1, schemaVersion: 2 })
-    expect(migrate(structuredClone(v1))).toEqual({ ...v1, schemaVersion: 2 })
+    const v3 = { ...v1, schemaVersion: 3, mazes: [], mazeRecords: {} }
+    expect(importSave(json)).toEqual(v3)
+    expect(migrate(structuredClone(v1))).toEqual(v3)
   })
   it('round-trips a v2 save with plate colours and the new colours', () => {
     const save = createEmptySave()
@@ -113,7 +117,7 @@ describe('serialize', () => {
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 99 } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 'red' } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
   })
-  it('round-trips figures with their style (an additive field: still schema 2)', () => {
+  it('round-trips figures with their style (an additive field)', () => {
     const save = createEmptySave()
     save.workshop.bricks.push({ id: 'f', p: 'minifig', x: 0, y: 0, z: 0, r: 2, c: 21, fig: figPreset('police') })
     save.blueprints.push({
@@ -137,5 +141,94 @@ describe('serialize', () => {
     void _a
     expect(out.workshop.bricks).toEqual([fig({}), fig({ fig: chef }), fig({})])
     expect(out.blueprints[0].bricks).toEqual([fig({})])
+  })
+})
+
+describe('serialize: mazes (schema 3)', () => {
+  const maze = (extra: Partial<Maze> = {}): Maze => ({
+    ...createEmptyMaze(7, 7, { id: 'm1', name: 'Mê cung 1', now: 5 }),
+    walls: ['0,0', '1,0', '2,0'],
+    entry: { cx: 0, cz: 1 },
+    exit: { cx: 6, cz: 5 },
+    coins: ['3,3'],
+    ...extra,
+  })
+
+  it('loads a v2 save, adding no mazes and no records', () => {
+    const v2: Record<string, unknown> = { ...createEmptySave(), schemaVersion: 2 }
+    delete v2.mazes
+    delete v2.mazeRecords
+    const out = migrate(structuredClone(v2))
+    expect(out.schemaVersion).toBe(3)
+    expect(out.mazes).toEqual([])
+    expect(out.mazeRecords).toEqual({})
+    expect(importSave(JSON.stringify({ app: 'bricktown', ...v2 }))).toEqual(createEmptySave())
+  })
+
+  it('round-trips mazes and records', () => {
+    const save = createEmptySave()
+    const { floorColor: _f, ...noFloor } = maze({ id: 'm2', templateId: 'heart', wallColor: 29 })
+    void _f
+    save.mazes.push(maze(), noFloor)
+    save.mazeRecords = { m1: { timeMs: 12345, stars: 3, coins: 2 }, 'tpl:easy': { timeMs: 900, stars: 1, coins: 0 } }
+    expect(importSave(exportSave(save))).toEqual(save)
+  })
+
+  it('drops mazes it cannot use and cleans up the fields of the rest', () => {
+    const out = migrate({
+      ...createEmptySave(),
+      mazes: [
+        maze(),
+        'nope',
+        { ...maze({ id: 'even' }), w: 8 },
+        { ...maze({ id: 'big' }), h: 23 },
+        maze({ id: '' }),
+        maze({ id: 'm1', name: 'duplicate' }),
+        {
+          ...maze({ id: 'm3' }),
+          name: 7,
+          walls: ['0,0', 'x', '9,9', 3, '-1,2', '1.5,2', '0,0'],
+          coins: ['3,3', '99,1'],
+          entry: { cx: 'a', cz: 1 },
+          exit: { cx: 6, cz: 40 },
+          wallColor: 99,
+          floorColor: 'red',
+          createdAt: 'yesterday',
+          templateId: 4,
+        },
+      ],
+    })
+    expect(out.mazes.map((m) => m.id)).toEqual(['m1', 'm3'])
+    expect(out.mazes[0]).toEqual(maze())
+    const { floorColor: _f, ...rest } = maze({ id: 'm3' })
+    void _f
+    expect(out.mazes[1]).toEqual({
+      ...rest,
+      name: '',
+      walls: ['0,0'],
+      coins: ['3,3'],
+      entry: null,
+      exit: null,
+      wallColor: DEFAULT_MAZE_WALL_COLOR,
+      createdAt: 0,
+    })
+    expect('floorColor' in out.mazes[1]).toBe(false)
+    expect('templateId' in out.mazes[1]).toBe(false)
+  })
+
+  it('keeps only well-formed records', () => {
+    const out = migrate({
+      ...createEmptySave(),
+      mazeRecords: {
+        ok: { timeMs: 1000, stars: 2, coins: 1 },
+        badStars: { timeMs: 1000, stars: 4, coins: 1 },
+        badTime: { timeMs: -1, stars: 1, coins: 0 },
+        badCoins: { timeMs: 1, stars: 1, coins: 1.5 },
+        notObject: 5,
+      },
+    })
+    expect(out.mazeRecords).toEqual({ ok: { timeMs: 1000, stars: 2, coins: 1 } })
+    expect(migrate({ ...createEmptySave(), mazeRecords: [] }).mazeRecords).toEqual({})
+    expect(migrate({ ...createEmptySave(), mazes: {} }).mazes).toEqual([])
   })
 })

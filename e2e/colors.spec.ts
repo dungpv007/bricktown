@@ -58,7 +58,7 @@ test('baseplate colour: pick gray, undo back to green, redo; saved with the work
       const saved = await savedSlotData<{ schemaVersion: number; workshop: { baseplate: Plate } }>(page)
       return saved && { v: saved.schemaVersion, c: saved.workshop.baseplate.c }
     })
-    .toEqual({ v: 2, c: 24 })
+    .toEqual({ v: 3, c: 24 })
 })
 
 test('colours: a scroll cue shows while swatches hide below, and goes at the end', async ({ page }) => {
