@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { COLORS, colorMaterialKind, type MaterialKind } from './colors'
 import { figKey, figOf, isFigure } from './figures'
 import { brickBodyGeometry, brickPrintGeometry } from './parts/brickGeometry'
+import { buildFigureGeometry, peekFigureGeometry, type FigureGeometry } from './parts/figureGeometry'
 import { brickCenter, QUARTER_COS, QUARTER_SIN } from './rotation'
 import type { Brick, Rot } from './types'
 
@@ -127,22 +128,51 @@ function mergeBricks(
   return geometry
 }
 
-const printOf = (b: Brick) => brickPrintGeometry(b)!
+export interface BakeOptions {
+  /**
+   * Figure looks not already in the shared figure cache are built just for this bake and disposed
+   * after it, instead of being added to the cache (for one-off models such as thumbnails).
+   */
+  transientFigures?: boolean
+}
 
 /**
- * Bakes without touching the cache. The caller owns the returned geometries and must dispose them.
- * Prefer `bakeBricks` unless the result is short-lived (e.g. thumbnails).
+ * Bakes without touching the bake cache. The caller owns the returned geometries and must dispose
+ * them. Prefer `bakeBricks` unless the result is short-lived (e.g. thumbnails).
  */
-export function bakeBricksUncached(bricks: Brick[]): BakedModel {
-  const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
-  for (const b of bricks) byKind[brickMaterialKind(b)].push(b)
-  const printed = bricks.filter((b) => brickPrintGeometry(b) !== null)
-  const optional = (list: Brick[]) => (list.length > 0 ? mergeBricks(list, brickBodyGeometry, true) : null)
-  return {
-    opaque: mergeBricks(byKind.opaque, brickBodyGeometry, true),
-    trans: optional(byKind.trans),
-    metal: optional(byKind.metal),
-    print: printed.length > 0 ? mergeBricks(printed, printOf, false) : null,
+export function bakeBricksUncached(bricks: Brick[], options: BakeOptions = {}): BakedModel {
+  const own = new Map<string, FigureGeometry>()
+  const figure = (b: Brick): FigureGeometry => {
+    const style = figOf(b)
+    const cached = peekFigureGeometry(style)
+    if (cached) return cached
+    const key = figKey(style)
+    let g = own.get(key)
+    if (!g) {
+      g = buildFigureGeometry(style)
+      own.set(key, g)
+    }
+    return g
+  }
+  const transient = options.transientFigures === true
+  const bodyOf = (b: Brick) => (transient && isFigure(b) ? figure(b).body : brickBodyGeometry(b))
+  const printOf = (b: Brick) => (transient && isFigure(b) ? figure(b).print : brickPrintGeometry(b))
+  try {
+    const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
+    for (const b of bricks) byKind[brickMaterialKind(b)].push(b)
+    const printed = bricks.filter((b) => printOf(b) !== null)
+    const optional = (list: Brick[]) => (list.length > 0 ? mergeBricks(list, bodyOf, true) : null)
+    return {
+      opaque: mergeBricks(byKind.opaque, bodyOf, true),
+      trans: optional(byKind.trans),
+      metal: optional(byKind.metal),
+      print: printed.length > 0 ? mergeBricks(printed, (b) => printOf(b)!, false) : null,
+    }
+  } finally {
+    for (const g of own.values()) {
+      g.body.dispose()
+      g.print.dispose()
+    }
   }
 }
 

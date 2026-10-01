@@ -344,15 +344,72 @@ function build(style: FigStyle): FigureGeometry {
   return out
 }
 
+/**
+ * A figure geometry nobody else owns (not cached): the caller must dispose both geometries. For
+ * short-lived uses such as thumbnails, so one-off looks never pile up in the shared cache.
+ */
+export function buildFigureGeometry(style: FigStyle): FigureGeometry {
+  return build(style)
+}
+
+/** The shared cache keeps at most this many looks, beyond the ones a scene still shows. */
+export const FIGURE_CACHE_MAX = 64
+
+/** Cached looks by `figKey`, least recently used first (a hit moves its key to the end). */
 const cache = new Map<string, FigureGeometry>()
 
-/** The geometry of a figure style, cached by look (`figKey`). Shared: never dispose or mutate it. */
+let liveKeys: () => ReadonlySet<string> = () => new Set()
+
+/**
+ * Tells the cache which looks (`figKey`s) are still on screen somewhere (the Workshop, Guided build,
+ * placement ghost...): eviction skips them. Without it, eviction is purely least recently used.
+ * Called only when the cache is over `FIGURE_CACHE_MAX`.
+ */
+export function setLiveFigureKeys(provider: () => ReadonlySet<string>): void {
+  liveKeys = provider
+}
+
+/** Number of looks in the shared figure cache. */
+export function figureCacheSize(): number {
+  return cache.size
+}
+
+/** The cached geometry of a look, if any, without building it or changing its recency. */
+export function peekFigureGeometry(style: FigStyle): FigureGeometry | undefined {
+  return cache.get(figKey(style))
+}
+
+/**
+ * Drops least recently used looks, except live ones and `keep`, until the cache is back to
+ * `FIGURE_CACHE_MAX`. Disposing frees their GPU buffers; a mesh that still draws one simply
+ * re-uploads it (three.js recreates disposed buffers on the next render).
+ */
+function trim(keep: string): void {
+  if (cache.size <= FIGURE_CACHE_MAX) return
+  const live = liveKeys()
+  for (const [key, g] of cache) {
+    if (cache.size <= FIGURE_CACHE_MAX) break
+    if (key === keep || live.has(key)) continue
+    cache.delete(key)
+    g.body.dispose()
+    g.print.dispose()
+  }
+}
+
+/**
+ * The geometry of a figure style, cached by look (`figKey`). Shared: never dispose or mutate it.
+ * The cache is bounded (see `trim`): hold the result only while the look is live.
+ */
 export function getFigureGeometry(style: FigStyle): FigureGeometry {
   const key = figKey(style)
   let g = cache.get(key)
-  if (!g) {
-    g = build(style)
+  if (g) {
+    cache.delete(key) // most recently used goes last
     cache.set(key, g)
+    return g
   }
+  g = build(style)
+  cache.set(key, g)
+  trim(key)
   return g
 }

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { bakeBricks, bakeCacheSize, bakeKey, bakedGeometries, evictBakes } from './bake'
+import { bakeBricks, bakeBricksUncached, bakeCacheSize, bakeKey, bakedGeometries, disposeBaked, evictBakes } from './bake'
 import { COLORS } from './colors'
 import { figKey, figPreset } from './figures'
-import { getFigureGeometry } from './parts/figureGeometry'
+import { figureCacheSize, getFigureGeometry, peekFigureGeometry } from './parts/figureGeometry'
 import { bounds } from './model'
 import { getPartGeometry } from './parts/geometry'
 import { getPrintGeometry } from './parts/printGeometry'
@@ -300,5 +300,33 @@ describe('baking figures', () => {
     expect(bb.min.z).toBeGreaterThanOrEqual(cz - 1 - 1e-6)
     expect(bb.max.z).toBeLessThanOrEqual(cz + 1 + 1e-6)
     expect(bb.min.y).toBeCloseTo(platesToWorld(3), 2)
+  })
+
+  it('with transientFigures, bakes looks the figure cache lacks without adding them, the same as cached', () => {
+    const style = { ...figPreset('chef'), legs: 9, hat: 'crown' as const }
+    const brick: Brick = { ...b('f', 'minifig', 0, 0, 0), fig: style }
+    expect(peekFigureGeometry(style)).toBeUndefined()
+    const before = figureCacheSize()
+    const transient = bakeBricksUncached([brick], { transientFigures: true })
+    expect(figureCacheSize()).toBe(before)
+    expect(peekFigureGeometry(style)).toBeUndefined()
+    const cached = bakeBricksUncached([brick])
+    expect(peekFigureGeometry(style)).toBeDefined()
+    expect(vertexCount(transient.opaque)).toBe(vertexCount(cached.opaque))
+    expect(vertexCount(transient.print!)).toBe(vertexCount(cached.print!))
+    expect(Array.from(transient.opaque.getAttribute('color').array)).toEqual(Array.from(cached.opaque.getAttribute('color').array))
+    disposeBaked(transient)
+    disposeBaked(cached)
+  })
+
+  it('with transientFigures, reuses a look already cached (no rebuild)', () => {
+    const style = figPreset('robber')
+    const shared = getFigureGeometry(style)
+    let disposedShared = false
+    shared.body.addEventListener('dispose', () => (disposedShared = true))
+    const baked = bakeBricksUncached([{ ...b('f', 'minifig', 0, 0, 0), fig: style }], { transientFigures: true })
+    expect(disposedShared).toBe(false)
+    expect(peekFigureGeometry(style)).toBe(shared)
+    disposeBaked(baked)
   })
 })

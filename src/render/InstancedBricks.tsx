@@ -7,6 +7,7 @@ import { brickBodyGeometry, brickPrintGeometry, brickShapeKey, hasOwnColors } fr
 import { brickCenter } from '../core/rotation'
 import type { Brick } from '../core/types'
 import { useInstanceCapacity } from './instanceCapacity'
+import { installLiveFigureKeys } from './liveFigures'
 import { bakedMaterials, brickMaterials, castsShadow, printMaterial } from './materials'
 
 export type BrickPointerHandler = (e: ThreeEvent<PointerEvent>, brick: Brick) => void
@@ -27,6 +28,9 @@ interface BrickGroupData {
 }
 
 const MIN_CAPACITY = 16
+
+// The scenes drawing figures from the shared figure cache (Workshop, Guided) draw them here.
+installLiveFigureKeys()
 
 /**
  * The brick drawn by instance `instanceId` of `object`, when `object` is one of the instanced

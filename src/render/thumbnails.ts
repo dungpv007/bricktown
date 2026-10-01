@@ -25,7 +25,18 @@ const FIT_MARGIN = 1.12
 let renderer: THREE.WebGLRenderer | null = null
 let unavailable = false
 let queue: Promise<unknown> = Promise.resolve()
+/** Thumbnails remembered at most; the least recently asked for is forgotten first. */
+export const THUMB_MEMO_MAX = 200
+/** Memoised pictures by key, least recently used first (a hit moves its key to the end). */
 const memo = new Map<string, Promise<string>>()
+
+function remember(key: string, result: Promise<string>): void {
+  memo.set(key, result)
+  for (const oldest of memo.keys()) {
+    if (memo.size <= THUMB_MEMO_MAX) break
+    memo.delete(oldest)
+  }
+}
 
 function getRenderer(): THREE.WebGLRenderer | null {
   if (unavailable || typeof document === 'undefined') return null
@@ -89,11 +100,12 @@ function render(bricks: Brick[], size: number, viewDir: THREE.Vector3, crop = 0)
   const gl = getRenderer()
   if (!gl || bricks.length === 0) return ''
   const scene = createScene()
-  // Baked here (uncached) and disposed below, so thumbnails do not pin geometry in the shared cache.
+  // Baked here (uncached, figure looks too) and disposed below, so thumbnails (e.g. every look tried
+  // in the figure editor) do not pin geometry in the shared caches.
   // Inside the try: an unknown part id throws, which must resolve '' rather than reject forever.
   let baked: BakedModel | null = null
   try {
-    baked = bakeBricksUncached(bricks)
+    baked = bakeBricksUncached(bricks, { transientFigures: true })
     const box = new THREE.Box3()
     for (const [kind, geometry] of bakedGeometries(baked)) {
       const mesh = new THREE.Mesh(geometry, bakedMaterials[kind])
@@ -124,17 +136,21 @@ export function getThumbnail(
   crop = 0,
 ): Promise<string> {
   const cached = memo.get(key)
-  if (cached) return cached
+  if (cached) {
+    memo.delete(key) // most recently used goes last
+    memo.set(key, cached)
+    return cached
+  }
   // One render per macrotask so a burst of requests never blocks input.
   const result = queue
     .then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)))
     .then(() => render(bricks, size, viewDir, crop))
     .then((url) => {
-      if (!url) memo.delete(key) // failures are not remembered, so a later request can retry
+      if (!url && memo.get(key) === result) memo.delete(key) // failures are not remembered, so a later request can retry
       return url
     })
   queue = result.catch(() => undefined)
-  memo.set(key, result)
+  remember(key, result)
   return result
 }
 
