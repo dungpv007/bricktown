@@ -1,8 +1,19 @@
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { platesToWorld, PLATES_PER_BRICK } from './core/units'
+import { useApp, type Mode } from './state/useApp'
+import MainMenu from './ui/MainMenu'
+import TopBar from './ui/TopBar'
+import { useT, type TKey } from './ui/i18n'
 
-export default function App() {
+const TITLE_KEYS: Record<Exclude<Mode, 'menu'>, TKey> = {
+  workshop: 'menuWorkshop',
+  guided: 'menuGuided',
+  city: 'menuCity',
+  drive: 'menuDrive',
+}
+
+function WorkshopPlaceholder() {
   const h = platesToWorld(PLATES_PER_BRICK)
   return (
     <Canvas shadows dpr={[1, 2]} camera={{ position: [8, 8, 8], fov: 45 }}>
@@ -19,5 +30,25 @@ export default function App() {
       </mesh>
       <OrbitControls makeDefault />
     </Canvas>
+  )
+}
+
+function ModePlaceholder({ mode }: { mode: Exclude<Mode, 'menu'> }) {
+  const t = useT()
+  return (
+    <div className="bt-screen bt-placeholder" data-testid={`mode-${mode}`}>
+      {mode === 'workshop' ? <WorkshopPlaceholder /> : t('comingSoon')}
+    </div>
+  )
+}
+
+export default function App() {
+  const mode = useApp((s) => s.mode)
+  if (mode === 'menu') return <MainMenu />
+  return (
+    <>
+      <ModePlaceholder mode={mode} />
+      <TopBar titleKey={TITLE_KEYS[mode]} />
+    </>
   )
 }
