@@ -309,6 +309,35 @@ describe('useMazeEditor: whole-maze changes', () => {
     expect(maze().name).toBe('Lâu đài') // an empty name is not a name
   })
 
+  it('editing walls, doors, coins or the size forgets the maze’s records; naming and colours keep them', () => {
+    ed().newMaze(7)
+    const id = maze().id
+    const seed = () => {
+      useGame.getState().setMazeRecord(id, { timeMs: 1000, stars: 3, coins: 0 })
+      useGame.getState().update((d) => ({ ...d, mazeChallenges: { [id]: { timeMs: 2000 } } }))
+    }
+    const kept = () => id in useGame.getState().data.mazeRecords && id in useGame.getState().data.mazeChallenges
+    const cleared = () => !(id in useGame.getState().data.mazeRecords) && !(id in useGame.getState().data.mazeChallenges)
+    seed()
+    ed().rename('Lâu đài')
+    ed().setWallColor(5)
+    expect(kept()).toBe(true)
+    ed().undo() // undoing a colour is not a structural change either
+    expect(kept()).toBe(true)
+
+    const edits: Array<() => void> = [
+      () => { ed().setTool('wall'); ed().tapCell(c(3, 3)) },
+      () => { ed().setTool('entry'); ed().tapCell(c(0, 1)) },
+      () => { ed().setTool('coin'); ed().tapCell(c(2, 2)) },
+      () => ed().resize(9),
+    ]
+    for (const change of edits) {
+      seed()
+      change()
+      expect(cleared()).toBe(true)
+    }
+  })
+
   it('typing a name saves each keystroke but undoes as one step', () => {
     ed().newMaze(7)
     const original = maze().name

@@ -12,6 +12,7 @@ import {
   parseCellKey,
   playabilityError,
   rateRun,
+  sameLayout,
   setEntry,
   setExit,
   solve,
@@ -291,5 +292,21 @@ describe('stars', () => {
   })
   it('an unsolvable maze never rates above one star', () => {
     expect(rateRun(createEmptyMaze(7, 7), 1)).toBe(1)
+  })
+})
+
+describe('sameLayout', () => {
+  it('ignores the name, colours, timestamps and the order of cell lists', () => {
+    const a = { ...openRoom(), coins: ['2,2', '4,4'] }
+    const b = { ...a, name: 'other', wallColor: 3, floorColor: 5, updatedAt: 99, walls: [...a.walls].reverse(), coins: ['4,4', '2,2'] }
+    expect(sameLayout(a, b)).toBe(true)
+  })
+  it('sees a change of walls, doors, coins or size', () => {
+    const a = openRoom()
+    expect(sameLayout(a, toggleWall(a, c(3, 3), true))).toBe(false)
+    expect(sameLayout(a, toggleCoin(a, c(3, 3)))).toBe(false)
+    expect(sameLayout(a, ok(setEntry(a, c(0, 1))))).toBe(false)
+    expect(sameLayout(a, clearDoor(a, 'exit'))).toBe(false)
+    expect(sameLayout(createEmptyMaze(7, 7), createEmptyMaze(9, 9))).toBe(false)
   })
 })

@@ -34,6 +34,34 @@ describe('useGame mazes', () => {
     expect(game().data.mazeChallenges).toEqual({ b: { timeMs: 6, from: 'An' } })
   })
 
+  it('a structural change to a maze forgets its best run and challenge; a rename or a colour does not', () => {
+    const a = createEmptyMaze(7, 7, { id: 'a', name: 'A' })
+    game().upsertMaze(a)
+    game().upsertMaze(createEmptyMaze(7, 7, { id: 'b' }))
+    const seed = () => {
+      game().setMazeRecord('a', { timeMs: 1, stars: 3, coins: 0 })
+      game().setMazeRecord('b', { timeMs: 2, stars: 2, coins: 1 })
+      game().update((d) => ({ ...d, mazeChallenges: { a: { timeMs: 5 }, b: { timeMs: 6 } } }))
+    }
+    seed()
+    game().upsertMaze({ ...a, name: 'A2', wallColor: 3, floorColor: 5, updatedAt: 7 })
+    expect(Object.keys(game().data.mazeRecords).sort()).toEqual(['a', 'b'])
+    expect(Object.keys(game().data.mazeChallenges).sort()).toEqual(['a', 'b'])
+
+    for (const changed of [
+      { ...a, walls: [...a.walls, '3,3'] },
+      { ...a, coins: ['3,3'] },
+      { ...a, entry: { cx: 0, cz: 3 } },
+      createEmptyMaze(9, 9, { id: 'a' }),
+    ]) {
+      seed()
+      game().upsertMaze(changed)
+      expect(game().data.mazeRecords).toEqual({ b: { timeMs: 2, stars: 2, coins: 1 } })
+      expect(game().data.mazeChallenges).toEqual({ b: { timeMs: 6 } })
+      game().upsertMaze(a)
+    }
+  })
+
   it('setMazeRecord stores the run under its key, replacing an older one', () => {
     game().setMazeRecord('tpl:easy', { timeMs: 5000, stars: 2, coins: 1 })
     game().setMazeRecord('tpl:easy', { timeMs: 4000, stars: 3, coins: 3 })
