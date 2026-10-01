@@ -11,6 +11,9 @@ describe('serialize', () => {
       workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
       guided: null,
       completedTemplates: [],
+      sharedTemplates: [],
+      mazes: [],
+      mazeChallenges: {},
     })
   })
   it('export -> import round-trips deep-equal', () => {
@@ -91,8 +94,9 @@ describe('serialize', () => {
       completedTemplates: ['tree'],
     }
     const json = JSON.stringify({ app: 'bricktown', ...v1 })
-    expect(importSave(json)).toEqual({ ...v1, schemaVersion: 2 })
-    expect(migrate(structuredClone(v1))).toEqual({ ...v1, schemaVersion: 2 })
+    const shareDefaults = { sharedTemplates: [], mazes: [], mazeChallenges: {} }
+    expect(importSave(json)).toEqual({ ...v1, ...shareDefaults, schemaVersion: 2 })
+    expect(migrate(structuredClone(v1))).toEqual({ ...v1, ...shareDefaults, schemaVersion: 2 })
   })
   it('round-trips a v2 save with plate colours and the new colours', () => {
     const save = createEmptySave()
@@ -137,5 +141,45 @@ describe('serialize', () => {
     void _a
     expect(out.workshop.bricks).toEqual([fig({}), fig({ fig: chef }), fig({})])
     expect(out.blueprints[0].bricks).toEqual([fig({})])
+  })
+
+  describe('sharing fields (optional, additive: folded into the next schema bump)', () => {
+    const base = { schemaVersion: SCHEMA_VERSION, blueprints: [], city: {}, workshop: {} }
+    const template = {
+      id: 'shared_1', name: { vi: 'Xe', en: 'Xe' }, difficulty: 1, kind: 'vehicle', tags: [], baseplate: { w: 8, d: 8 },
+      bricks: [{ id: 'shared_1-0', p: 'minifig', x: 0, y: 0, z: 0, r: 0, c: 0, fig: figPreset('chef') }], steps: [[0]],
+    }
+    it('fills in the defaults for an older save', () => {
+      const out = migrate(base)
+      expect(out.sharedTemplates).toEqual([])
+      expect(out.mazes).toEqual([])
+      expect(out.mazeChallenges).toEqual({})
+    })
+    it('round-trips shared templates, mazes and challenges', () => {
+      const save = createEmptySave()
+      save.sharedTemplates = [template as never]
+      save.mazes = [{ id: 'maze_1', name: 'm', w: 7, h: 7, walls: ['0,0'], entry: null, exit: null, coins: [], wallColor: 6, createdAt: 1, updatedAt: 1 }]
+      save.mazeChallenges = { maze_1: { timeMs: 4200 }, maze_2: { timeMs: 900, from: 'An' } }
+      expect(importSave(exportSave(save))).toEqual(save)
+    })
+    it('drops malformed shared templates, mazes and challenges', () => {
+      const out = migrate({
+        ...base,
+        sharedTemplates: [
+          template, { id: 'x' }, null, { ...template, bricks: [{ ...template.bricks[0], fig: 'chef' }] },
+          { ...template, id: 'no_steps', steps: [] }, // a brick in no step: Guided could never finish it
+          { ...template, id: 'floating', bricks: [{ ...template.bricks[0], y: 5 }] },
+          { ...template, id: 'odd_steps', steps: [5] }, // a shape validateTemplate does not expect
+        ],
+        mazes: [{ id: 'm' }, 'maze', null],
+        mazeChallenges: { a: { timeMs: 10 }, b: { timeMs: -1 }, c: 'fast', d: { timeMs: 5, from: 7 }, e: { timeMs: NaN } },
+      })
+      const { fig: _fig, ...plain } = template.bricks[0]
+      void _fig
+      expect(out.sharedTemplates).toEqual([template, { ...template, bricks: [plain] }])
+      expect(out.mazes).toEqual([{ id: 'm' }])
+      expect(out.mazeChallenges).toEqual({ a: { timeMs: 10 }, d: { timeMs: 5 } })
+      expect(migrate({ ...base, sharedTemplates: 'x', mazes: {}, mazeChallenges: [] })).toMatchObject({ sharedTemplates: [], mazes: [], mazeChallenges: {} })
+    })
   })
 })

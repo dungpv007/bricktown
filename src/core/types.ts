@@ -1,3 +1,5 @@
+import type { Maze } from './maze'
+
 /** Rotation in quarter turns counter-clockwise around +Y (viewed from above). */
 export type Rot = 0 | 1 | 2 | 3
 
@@ -121,6 +123,13 @@ export interface GuidedState {
   placed: string[] // brick ids of the template already placed
 }
 
+/** The time a friend set on a shared maze, for the kid to beat. */
+export interface MazeChallenge {
+  timeMs: number
+  /** Who set it, when known. */
+  from?: string
+}
+
 export interface SaveData {
   schemaVersion: number
   blueprints: Blueprint[]
@@ -128,4 +137,12 @@ export interface SaveData {
   workshop: WorkshopState
   guided: GuidedState | null
   completedTemplates: string[]
+  // The fields below are optional until the next schema bump makes them required; `migrate` always
+  // fills them in (see core/serialize), so a loaded save has them.
+  /** Models shared "with build instructions": built step by step in Guided mode. */
+  sharedTemplates?: Template[]
+  /** The kid's own and imported mazes (owned by Maze mode; shared mazes are added here). */
+  mazes?: Maze[]
+  /** Keyed by maze id. */
+  mazeChallenges?: Record<string, MazeChallenge>
 }

@@ -1,6 +1,8 @@
 import { COLORS } from './colors'
 import { parseFig } from './figures'
-import type { Baseplate, Blueprint, Brick, SaveData } from './types'
+import { validateTemplate } from './template'
+import type { Maze } from './maze'
+import type { Baseplate, Blueprint, Brick, MazeChallenge, SaveData, Template } from './types'
 
 export const SCHEMA_VERSION = 2
 
@@ -12,6 +14,9 @@ export function createEmptySave(): SaveData {
     workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
     guided: null,
     completedTemplates: [],
+    sharedTemplates: [],
+    mazes: [],
+    mazeChallenges: {},
   }
 }
 
@@ -28,6 +33,8 @@ export const MIGRATIONS: Record<number, Migration> = {
 }
 // `Brick.fig` (minifigure styles) was added later without a version bump: it is optional and purely
 // additive, older saves simply have no figures, and `normalize` drops any style it cannot read.
+// Likewise `sharedTemplates`, `mazes` and `mazeChallenges` (sharing): optional and additive, filled in
+// by `normalize` when missing. The next schema bump should make them required.
 
 const UNSUPPORTED = 'unsupported save'
 
@@ -92,7 +99,40 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
         ? (guided as unknown as SaveData['guided'])
         : null,
     completedTemplates: arrayOr<string>(data.completedTemplates, []).filter((id) => typeof id === 'string'),
+    sharedTemplates: arrayOr<unknown>(data.sharedTemplates, [])
+      .filter(isTemplateLike)
+      .map((t) => ({ ...t, bricks: normalizeBricks(t.bricks) }) as unknown as Template)
+      .filter(isSoundTemplate),
+    mazes: arrayOr<unknown>(data.mazes, []).filter(isRecord) as unknown as Maze[],
+    mazeChallenges: normalizeChallenges(data.mazeChallenges),
   }
+}
+
+/** A template Guided mode can build: one that a hand-edited file broke is dropped. */
+function isSoundTemplate(t: Template): boolean {
+  try {
+    return validateTemplate(t).length === 0
+  } catch {
+    return false // a shape validateTemplate does not expect (it assumes the template's types)
+  }
+}
+
+/** Enough of a template's shape for `validateTemplate` to make sense of it. */
+function isTemplateLike(v: unknown): v is Record<string, unknown> & { bricks: unknown[] } {
+  return (
+    isRecord(v) && typeof v.id === 'string' && isRecord(v.name) && isRecord(v.baseplate) &&
+    Array.isArray(v.bricks) && Array.isArray(v.steps)
+  )
+}
+
+function normalizeChallenges(v: unknown): Record<string, MazeChallenge> {
+  const out: Record<string, MazeChallenge> = {}
+  if (!isRecord(v)) return out
+  for (const [id, c] of Object.entries(v)) {
+    if (id === '__proto__' || !isRecord(c) || typeof c.timeMs !== 'number' || !Number.isFinite(c.timeMs) || c.timeMs <= 0) continue
+    out[id] = typeof c.from === 'string' ? { timeMs: c.timeMs, from: c.from } : { timeMs: c.timeMs }
+  }
+  return out
 }
 
 /** Bricks as stored, except that a figure style that is not valid is dropped (see `parseFig`). */
