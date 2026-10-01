@@ -9,7 +9,7 @@ import {
   type RapierRigidBody,
 } from '@react-three/rapier'
 import * as THREE from 'three'
-import { bakeBricksUncached, type BakedModel } from '../../core/bake'
+import { bakeBricksUncached, disposeBaked, type BakedModel } from '../../core/bake'
 import {
   approach,
   clampHorizontalSpeed,
@@ -22,7 +22,7 @@ import {
 import { brickCenter } from '../../core/rotation'
 import type { Brick } from '../../core/types'
 import type { VehicleConfig } from '../../core/vehicle'
-import { bakedGlassMaterial, bakedMaterial } from '../../render/materials'
+import BakedMeshes from '../../render/BakedMeshes'
 import { useDriveInput } from '../../state/useDriveInput'
 import { useDriveStatus } from '../../state/useDriveStatus'
 
@@ -166,13 +166,7 @@ function chassisMass(config: VehicleConfig) {
  */
 function useOwnBake(bricks: Brick[]): BakedModel {
   const baked = useMemo(() => bakeBricksUncached(bricks), [bricks])
-  useEffect(
-    () => () => {
-      baked.opaque.dispose()
-      baked.glass?.dispose()
-    },
-    [baked],
-  )
+  useEffect(() => () => disposeBaked(baked), [baked])
   return baked
 }
 
@@ -182,12 +176,7 @@ function WheelVisual({ brick }: { brick: Brick }) {
   const baked = useOwnBake(local)
   const [x, y, z] = useMemo(() => brickCenter(local[0]), [local])
   const offset: [number, number, number] = [-x, -y, -z]
-  return (
-    <>
-      <mesh geometry={baked.opaque} material={bakedMaterial} position={offset} castShadow dispose={null} />
-      {baked.glass && <mesh geometry={baked.glass} material={bakedGlassMaterial} position={offset} dispose={null} />}
-    </>
-  )
+  return <BakedMeshes baked={baked} position={offset} />
 }
 
 interface Props {
@@ -329,10 +318,7 @@ export default function Vehicle({ setup, spawn, chassisRef }: Props) {
         friction={CHASSIS_FRICTION}
       />
       <group ref={chassisRef}>
-        <mesh geometry={bakedBody.opaque} material={bakedMaterial} position={[-ox, -oy, -oz]} castShadow receiveShadow dispose={null} />
-        {bakedBody.glass && (
-          <mesh geometry={bakedBody.glass} material={bakedGlassMaterial} position={[-ox, -oy, -oz]} dispose={null} />
-        )}
+        <BakedMeshes baked={bakedBody} position={[-ox, -oy, -oz]} receiveShadow />
         {config.wheels.map((w, i) => (
           <group
             key={wheelBricks[i].id}

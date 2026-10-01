@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react'
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { canPlace } from '../../core/model'
@@ -9,9 +9,12 @@ import type { Baseplate as BaseplateSize, Brick } from '../../core/types'
 import { useTap } from '../../input/useTap'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks from '../../render/InstancedBricks'
-import { useEditor } from '../../state/useEditor'
+import { useEditor, type ViewShift } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
+import PlateEdgeButtons, { PlateEdgeTracker, type EdgeElements } from './PlateEdgeButtons'
+import { safeRect, toNdc } from './safeArea'
+import { fitView, plateCorners, projectBounds, rectInside } from './viewFit'
 import DevStats from '../../ui/DevStats'
 
 export const SKY = '#87ceeb'
@@ -60,23 +63,128 @@ export function Lights({ size }: { size: BaseplateSize }) {
   )
 }
 
-/** Camera + orbit controls framing the baseplate; remounted (reset) when the plate size changes. */
-export function CameraRig({ size }: { size: BaseplateSize }) {
-  const span = Math.max(size.w, size.d)
-  const dist = span * 1.5 + 8
+const FOV = 45
+/** How long the camera glides to re-fit the plate after a resize. */
+const REFIT_MS = 350
+
+function frameView(size: BaseplateSize): { target: Vec3; position: Vec3 } {
+  const dist = Math.max(size.w, size.d) * 1.5 + 8
   const target: Vec3 = [size.w / 2, 0, size.d / 2]
   // Looking from the front-right, a bit above.
-  const position: Vec3 = [target[0] + dist * 0.45, dist * 0.7, target[2] + dist * 0.75]
+  return { target, position: [target[0] + dist * 0.45, dist * 0.7, target[2] + dist * 0.75] }
+}
+
+const unit = (v: Vec3): Vec3 => {
+  const l = Math.hypot(v[0], v[1], v[2])
+  return [v[0] / l, v[1] / l, v[2] / l]
+}
+
+/** Room left around the fitted plate for the edge ➕/➖ buttons (pixels). */
+const FIT_PAD = 72
+
+/** Framing that shows the whole plate in the HUD-free part of the canvas, looking along `dir`. */
+function fitPlate(size: BaseplateSize, dir: Vec3, canvas: HTMLElement, width: number, height: number) {
+  const r = safeRect(canvas)
+  const pad = Math.max(0, Math.min(FIT_PAD, (r.right - r.left) / 4, (r.bottom - r.top) / 4))
+  const safe = toNdc({ left: r.left + pad, top: r.top + pad, right: r.right - pad, bottom: r.bottom - pad }, width, height)
+  return { safe, ...fitView(plateCorners(size), dir, FOV, width / height, safe) }
+}
+
+interface Glide { from: { p: Vec3; t: Vec3 }; to: { p: Vec3; t: Vec3 }; start: number }
+
+/**
+ * Camera + orbit controls framing the baseplate as it was at mount; remount (via `key`) to re-frame.
+ * Each new `shift` moves the camera by that much, following bricks that moved after a resize.
+ * With `fit`, the plate is framed inside the part of the screen the HUD leaves free, and after a
+ * resize that pushes it out of there the camera glides (same angles) to fit it again.
+ */
+export function CameraRig({ size, shift, fit = false }: { size: BaseplateSize; shift?: ViewShift; fit?: boolean }) {
+  const span = Math.max(size.w, size.d)
+  const canvas = useThree((s) => s.gl.domElement)
+  const view = useThree((s) => s.size)
+  // Fixed at mount: later size changes must not snap the view back to the plate centre.
+  const [{ target, position }] = useState(() => {
+    const frame = frameView(size)
+    if (!fit) return frame
+    const dir = unit([frame.position[0] - frame.target[0], frame.position[1], frame.position[2] - frame.target[2]])
+    return fitPlate(size, dir, canvas, view.width, view.height)
+  })
+  const camera = useRef<THREE.PerspectiveCamera>(null)
+  const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
+  const glide = useRef<Glide | null>(null)
+  const seenShift = useRef(shift?.seq)
+  useLayoutEffect(() => {
+    if (!shift || shift.seq === seenShift.current) return
+    seenShift.current = shift.seq
+    const cam = camera.current
+    const ctl = controls.current
+    if (!cam || !ctl) return
+    cam.position.x += shift.dx
+    cam.position.z += shift.dz
+    ctl.target.x += shift.dx
+    ctl.target.z += shift.dz
+    ctl.update()
+    const g = glide.current
+    if (g) {
+      for (const v of [g.from.p, g.from.t, g.to.p, g.to.t]) {
+        v[0] += shift.dx
+        v[2] += shift.dz
+      }
+    }
+  }, [shift])
+
+  // Declared after the shift effect: a resize's shift is applied before checking the fit.
+  const fittedSize = useRef({ w: size.w, d: size.d })
+  useLayoutEffect(() => {
+    if (!fit || (fittedSize.current.w === size.w && fittedSize.current.d === size.d)) return
+    fittedSize.current = { w: size.w, d: size.d }
+    const cam = camera.current
+    const ctl = controls.current
+    if (!cam || !ctl) return
+    const p: Vec3 = [cam.position.x, cam.position.y, cam.position.z]
+    const t: Vec3 = [ctl.target.x, ctl.target.y, ctl.target.z]
+    const next = fitPlate(size, unit([p[0] - t[0], p[1] - t[1], p[2] - t[2]]), canvas, view.width, view.height)
+    const shown = projectBounds(plateCorners(size), p, t, FOV, view.width / view.height)
+    if (shown && rectInside(shown, next.safe, 0.01)) return
+    glide.current = { from: { p, t }, to: { p: next.position, t: next.target }, start: performance.now() }
+  }, [fit, size, canvas, view])
+
+  // Any camera drag by the player cancels a glide.
+  useEffect(() => {
+    const ctl = controls.current
+    if (!ctl) return
+    const cancel = () => {
+      glide.current = null
+    }
+    ctl.addEventListener('start', cancel)
+    return () => ctl.removeEventListener('start', cancel)
+  }, [])
+
+  useFrame(() => {
+    const g = glide.current
+    const cam = camera.current
+    const ctl = controls.current
+    if (!g || !cam || !ctl) return
+    const k = Math.min(1, (performance.now() - g.start) / REFIT_MS)
+    const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2 // ease in-out
+    const mix = (a: Vec3, b: Vec3, i: number) => a[i] + (b[i] - a[i]) * e
+    cam.position.set(mix(g.from.p, g.to.p, 0), mix(g.from.p, g.to.p, 1), mix(g.from.p, g.to.p, 2))
+    ctl.target.set(mix(g.from.t, g.to.t, 0), mix(g.from.t, g.to.t, 1), mix(g.from.t, g.to.t, 2))
+    ctl.update()
+    if (k >= 1) glide.current = null
+  })
+
   return (
     <>
-      <PerspectiveCamera makeDefault position={position} fov={45} near={0.1} far={500} />
+      <PerspectiveCamera ref={camera} makeDefault position={position} fov={FOV} near={0.1} far={500} />
       <OrbitControls
+        ref={controls}
         makeDefault
         target={target}
         enableDamping
         dampingFactor={0.12}
         minDistance={4}
-        maxDistance={span * 3 + 10}
+        maxDistance={span * 4 + 20}
         minPolarAngle={0.15}
         maxPolarAngle={Math.PI / 2 - 0.1}
         touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
@@ -104,6 +212,8 @@ function WorkshopWorld() {
   const rot = useEditor((s) => s.rot)
   const carried = useEditor((s) => s.carried)
   const errorSeq = useEditor((s) => s.errorSeq)
+  const viewShift = useEditor((s) => s.viewShift)
+  const frameSeq = useEditor((s) => s.frameSeq)
   const consumeTap = useTap()
 
   // The last pointer hit is kept (not just the anchor) so the anchor re-centres right away when
@@ -134,6 +244,14 @@ function WorkshopWorld() {
     el.addEventListener('pointerleave', onLeave)
     return () => el.removeEventListener('pointerleave', onLeave)
   }, [el, setHit])
+
+  // A resize that slid the bricks to new coordinates leaves the kept hit (and ghost) stale.
+  useEffect(
+    () => useEditor.subscribe((s, prev) => {
+      if (s.viewShift !== prev.viewShift) setHit(null)
+    }),
+    [setHit],
+  )
 
   // canPlace rebuilds an occupancy grid, so it only runs when the target actually changes.
   const ax = anchor?.x
@@ -188,7 +306,8 @@ function WorkshopWorld() {
 
   return (
     <>
-      <CameraRig key={`${baseplate.w}x${baseplate.d}`} size={baseplate} />
+      {/* Re-framed for each loaded model; resizing the plate only shifts the view (see CameraRig). */}
+      <CameraRig key={frameSeq} size={baseplate} shift={viewShift} fit />
       <Lights size={baseplate} />
       <Ground size={baseplate} />
       <Baseplate size={baseplate} kind={kind} onPointer={onBaseplatePointer} />
@@ -200,12 +319,17 @@ function WorkshopWorld() {
 }
 
 export default function WorkshopScene() {
+  const edges = useRef<EdgeElements>({})
   return (
-    <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="workshop-canvas">
-      <color attach="background" args={[SKY]} />
-      <fog attach="fog" args={[SKY, 80, 220]} />
-      <WorkshopWorld />
-      <DevStats />
-    </Canvas>
+    <>
+      <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="workshop-canvas">
+        <color attach="background" args={[SKY]} />
+        <fog attach="fog" args={[SKY, 80, 220]} />
+        <WorkshopWorld />
+        <PlateEdgeTracker edges={edges} />
+        <DevStats />
+      </Canvas>
+      <PlateEdgeButtons edges={edges} />
+    </>
   )
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getTemplate } from '../../content/templates'
-import { COLORS } from '../../core/colors'
+import { COLORS, GLASS_COLOR } from '../../core/colors'
 import { getPart } from '../../core/parts/catalog'
 import { getPartGeometry } from '../../core/parts/geometry'
 import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
@@ -50,7 +50,7 @@ function TargetGhost({ brick, pulse = true, onPointer }: { brick: Brick; pulse?:
   const [material] = useState(() => {
     const c = COLORS[brick.c]
     // Glass is nearly white: give its ghost a clear sky-blue glow so it still stands out.
-    const hex = c?.glass ? GLASS_GHOST : (c?.hex ?? '#ffffff')
+    const hex = brick.c === GLASS_COLOR ? GLASS_GHOST : (c?.hex ?? '#ffffff')
     return new THREE.MeshStandardMaterial({
       color: hex,
       emissive: hex,

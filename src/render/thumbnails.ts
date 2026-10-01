@@ -1,7 +1,7 @@
 import * as THREE from 'three'
-import { bakeBricksUncached, type BakedModel } from '../core/bake'
+import { bakeBricksUncached, bakedGeometries, disposeBaked, type BakedModel } from '../core/bake'
 import type { Brick } from '../core/types'
-import { bakedGlassMaterial, bakedMaterial } from './materials'
+import { bakedMaterials } from './materials'
 
 /**
  * Picture buttons: renders a brick model to a PNG data URL with one lazily created offscreen
@@ -88,9 +88,8 @@ function render(bricks: Brick[], size: number): string {
   try {
     baked = bakeBricksUncached(bricks)
     const box = new THREE.Box3()
-    const meshes: THREE.Mesh[] = [new THREE.Mesh(baked.opaque, bakedMaterial)]
-    if (baked.glass) meshes.push(new THREE.Mesh(baked.glass, bakedGlassMaterial))
-    for (const mesh of meshes) {
+    for (const [kind, geometry] of bakedGeometries(baked)) {
+      const mesh = new THREE.Mesh(geometry, bakedMaterials[kind])
       mesh.geometry.computeBoundingBox()
       if (mesh.geometry.boundingBox) box.union(mesh.geometry.boundingBox)
       scene.add(mesh)
@@ -101,8 +100,7 @@ function render(bricks: Brick[], size: number): string {
   } catch {
     return ''
   } finally {
-    baked?.opaque.dispose()
-    baked?.glass?.dispose()
+    if (baked) disposeBaked(baked)
   }
 }
 

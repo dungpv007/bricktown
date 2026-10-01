@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
-import { useT } from './i18n'
+import { useT, type TKey } from './i18n'
 
 const ERROR_ICON_MS = 900
 
 /**
  * Brief red icon (no text) each time `errorSeq` changes, i.e. whenever an action is rejected.
- * `testId` tells the editors apart for e2e specs.
+ * `testId` tells the editors apart for e2e specs; `labelKey` names the rejection for screen readers.
  */
-export default function ErrorBadge({ errorSeq, testId }: { errorSeq: number; testId: string }) {
+export default function ErrorBadge({
+  errorSeq,
+  testId,
+  labelKey = 'cantPlace',
+}: {
+  errorSeq: number
+  testId: string
+  labelKey?: TKey
+}) {
   const t = useT()
   const [hiddenSeq, setHiddenSeq] = useState(errorSeq)
   useEffect(() => {
@@ -17,7 +25,7 @@ export default function ErrorBadge({ errorSeq, testId }: { errorSeq: number; tes
   }, [errorSeq, hiddenSeq])
   if (errorSeq === hiddenSeq) return null
   return (
-    <div key={errorSeq} className="bt-error-badge" role="status" aria-label={t('cantPlace')} data-testid={testId}>
+    <div key={errorSeq} className="bt-error-badge" role="status" aria-label={t(labelKey)} data-testid={testId}>
       🚫
     </div>
   )

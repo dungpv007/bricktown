@@ -1,18 +1,18 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import type { BakedModel } from '../../core/bake'
+import { bakedGeometries, type BakedModel } from '../../core/bake'
+import type { MaterialKind } from '../../core/colors'
 import { CELL, footprintCells } from '../../core/city'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
-import { bakedGlassMaterial, bakedMaterial } from '../../render/materials'
+import { bakedMaterials, castsShadow } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
 import { makeSizeOf, resolveRenderable, type RenderableSource } from '../../render/sources'
 
 /** Height (studs) of a baked model, at least 1. */
 export function bakedHeight(baked: BakedModel): number {
   let top = 0
-  for (const g of [baked.opaque, baked.glass]) {
-    if (!g || g.getAttribute('position').count === 0) continue
+  for (const [, g] of bakedGeometries(baked)) {
     if (!g.boundingBox) g.computeBoundingBox()
     top = Math.max(top, g.boundingBox?.max.y ?? 0)
   }
@@ -37,12 +37,12 @@ const tmpMatrix = new THREE.Matrix4()
 
 function BakedInstances({
   geometry,
-  glass,
+  kind,
   baseplate,
   placements,
 }: {
   geometry: THREE.BufferGeometry
-  glass: boolean
+  kind: MaterialKind
   baseplate: Baseplate
   placements: CityPlacement[]
 }) {
@@ -65,8 +65,8 @@ function BakedInstances({
     <instancedMesh
       key={capacity}
       ref={ref}
-      args={[geometry, glass ? bakedGlassMaterial : bakedMaterial, capacity]}
-      castShadow={!glass}
+      args={[geometry, bakedMaterials[kind], capacity]}
+      castShadow={castsShadow(kind)}
       receiveShadow
     />
   )
@@ -76,10 +76,9 @@ function SourceGroup({ source, placements }: { source: RenderableSource; placeme
   const { baked, baseplate } = source
   return (
     <>
-      {baked.opaque.getAttribute('position').count > 0 && (
-        <BakedInstances geometry={baked.opaque} glass={false} baseplate={baseplate} placements={placements} />
-      )}
-      {baked.glass && <BakedInstances geometry={baked.glass} glass baseplate={baseplate} placements={placements} />}
+      {bakedGeometries(baked).map(([kind, geometry]) => (
+        <BakedInstances key={kind} geometry={geometry} kind={kind} baseplate={baseplate} placements={placements} />
+      ))}
     </>
   )
 }
@@ -116,7 +115,7 @@ function Placeholders({ placements, sizeOf }: { placements: CityPlacement[]; siz
 }
 
 /**
- * Every city placement, drawn with its baked model: one InstancedMesh per source (and glass).
+ * Every city placement, drawn with its baked model: one InstancedMesh per source and material kind.
  * Placements whose source is missing or cannot be baked show as grey placeholder blocks.
  */
 export default function Placements({ placements, blueprints }: { placements: CityPlacement[]; blueprints: Blueprint[] }) {
