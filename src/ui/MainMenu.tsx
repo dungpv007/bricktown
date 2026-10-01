@@ -5,6 +5,7 @@ import { snap } from '../audio/sfx'
 import { useApp } from '../state/useApp'
 import { useT, type TKey } from './i18n'
 import InstallHint from './InstallHint'
+import MenuBackdrop from './MenuBackdrop'
 import Onboarding from './Onboarding'
 import SlotMenu from './SlotMenu'
 
@@ -29,6 +30,7 @@ export default function MainMenu() {
 
   return (
     <div className="bt-screen bt-menu" data-testid="main-menu">
+      <MenuBackdrop />
       <h1 className="bt-title">{t('appTitle')}</h1>
       <div className="bt-cards">
         {CARDS.map((c) => (
