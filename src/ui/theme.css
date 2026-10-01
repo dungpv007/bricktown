@@ -67,7 +67,8 @@
   margin: 0;
   font-size: clamp(32px, 7vw, 56px);
   color: var(--bt-white);
-  text-shadow: 0 4px 0 var(--bt-red);
+  /* The red brick edge, plus a soft dark halo so the white letters read over the moving town. */
+  text-shadow: 0 4px 0 var(--bt-red), 0 0 14px rgba(16, 36, 64, 0.55), 0 2px 24px rgba(16, 36, 64, 0.35);
   letter-spacing: 2px;
 }
 
@@ -113,6 +114,49 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
+}
+
+/* ---------- Main menu backdrop: town poster, then the live town fading in over it ---------- */
+.bt-menu {
+  isolation: isolate; /* the backdrop's negative z-index stays inside the menu */
+}
+
+.bt-menu-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(#6ec3f0, #bfe7fb 70%, #dff3fd);
+}
+
+.bt-menu-bg-poster,
+.bt-menu-bg-live {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.bt-menu-bg-poster {
+  object-fit: cover;
+}
+
+.bt-menu-bg-live {
+  background: linear-gradient(#6ec3f0, #bfe7fb 70%, #dff3fd);
+  opacity: 0;
+  transition: opacity 1.2s ease-in;
+}
+
+.bt-menu-bg-live.bt-ready {
+  opacity: 1;
+}
+
+/* A soft darker glow behind the title and cards, so text and icons stay easy to read on the town. */
+.bt-menu-bg-shade {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 62% 58% at 50% 50%, rgba(16, 36, 64, 0.32), rgba(16, 36, 64, 0.1) 70%, rgba(16, 36, 64, 0));
 }
 
 .bt-topbar {
