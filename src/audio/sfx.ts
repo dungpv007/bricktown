@@ -5,7 +5,7 @@ import { useApp } from '../state/useApp'
  * when the browser has no AudioContext, so game code can call them unconditionally.
  */
 
-export type SoundName = 'snap' | 'pop' | 'paint' | 'error' | 'success' | 'horn'
+export type SoundName = 'snap' | 'pop' | 'paint' | 'error' | 'success' | 'horn' | 'coin'
 
 /** One oscillator note: starts `at` seconds after the call and glides from `freq` to `freqEnd`. */
 export interface Tone {
@@ -48,6 +48,11 @@ export const SOUNDS: Record<SoundName, readonly Tone[]> = {
   horn: [
     { type: 'sawtooth', freq: 349.23, at: 0, dur: 0.38, gain: 0.3, lowpass: 1400 },
     { type: 'sawtooth', freq: 440, at: 0, dur: 0.38, gain: 0.3, lowpass: 1400 },
+  ],
+  // A bright two-note "ding-ding": a coin picked up.
+  coin: [
+    { type: 'square', freq: 987.77, at: 0, dur: 0.08, gain: 0.3, lowpass: 3500 },
+    { type: 'square', freq: 1318.51, at: 0.07, dur: 0.26, gain: 0.3, lowpass: 3500 },
   ],
 }
 
@@ -150,6 +155,7 @@ export const paint = () => play('paint')
 export const error = () => play('error')
 export const success = () => play('success')
 export const horn = () => play('horn')
+export const coin = () => play('coin')
 
 /** Test hook: forgets the shared context so the next call builds a fresh one. */
 export function resetAudioForTests(): void {

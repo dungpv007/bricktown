@@ -1,5 +1,6 @@
 import { COLORS } from '../../core/colors'
 import { DEFAULT_MAZE_FLOOR_COLOR, parseCellKey, type Cell, type Maze } from '../../core/maze'
+import { voidWalls } from '../../core/mazeRun'
 
 /**
  * Top-down picture of a maze as a PNG data URL, drawn on a 2D canvas (no WebGL needed, so it is
@@ -16,6 +17,8 @@ const EXIT_DARK = '#1b2a34'
 const EXIT_LIGHT = '#f4f4f4'
 const GOLD = '#f2c230'
 const GOLD_EDGE = '#9a7412'
+/** Void walls are low hedges in the 3D view (see `voidWalls`). */
+const HEDGE = COLORS[5].hex
 
 function draw(maze: Maze): string {
   if (typeof document === 'undefined') return ''
@@ -35,8 +38,14 @@ function draw(maze: Maze): string {
 
   const wall = COLORS[maze.wallColor]?.hex ?? '#fe8a18'
   const walls = new Set(maze.walls)
+  const hedges = voidWalls(maze)
   for (const key of maze.walls) {
     const c = parseCellKey(key)
+    if (hedges.has(key)) {
+      ctx.fillStyle = HEDGE
+      ctx.fillRect(...rect(c))
+      continue
+    }
     ctx.fillStyle = wall
     ctx.fillRect(...rect(c))
     // A darker lower edge where the wall meets floor gives the blocks a little height.

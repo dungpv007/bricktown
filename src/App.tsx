@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
-import { useHasOpenMaze, useMazeEditor } from './state/useMazeEditor'
+import { isPlayable } from './core/maze'
+import { currentMaze, useHasOpenMaze, useMazeEditor } from './state/useMazeEditor'
+import { useMazeRun } from './state/useMazeRun'
 import MainMenu from './ui/MainMenu'
 import SceneBoundary from './ui/SceneBoundary'
 import { lazyScene } from './ui/lazyScene'
@@ -25,7 +27,7 @@ const DriveScene = lazyScene(() => import('./scenes/drive/DriveScene'))
 const MazePicker = lazyScene(() => import('./scenes/maze/MazePicker'))
 const MazeScene = lazyScene(() => import('./scenes/maze/MazeScene'))
 const MazeUI = lazyScene(() => import('./scenes/maze/MazeUI'))
-const MazeDrivePlaceholder = lazyScene(() => import('./scenes/maze/MazeDrivePlaceholder'))
+const MazeDriveScene = lazyScene(() => import('./scenes/maze/MazeDriveScene'))
 
 type PlayMode = Exclude<Mode, 'menu'>
 
@@ -123,11 +125,51 @@ function Maze() {
   )
 }
 
+/**
+ * Driving out of the maze open in the editor: vehicle picker, then the drive. The maze is taken as
+ * it is on entry; without a playable maze it goes back to the editor.
+ */
 function MazeDrive() {
+  const setMode = useApp((s) => s.setMode)
+  const [maze] = useState(currentMaze)
+  const [recordKey] = useState(() => useMazeEditor.getState().mazeId)
+  const [source, setSource] = useState<string | null>(null)
+  const [runId, setRunId] = useState(0)
+  const playable = maze !== null && isPlayable(maze)
+  useEffect(() => {
+    if (!playable) setMode('maze')
+  }, [playable, setMode])
+
+  const pickAgain = useCallback(() => setSource(null), [])
+  if (!maze || !playable) return null
+  const start = (vehicle: string) => {
+    useMazeRun.getState().begin(maze, recordKey)
+    setSource(vehicle)
+  }
+  const retry = () => {
+    useMazeRun.getState().begin(maze, recordKey)
+    setRunId((n) => n + 1)
+  }
+  const toMenu = () => {
+    useMazeEditor.getState().close()
+    setMode('menu')
+  }
   return (
     <div className="bt-screen" data-testid="mode-mazeDrive">
       <SceneBoundary>
-        <MazeDrivePlaceholder />
+        {source === null ? (
+          <VehiclePicker onPick={start} />
+        ) : (
+          <MazeDriveScene
+            maze={maze}
+            source={source}
+            runId={runId}
+            onChangeVehicle={pickAgain}
+            onRetry={retry}
+            onEdit={() => setMode('maze')}
+            onMenu={toMenu}
+          />
+        )}
       </SceneBoundary>
     </div>
   )

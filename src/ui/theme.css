@@ -1834,3 +1834,118 @@ form.bt-dialog,
 .bt-maze-name:focus-within {
   background: rgba(255, 255, 255, 0.92);
 }
+
+/* ---------- Maze: driving out ---------- */
+
+.bt-maze-hud {
+  --bt-edge: 20px;
+  position: absolute;
+  inset: var(--bt-safe-inset);
+  pointer-events: none;
+}
+
+.bt-maze-hud-top {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+}
+
+.bt-maze-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 52px;
+  padding: 0 18px;
+  box-sizing: border-box;
+  border-radius: var(--bt-radius);
+  background: var(--bt-white);
+  box-shadow: var(--bt-shadow);
+  color: var(--bt-ink);
+  font-size: 26px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Under the change-vehicle button of the drive controls. */
+.bt-maze-hud-side {
+  position: absolute;
+  top: 88px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+/* The ring fills up again while the next hint cools down. */
+.bt-maze-hint {
+  --bt-hint-ready: 1;
+  background:
+    radial-gradient(circle, var(--bt-yellow) 0 58%, transparent 59%),
+    conic-gradient(var(--bt-orange) calc(var(--bt-hint-ready) * 360deg), rgba(27, 42, 65, 0.15) 0);
+}
+
+.bt-maze-hint:disabled {
+  opacity: 0.75;
+}
+
+.bt-maze-win {
+  align-items: center;
+  background: rgba(27, 42, 65, 0.35);
+  pointer-events: auto; /* the drive controls underneath are off while the card shows */
+}
+
+.bt-maze-win-card {
+  gap: 16px;
+  padding: 24px 32px;
+}
+
+.bt-maze-win-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.bt-maze-stars {
+  display: flex;
+  gap: 8px;
+}
+
+.bt-maze-star {
+  font-size: 76px;
+  line-height: 1;
+  color: rgba(27, 42, 65, 0.18);
+  animation: bt-star-in 0.45s ease-out both;
+}
+
+.bt-maze-star-on {
+  color: var(--bt-yellow);
+  text-shadow: 0 4px 0 #c79a00;
+}
+
+.bt-maze-record {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--bt-ink);
+}
+
+.bt-maze-record-new {
+  color: var(--bt-red);
+  animation: bt-celebrate-in 0.5s 1.2s ease-out both;
+}
+
+@keyframes bt-star-in {
+  0% { transform: scale(0) rotate(-40deg); opacity: 0; }
+  70% { transform: scale(1.25) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-maze-star,
+  .bt-maze-record-new {
+    animation: none;
+  }
+}

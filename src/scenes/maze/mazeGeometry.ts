@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { CELL } from '../../core/city'
 import { platesToWorld } from '../../core/units'
-import { WALL_HEIGHT } from './mazeView'
+import { HEDGE_HEIGHT, WALL_HEIGHT } from './mazeView'
 
 /**
  * Shared maze geometry and textures, built once on first use and never disposed (the editor and
@@ -59,6 +59,11 @@ function buildWallStuds(): THREE.BufferGeometry {
   return merge(parts, 'wall studs')
 }
 
+/** A void cell's hedge: one green plate filling the cell (studs: the wall studs, moved down). Bottom at y = 0. */
+function buildHedge(): THREE.BufferGeometry {
+  return new THREE.BoxGeometry(CELL - 2 * SEAM, HEDGE_HEIGHT - SEAM, CELL - 2 * SEAM).translate(0, (HEDGE_HEIGHT - SEAM) / 2, 0)
+}
+
 /** A gold coin: a flat round 2x2-ish tile with a raised ring, lying on the floor. Centred, bottom at y = 0. */
 function buildCoin(): THREE.BufferGeometry {
   return merge(
@@ -73,6 +78,7 @@ function buildCoin(): THREE.BufferGeometry {
 let wallBlock: THREE.BufferGeometry | null = null
 let wallStuds: THREE.BufferGeometry | null = null
 let coin: THREE.BufferGeometry | null = null
+let hedge: THREE.BufferGeometry | null = null
 
 export function wallBlockGeometry(): THREE.BufferGeometry {
   return (wallBlock ??= buildWallBlock())
@@ -80,6 +86,10 @@ export function wallBlockGeometry(): THREE.BufferGeometry {
 
 export function wallStudsGeometry(): THREE.BufferGeometry {
   return (wallStuds ??= buildWallStuds())
+}
+
+export function hedgeGeometry(): THREE.BufferGeometry {
+  return (hedge ??= buildHedge())
 }
 
 export function coinGeometry(): THREE.BufferGeometry {

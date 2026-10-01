@@ -137,8 +137,8 @@ test('maze: a new empty maze cannot be driven until it has an entry, an exit and
   await expect(status).toHaveAttribute('data-status', 'ok')
 
   await drive.click()
-  await expect(page.getByTestId('maze-drive-placeholder')).toBeVisible()
-  await page.getByTestId('maze-drive-back').click()
+  await expect(page.getByTestId('vehicle-picker')).toBeVisible()
+  await page.getByTestId('back').click()
   await waitForEditor(page)
   await expect(status).toHaveAttribute('data-status', 'ok')
 

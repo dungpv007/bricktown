@@ -6,6 +6,7 @@ import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { CELL } from '../../core/city'
 import { pointToCell } from '../../core/cityPlan'
 import { cellKey, inBounds, type Cell, type Maze } from '../../core/maze'
+import { voidWalls } from '../../core/mazeRun'
 import { createGestureTracker, sampleOf } from '../../input/tapGesture'
 import { currentMaze, useMazeEditor, useShownMaze, type MazeTool } from '../../state/useMazeEditor'
 import DevStats from '../../ui/DevStats'
@@ -161,7 +162,7 @@ function MazeWorld({ maze }: { maze: Maze }) {
     let painting: number | null = null
     let mouseGesture = false
 
-    /** The cell under the pointer: a wall top when the ray hits one, else the floor (null off the maze). */
+    /** The cell under the pointer: a (full-height) wall top when the ray hits one, else the floor (null off the maze). */
     const cellAt = (e: PointerEvent): Cell | null => {
       const rect = el.getBoundingClientRect()
       ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1)
@@ -171,7 +172,9 @@ function MazeWorld({ maze }: { maze: Maze }) {
       const top = raycaster.ray.intersectPlane(TOP_PLANE, hit)
       if (top) {
         const cell = pointToCell(top.x, top.z)
-        if (shown.walls.includes(cellKey(cell))) return cell
+        const key = cellKey(cell)
+        // Void walls are low hedges: picked on the floor like the open cells.
+        if (shown.walls.includes(key) && !voidWalls(shown).has(key)) return cell
       }
       const floor = raycaster.ray.intersectPlane(GROUND_PLANE, hit)
       return floor ? pointToCell(floor.x, floor.z) : null

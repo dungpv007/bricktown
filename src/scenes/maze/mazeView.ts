@@ -14,6 +14,8 @@ export interface NdcRect {
 /** Wall blocks are two bricks (6 plates) tall. */
 export const WALL_PLATES = 6
 export const WALL_HEIGHT = platesToWorld(WALL_PLATES)
+/** Void walls (no floor around them, see `voidWalls`) are drawn as one-plate hedges. */
+export const HEDGE_HEIGHT = platesToWorld(1)
 
 /** Camera tilt from straight down (radians): the maze reads like a map, walls still look 3D. */
 export const MAZE_TILT = 0.5

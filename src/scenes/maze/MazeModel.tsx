@@ -3,9 +3,11 @@ import * as THREE from 'three'
 import { CELL } from '../../core/city'
 import { COLORS, colorMaterialKind } from '../../core/colors'
 import { DEFAULT_MAZE_FLOOR_COLOR, parseCellKey, type Cell, type Maze } from '../../core/maze'
+import { voidWalls } from '../../core/mazeRun'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { brickMaterials } from '../../render/materials'
-import { checkerTexture4, coinGeometry, floorStudTexture, wallBlockGeometry, wallStudsGeometry } from './mazeGeometry'
+import { checkerTexture4, coinGeometry, floorStudTexture, hedgeGeometry, wallBlockGeometry, wallStudsGeometry } from './mazeGeometry'
+import { HEDGE_HEIGHT, WALL_HEIGHT } from './mazeView'
 
 const GRASS = '#7cc46a'
 const FLOOR_THICKNESS = 0.4
@@ -13,6 +15,7 @@ const GRID_OPACITY = 0.14
 /** How far the grass reaches past the maze (studs). */
 const GRASS_BORDER = 160
 const GOLD = COLORS[29].hex
+const HEDGE = COLORS[5].hex // green
 const ENTRY_PAD = COLORS[11].hex // lime
 const FLAG_RED = COLORS[2].hex
 const POLE = COLORS[0].hex
@@ -112,15 +115,32 @@ function CellInstances({ cells, geometry, material, color, castShadow, y = 0 }: 
   )
 }
 
-/** Every wall cell as a brick-stack block with studs on top, in the wall colour. */
-function Walls({ walls, color }: { walls: string[]; color: number }) {
+/**
+ * Wall cells as brick-stack blocks with studs on top, in the wall colour. Walls with no floor
+ * around them (the filler outside a maze's shape) are low green hedges instead, so the shape reads.
+ */
+function Walls({ maze }: { maze: Pick<Maze, 'w' | 'h' | 'walls' | 'wallColor'> }) {
+  const { w, h, walls, wallColor: color } = maze
+  const [solid, hedges] = useMemo(() => {
+    const low = voidWalls({ w, h, walls })
+    return [walls.filter((k) => !low.has(k)), walls.filter((k) => low.has(k))]
+  }, [w, h, walls])
   const kind = colorMaterialKind(color)
   const hex = COLORS[color]?.hex ?? '#ffffff'
   const material = brickMaterials[kind]
   return (
     <>
-      <CellInstances cells={walls} geometry={wallBlockGeometry()} material={material} color={hex} castShadow={kind !== 'trans'} />
-      <CellInstances cells={walls} geometry={wallStudsGeometry()} material={material} color={hex} castShadow={false} />
+      <CellInstances cells={solid} geometry={wallBlockGeometry()} material={material} color={hex} castShadow={kind !== 'trans'} />
+      <CellInstances cells={solid} geometry={wallStudsGeometry()} material={material} color={hex} castShadow={false} />
+      <CellInstances cells={hedges} geometry={hedgeGeometry()} material={brickMaterials.opaque} color={HEDGE} castShadow={false} />
+      <CellInstances
+        cells={hedges}
+        geometry={wallStudsGeometry()}
+        material={brickMaterials.opaque}
+        color={HEDGE}
+        castShadow={false}
+        y={HEDGE_HEIGHT - WALL_HEIGHT}
+      />
     </>
   )
 }
@@ -175,7 +195,7 @@ export default function MazeModel({ maze }: { maze: Maze }) {
   return (
     <group>
       <Floor w={maze.w} h={maze.h} color={maze.floorColor ?? DEFAULT_MAZE_FLOOR_COLOR} />
-      <Walls walls={maze.walls} color={maze.wallColor} />
+      <Walls maze={maze} />
       <CellInstances cells={maze.coins} geometry={coinGeometry()} material={brickMaterials.metal} color={GOLD} castShadow y={0.05} />
       {maze.entry && <Door maze={maze} cell={maze.entry} kind="entry" />}
       {maze.exit && <Door maze={maze} cell={maze.exit} kind="exit" />}
