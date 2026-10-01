@@ -19,7 +19,8 @@ interface BtWindow {
 }
 
 test.describe('first launch', () => {
-  useFlags('bricktown-install-hint-dismissed')
+  // A returning player who saw the old (pre-v2) tour gets the new Workshop tour too.
+  useFlags('bricktown-install-hint-dismissed', 'bricktown-onboarded')
 
   test('onboarding walks through five cards and does not return', async ({ page }) => {
     await page.goto('/')
@@ -60,7 +61,7 @@ test('mute toggle persists across a reload', async ({ page }) => {
 })
 
 test.describe('install tip', () => {
-  useFlags('bricktown-onboarded')
+  useFlags('bricktown-onboarded-v2')
 
   test('shows on iOS in the browser and stays dismissed', async ({ page }) => {
     await page.goto('/')

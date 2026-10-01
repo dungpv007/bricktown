@@ -21,7 +21,7 @@ export default defineConfig({
         {
           origin: 'http://localhost:5173',
           localStorage: [
-            { name: 'bricktown-onboarded', value: '1' },
+            { name: 'bricktown-onboarded-v2', value: '1' },
             { name: 'bricktown-install-hint-dismissed', value: '1' },
           ],
         },
