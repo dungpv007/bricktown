@@ -93,6 +93,14 @@ export function useShownMaze(): Maze | null {
   return preview ?? templateMaze ?? own
 }
 
+/** True while a maze is open in the editor (re-renders only when that changes, not on every edit). */
+export function useHasOpenMaze(): boolean {
+  const mazeId = useMazeEditor((s) => s.mazeId)
+  const hasTemplate = useMazeEditor((s) => s.templateMaze !== null)
+  const hasOwn = useGame((s) => mazeId !== null && s.data.mazes.some((m) => m.id === mazeId))
+  return hasTemplate || hasOwn
+}
+
 /** "Mê cung 3": the first number not already used by one of the kid's mazes. */
 function nextDefaultName(): string {
   const base = t('mazeDefaultName')
