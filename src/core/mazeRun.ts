@@ -1,5 +1,5 @@
-import { CELL } from './city'
-import { cellKey, inBounds, rateRun, type Cell, type Maze } from './maze'
+import type { SteerTuning } from './drive'
+import { MAZE_CELL, cellKey, inBounds, rateRun, type Cell, type Maze } from './maze'
 import type { MazeRecord } from './types'
 
 /**
@@ -11,7 +11,16 @@ import type { MazeRecord } from './types'
 type Dims = Pick<Maze, 'w' | 'h'>
 
 /** World centre of a cell on the floor. */
-export const cellCenterXZ = (cell: Cell): { x: number; z: number } => ({ x: (cell.cx + 0.5) * CELL, z: (cell.cz + 0.5) * CELL })
+export const cellCenterXZ = (cell: Cell): { x: number; z: number } => ({ x: (cell.cx + 0.5) * MAZE_CELL, z: (cell.cz + 0.5) * MAZE_CELL })
+
+/** The cell under a world point (may be outside the grid). */
+export const cellAtPoint = (x: number, z: number): Cell => ({ cx: Math.floor(x / MAZE_CELL), cz: Math.floor(z / MAZE_CELL) })
+
+/**
+ * Steering in a maze: the wheels turn further than in the city when slow (a corridor corner needs a
+ * tight turn), and keep less of that at speed so a fast car does not spin.
+ */
+export const MAZE_STEER: SteerTuning = { MAX_STEER: 0.8, STEER_AT_SPEED: 0.4 }
 
 /** Heading that drives from `from` towards its neighbour `to`. */
 function headingTowards(from: Cell, to: Cell): number {

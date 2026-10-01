@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { CELL } from '../../core/city'
+import { MAZE_CELL } from '../../core/maze'
 import { platesToWorld } from '../../core/units'
 import { HEDGE_HEIGHT, WALL_HEIGHT } from './mazeView'
 
@@ -25,31 +25,39 @@ function merge(parts: THREE.BufferGeometry[], what: string): THREE.BufferGeometr
 }
 
 /**
- * One wall cell's bricks: two courses (8x4 bricks below running along X, 4x8 above running along Z,
- * like a real brick bond). Centred on X/Z, bottom at y = 0.
+ * One wall cell's bricks: two courses of two whole-stud bricks each (below running along X, above
+ * running along Z, like a real brick bond). With an odd cell size the halves differ by a stud
+ * (6 + 7 for 13), the upper course flipped so the seams do not line up. Centred on X/Z, bottom at y = 0.
  */
 function buildWallBlock(): THREE.BufferGeometry {
-  const q = CELL / 4
+  const a = Math.floor(MAZE_CELL / 2)
+  const b = MAZE_CELL - a
+  const half = MAZE_CELL / 2
   const box = (sx: number, sz: number, x: number, y: number, z: number) =>
     new THREE.BoxGeometry(sx - 2 * SEAM, BRICK_HEIGHT - SEAM, sz - 2 * SEAM).translate(x, y, z)
   const low = BRICK_HEIGHT / 2 - SEAM / 2
   const high = BRICK_HEIGHT * 1.5 - SEAM / 2
   return merge(
-    [box(CELL, CELL / 2, 0, low, -q), box(CELL, CELL / 2, 0, low, q), box(CELL / 2, CELL, -q, high, 0), box(CELL / 2, CELL, q, high, 0)],
+    [
+      box(MAZE_CELL, a, 0, low, -half + a / 2),
+      box(MAZE_CELL, b, 0, low, half - b / 2),
+      box(b, MAZE_CELL, -half + b / 2, high, 0),
+      box(a, MAZE_CELL, half - a / 2, high, 0),
+    ],
     'wall block',
   )
 }
 
 /**
- * The 8x8 studs on top of a wall cell, a separate mesh so they can skip the shadow pass (thousands
+ * The studs on top of a wall cell (one per stud of the cell), a separate mesh so they can skip the shadow pass (thousands
  * of them; their shadows are invisible from above). Open at the bottom, which is never seen.
  */
 function buildWallStuds(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
-  for (let i = 0; i < CELL; i++) {
-    for (let j = 0; j < CELL; j++) {
-      const x = i + 0.5 - CELL / 2
-      const z = j + 0.5 - CELL / 2
+  for (let i = 0; i < MAZE_CELL; i++) {
+    for (let j = 0; j < MAZE_CELL; j++) {
+      const x = i + 0.5 - MAZE_CELL / 2
+      const z = j + 0.5 - MAZE_CELL / 2
       parts.push(
         new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT, STUD_SEGMENTS, 1, true).translate(x, WALL_HEIGHT + STUD_HEIGHT / 2, z),
         new THREE.CircleGeometry(STUD_RADIUS, STUD_SEGMENTS).rotateX(-Math.PI / 2).translate(x, WALL_HEIGHT + STUD_HEIGHT, z),
@@ -61,7 +69,7 @@ function buildWallStuds(): THREE.BufferGeometry {
 
 /** A void cell's hedge: one green plate filling the cell (studs: the wall studs, moved down). Bottom at y = 0. */
 function buildHedge(): THREE.BufferGeometry {
-  return new THREE.BoxGeometry(CELL - 2 * SEAM, HEDGE_HEIGHT - SEAM, CELL - 2 * SEAM).translate(0, (HEDGE_HEIGHT - SEAM) / 2, 0)
+  return new THREE.BoxGeometry(MAZE_CELL - 2 * SEAM, HEDGE_HEIGHT - SEAM, MAZE_CELL - 2 * SEAM).translate(0, (HEDGE_HEIGHT - SEAM) / 2, 0)
 }
 
 /** A gold coin: a flat round 2x2-ish tile with a raised ring, lying on the floor. Centred, bottom at y = 0. */

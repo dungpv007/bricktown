@@ -101,6 +101,7 @@ export const vi = {
   driveTurnWheels: 'Xoay bánh xe cho thẳng',
   driveWheelsLow: 'Đặt bánh xe ở dưới cùng',
   driveUnknownPart: 'Xe có mảnh lạ',
+  driveTooWide: 'Xe quá rộng cho mê cung',
   driveGas: 'Chạy',
   driveReverse: 'Lùi',
   driveFlip: 'Lật xe lại',

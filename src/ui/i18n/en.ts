@@ -103,6 +103,7 @@ export const en: Record<keyof typeof vi, string> = {
   driveTurnWheels: 'Turn the wheels to face forward',
   driveWheelsLow: 'Put the wheels at the bottom',
   driveUnknownPart: 'Has an unknown piece',
+  driveTooWide: 'Too wide for the maze',
   driveGas: 'Go',
   driveReverse: 'Reverse',
   driveFlip: 'Flip the car back',

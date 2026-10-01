@@ -24,6 +24,12 @@ export const DRIVE = {
   STEER_AT_SPEED: 0.55,
 } as const
 
+/** How far the front wheels turn: at full stick when slow, and the fraction of that kept at top speed. */
+export interface SteerTuning {
+  MAX_STEER: number
+  STEER_AT_SPEED: number
+}
+
 /** A wheel brick turned 0 or 2 quarter turns: its axle runs along X, so it can roll forward. */
 export const isDriveWheel = (brick: Brick): boolean => isWheel(brick) && brick.r % 2 === 0
 
@@ -162,12 +168,12 @@ export function engineForce(throttle: number, forwardSpeed: number, mass: number
 
 /**
  * Front wheel angle for a stick value in [-1, 1] (right = +1). Rapier turns the wheel left for a
- * positive angle. Turns are gentler at speed.
+ * positive angle. Turns are gentler at speed. `tuning`: the city's limits unless a mode has its own.
  */
-export function steerAngle(steer: number, forwardSpeed: number): number {
+export function steerAngle(steer: number, forwardSpeed: number, tuning: SteerTuning = DRIVE): number {
   const fast = Math.min(1, Math.abs(forwardSpeed) / DRIVE.MAX_SPEED)
-  const scale = 1 - (1 - DRIVE.STEER_AT_SPEED) * fast
-  return -steer * DRIVE.MAX_STEER * scale
+  const scale = 1 - (1 - tuning.STEER_AT_SPEED) * fast
+  return -steer * tuning.MAX_STEER * scale
 }
 
 /** Frame-rate independent smoothing of `current` towards `target` (`rate` per second). */

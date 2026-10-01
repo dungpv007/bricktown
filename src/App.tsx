@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useApp, type Mode } from './state/useApp'
 import { useGame } from './state/useGame'
 import { useGuided } from './state/useGuided'
-import { isPlayable } from './core/maze'
+import { MAZE_MAX_VEHICLE_WIDTH, isPlayable } from './core/maze'
 import { currentMaze, useHasOpenMaze, useMazeEditor } from './state/useMazeEditor'
 import { useMazeRun } from './state/useMazeRun'
 import MainMenu from './ui/MainMenu'
@@ -158,7 +158,7 @@ function MazeDrive() {
     <div className="bt-screen" data-testid="mode-mazeDrive">
       <SceneBoundary>
         {source === null ? (
-          <VehiclePicker onPick={start} />
+          <VehiclePicker onPick={start} maxWidth={MAZE_MAX_VEHICLE_WIDTH} />
         ) : (
           <MazeDriveScene
             maze={maze}

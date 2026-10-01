@@ -160,3 +160,38 @@ test('maze drive: a tiny maze built from scratch drives out; menu from the finis
   await page.getByTestId('menu-maze').click()
   await expect(page.getByTestId('maze-picker')).toBeVisible()
 })
+
+test('maze vehicle picker: a vehicle too wide for the corridors is greyed out there, not in the city', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => 'useGame' in ((window as unknown as { __bt?: object }).__bt ?? {}))).toBe(true)
+  // A car with a 16-stud wing plate: drivable, but wider than a maze corridor allows.
+  await page.evaluate(() => {
+    const brick = (id: string, p: string, x: number, y: number, z: number, r: number, c: number) => ({ id, p, x, y, z, r, c })
+    const now = Date.now()
+    const game = (window as unknown as { __bt: { useGame: { getState(): { upsertBlueprint(bp: unknown): void } } } }).__bt.useGame
+    game.getState().upsertBlueprint({
+      id: 'bp_wide', name: 'Wide', kind: 'vehicle', tags: ['vehicle'], baseplate: { w: 16, d: 16 }, createdAt: now, updatedAt: now,
+      bricks: [
+        brick('w1', 'wheel_small', 6, 0, 4, 0, 1), brick('w2', 'wheel_small', 9, 0, 4, 0, 1),
+        brick('w3', 'wheel_small', 6, 0, 10, 0, 1), brick('w4', 'wheel_small', 9, 0, 10, 0, 1),
+        brick('p1', 'plate_4x8', 0, 5, 4, 1, 8), brick('p2', 'plate_4x8', 8, 5, 4, 1, 8),
+        brick('p3', 'plate_4x8', 6, 5, 3, 0, 8),
+      ],
+    })
+  })
+  await page.getByTestId('menu-maze').click()
+  await page.getByTestId('maze-tpl-easy').click()
+  await page.getByTestId('maze-drive').click()
+  const wide = page.getByTestId('veh-bp_wide')
+  await expect(wide).toBeDisabled()
+  await expect(wide.getByTestId('veh-too-wide')).toBeVisible()
+  for (const tpl of ['car', 'police_car', 'truck', 'fire_truck']) await expect(page.getByTestId(`veh-tpl:${tpl}`)).toBeEnabled()
+
+  // Same vehicle, city drive: no corridor, no limit.
+  await page.evaluate(() => (window as unknown as { __bt: { flushAutosave(): Promise<boolean> } }).__bt.flushAutosave())
+  await page.goto('/')
+  await page.getByTestId('menu-drive').click()
+  await expect(page.getByTestId('veh-bp_wide')).toBeEnabled()
+  await expect(page.getByTestId('veh-bp_wide').getByTestId('veh-too-wide')).toHaveCount(0)
+})

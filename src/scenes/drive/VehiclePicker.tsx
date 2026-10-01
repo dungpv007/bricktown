@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { TEMPLATES } from '../../content/templates'
 import { analyzeDrive, type DriveProblem } from '../../core/drive'
 import type { Brick } from '../../core/types'
+import { vehicleWidth } from '../../core/vehicle'
 import { getThumbnail } from '../../render/thumbnails'
 import { templateSource } from '../../render/sources'
 import { useApp } from '../../state/useApp'
@@ -20,6 +21,8 @@ const HINTS: Record<DriveProblem, { icon: string; key: TKey; testId: string }> =
   wheels_not_lowest: { icon: '🛞⬇️', key: 'driveWheelsLow', testId: 'veh-wheels-low' },
   unknown_part: { icon: '❓', key: 'driveUnknownPart', testId: 'veh-unknown-part' },
 }
+/** A vehicle that drives, but is wider than the picker's `maxWidth` (a maze corridor). */
+const TOO_WIDE = { icon: '↔️', key: 'driveTooWide', testId: 'veh-too-wide' } as const
 
 interface Entry {
   source: string
@@ -29,11 +32,18 @@ interface Entry {
   bricks: Brick[]
 }
 
-function VehicleCard({ entry, color, onPick }: { entry: Entry; color: string; onPick: (source: string) => void }) {
+interface CardProps {
+  entry: Entry
+  color: string
+  maxWidth: number
+  onPick: (source: string) => void
+}
+
+function VehicleCard({ entry, color, maxWidth, onPick }: CardProps) {
   const t = useT()
   const url = useThumbnail(entry.thumbKey, () => getThumbnail(entry.thumbKey, entry.bricks))
   const analysis = useMemo(() => analyzeDrive(entry.bricks), [entry.bricks])
-  const hint = analysis.ok ? null : HINTS[analysis.reason]
+  const hint = !analysis.ok ? HINTS[analysis.reason] : vehicleWidth(analysis.config) > maxWidth ? TOO_WIDE : null
   return (
     <button
       className="bt-card bt-veh-card"
@@ -58,11 +68,18 @@ function VehicleCard({ entry, color, onPick }: { entry: Entry; color: string; on
   )
 }
 
+interface Props {
+  onPick: (source: string) => void
+  /** Vehicles wider than this (studs, wheels included) are greyed out too (a maze corridor's limit). */
+  maxWidth?: number
+}
+
 /**
  * Pick what to drive: the ready-made vehicles first, then the kid's own vehicle blueprints.
- * Builds that cannot drive are shown greyed out with a hint badge saying what to fix.
+ * Builds that cannot drive (or are wider than `maxWidth`) are shown greyed out with a hint badge
+ * saying what to fix.
  */
-export default function VehiclePicker({ onPick }: { onPick: (source: string) => void }) {
+export default function VehiclePicker({ onPick, maxWidth = Infinity }: Props) {
   const t = useT()
   const lang = useApp((s) => s.lang)
   const blueprints = useGame((s) => s.data.blueprints)
@@ -86,7 +103,7 @@ export default function VehiclePicker({ onPick }: { onPick: (source: string) => 
       <h2 className="bt-picker-title">{t('drivePick')}</h2>
       <div className="bt-cards">
         {entries.map((entry, i) => (
-          <VehicleCard key={entry.source} entry={entry} color={CARD_COLORS[i % CARD_COLORS.length]} onPick={onPick} />
+          <VehicleCard key={entry.source} entry={entry} color={CARD_COLORS[i % CARD_COLORS.length]} maxWidth={maxWidth} onPick={onPick} />
         ))}
       </div>
     </div>

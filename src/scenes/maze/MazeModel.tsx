@@ -1,8 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { CELL } from '../../core/city'
 import { COLORS, colorMaterialKind } from '../../core/colors'
-import { DEFAULT_MAZE_FLOOR_COLOR, parseCellKey, type Cell, type Maze } from '../../core/maze'
+import { DEFAULT_MAZE_FLOOR_COLOR, MAZE_CELL, parseCellKey, type Cell, type Maze } from '../../core/maze'
 import { voidWalls } from '../../core/mazeRun'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { brickMaterials } from '../../render/materials'
@@ -26,12 +25,12 @@ const tmp = new THREE.Matrix4()
 const tmpColor = new THREE.Color()
 
 /** World centre of a cell on the floor. */
-export const cellCenter = (cell: Cell): [number, number] => [(cell.cx + 0.5) * CELL, (cell.cz + 0.5) * CELL]
+export const cellCenter = (cell: Cell): [number, number] => [(cell.cx + 0.5) * MAZE_CELL, (cell.cz + 0.5) * MAZE_CELL]
 
 /** Studded baseplate under the maze (top at y = 0), faint cell lines, grass around it. */
 function Floor({ w, h, color }: { w: number; h: number; color: number }) {
-  const sx = w * CELL
-  const sz = h * CELL
+  const sx = w * MAZE_CELL
+  const sz = h * MAZE_CELL
   const material = useMemo(() => {
     const map = floorStudTexture().clone() // own repeat per maze size; shares the canvas image
     map.repeat.set(sx, sz)
@@ -51,8 +50,8 @@ function Floor({ w, h, color }: { w: number; h: number; color: number }) {
 
   const grid = useMemo(() => {
     const points: number[] = []
-    for (let i = 0; i <= w; i++) points.push(i * CELL, 0, 0, i * CELL, 0, sz)
-    for (let j = 0; j <= h; j++) points.push(0, 0, j * CELL, sx, 0, j * CELL)
+    for (let i = 0; i <= w; i++) points.push(i * MAZE_CELL, 0, 0, i * MAZE_CELL, 0, sz)
+    for (let j = 0; j <= h; j++) points.push(0, 0, j * MAZE_CELL, sx, 0, j * MAZE_CELL)
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
     return g
@@ -157,7 +156,7 @@ function poleSide(maze: Pick<Maze, 'w' | 'h'>, cell: Cell): [number, number] {
 function Door({ maze, cell, kind }: { maze: Pick<Maze, 'w' | 'h'>; cell: Cell; kind: 'entry' | 'exit' }) {
   const [x, z] = cellCenter(cell)
   const side = poleSide(maze, cell)
-  const inset = CELL / 2 - 0.7
+  const inset = MAZE_CELL / 2 - 0.7
   const px = x + side[0] * inset
   const pz = z + side[1] * inset
   const checker = kind === 'exit' ? checkerTexture4() : null
@@ -167,7 +166,7 @@ function Door({ maze, cell, kind }: { maze: Pick<Maze, 'w' | 'h'>; cell: Cell; k
   return (
     <group>
       <mesh position={[x, 0.06, z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[CELL - 0.6, CELL - 0.6]} />
+        <planeGeometry args={[MAZE_CELL - 0.6, MAZE_CELL - 0.6]} />
         {checker ? (
           <meshStandardMaterial map={checker} roughness={0.7} polygonOffset polygonOffsetFactor={-1} />
         ) : (
