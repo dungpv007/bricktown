@@ -44,6 +44,21 @@ function safeStorage(): StateStorage {
   }
 }
 
+const LANGS: readonly Lang[] = ['vi', 'en']
+const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal']
+const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
+
+/** Keeps only persisted preference values that are valid; anything else falls back to defaults. */
+export function sanitizePrefs(persisted: unknown): Partial<Pick<AppState, 'lang' | 'difficulty' | 'slotId'>> {
+  const out: Partial<Pick<AppState, 'lang' | 'difficulty' | 'slotId'>> = {}
+  if (typeof persisted !== 'object' || persisted === null) return out
+  const p = persisted as Record<string, unknown>
+  if (LANGS.includes(p.lang as Lang)) out.lang = p.lang as Lang
+  if (DIFFICULTIES.includes(p.difficulty as Difficulty)) out.difficulty = p.difficulty as Difficulty
+  if (SLOT_IDS.includes(p.slotId as SlotId)) out.slotId = p.slotId as SlotId
+  return out
+}
+
 export const useApp = create<AppState>()(
   persist(
     (set) => ({
@@ -59,7 +74,8 @@ export const useApp = create<AppState>()(
     {
       name: 'bricktown-prefs',
       storage: createJSONStorage(safeStorage),
-      partialize: (s) => ({ lang: s.lang, difficulty: s.difficulty }),
+      partialize: (s) => ({ lang: s.lang, difficulty: s.difficulty, slotId: s.slotId }),
+      merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),
     },
   ),
 )

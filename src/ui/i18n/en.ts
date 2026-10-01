@@ -34,5 +34,9 @@ export const en: Record<keyof typeof vi, string> = {
   confirmDelete: 'Delete this slot?',
   confirmImport: 'Overwrite this slot?',
   importFailed: 'Could not read that file',
+  saveFailed: 'Could not save',
+  bootError: 'Something went wrong starting the game',
+  reload: 'Reload',
+  loadWarning: 'Could not read this slot',
   close: 'Close',
 }

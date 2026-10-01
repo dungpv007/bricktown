@@ -32,5 +32,9 @@ export const vi = {
   confirmDelete: 'Xóa ô này?',
   confirmImport: 'Ghi đè ô này?',
   importFailed: 'File không đọc được',
+  saveFailed: 'Không lưu được',
+  bootError: 'Có lỗi khi mở game',
+  reload: 'Tải lại',
+  loadWarning: 'Không đọc được ô lưu này',
   close: 'Đóng',
 } as const

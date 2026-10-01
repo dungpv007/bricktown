@@ -5,6 +5,7 @@ import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
 import { flushAutosave, markClean } from './autosave'
 import { deleteSlot, loadSlot, saveSlot } from './saves'
+import { usePersistStatus } from './status'
 
 /**
  * Makes `data` the live game state. Also resets the editor, whose undo history lives outside
@@ -17,30 +18,52 @@ export function applySave(data: SaveData): void {
   markClean(useGame.getState().data)
 }
 
-/** Loads the current slot (or a fresh empty save) into the game. */
+/**
+ * Loads the current slot into the game. An absent or unreadable record (already backed up by
+ * `loadSlot`) starts from an empty save. A read error starts an empty in-memory save too, but
+ * blocks autosave so the unknown real contents are never overwritten.
+ */
 export async function loadCurrentSlot(): Promise<void> {
-  const data = (await loadSlot(useApp.getState().slotId)) ?? createEmptySave()
-  applySave(data)
+  const result = await loadSlot(useApp.getState().slotId)
+  if (result.status === 'error') {
+    usePersistStatus.getState().set({ error: 'load', writeBlocked: true })
+    applySave(createEmptySave())
+    return
+  }
+  usePersistStatus.getState().set({ error: null, writeBlocked: false })
+  applySave(result.status === 'ok' ? result.data : createEmptySave())
 }
 
-/** Flushes the current slot, then switches to and loads `id`. */
-export async function switchSlot(id: SlotId): Promise<void> {
-  await flushAutosave()
+/**
+ * Flushes the current slot, then switches to and loads `id`.
+ * Returns false (and changes nothing) when the flush fails.
+ */
+export async function switchSlot(id: SlotId): Promise<boolean> {
+  if (!(await flushAutosave())) return false
   useApp.getState().setSlot(id)
   await loadCurrentSlot()
+  return true
 }
 
 /** Deletes slot `id`; if it is the current slot the game restarts from an empty save. */
-export async function deleteSlotById(id: SlotId): Promise<void> {
+export async function deleteSlotById(id: SlotId): Promise<boolean> {
+  if (!(await deleteSlot(id))) return false
   if (id === useApp.getState().slotId) {
+    usePersistStatus.getState().set({ error: null, writeBlocked: false })
     applySave(createEmptySave())
   }
-  await deleteSlot(id)
+  return true
 }
 
 /** Replaces the current slot's contents with imported `data` and persists it immediately. */
 export async function importIntoCurrentSlot(data: SaveData): Promise<boolean> {
   applySave(data)
+  usePersistStatus.getState().set({ error: null, writeBlocked: false })
   const ok = await saveSlot(useApp.getState().slotId, useGame.getState().data)
+  if (!ok) {
+    // Not persisted: let the next flush (edit, tab hide) retry.
+    markClean(null)
+    usePersistStatus.getState().set({ error: 'save' })
+  }
   return ok
 }

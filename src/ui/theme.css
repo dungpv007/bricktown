@@ -136,6 +136,7 @@
 .bt-placeholder {
   align-items: center;
   justify-content: center;
+  gap: 16px;
   font-size: 28px;
   font-weight: 800;
 }
@@ -238,4 +239,9 @@
   background: var(--bt-red);
   color: var(--bt-white);
   font-size: 36px;
+}
+
+.bt-warning {
+  font-size: 40px;
+  line-height: 1;
 }

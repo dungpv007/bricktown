@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { Mode } from '../state/useApp'
+import { usePersistStatus } from '../persistence/status'
 import { useApp } from '../state/useApp'
 import { useT, type TKey } from './i18n'
 import SlotMenu from './SlotMenu'
@@ -18,6 +19,7 @@ export default function MainMenu() {
   const lang = useApp((s) => s.lang)
   const setLang = useApp((s) => s.setLang)
   const setMode = useApp((s) => s.setMode)
+  const persistError = usePersistStatus((s) => s.error)
   const [slotsOpen, setSlotsOpen] = useState(false)
 
   return (
@@ -54,6 +56,16 @@ export default function MainMenu() {
         >
           ⚙️ {t('slot')}
         </button>
+        {persistError && (
+          <span
+            className="bt-warning"
+            data-testid="persist-warning"
+            role="img"
+            aria-label={persistError === 'load' ? t('loadWarning') : t('saveFailed')}
+          >
+            ⚠️
+          </span>
+        )}
       </div>
       {slotsOpen && <SlotMenu onClose={() => setSlotsOpen(false)} />}
     </div>

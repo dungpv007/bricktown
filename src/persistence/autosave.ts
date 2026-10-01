@@ -2,6 +2,7 @@ import type { SaveData } from '../core/types'
 import { useApp } from '../state/useApp'
 import { useGame } from '../state/useGame'
 import { saveSlot } from './saves'
+import { usePersistStatus } from './status'
 
 export const AUTOSAVE_DELAY_MS = 2000
 
@@ -17,19 +18,30 @@ function clearTimer() {
   }
 }
 
-/** Declares `data` as already persisted so autosave skips it (used right after load/import). */
-export function markClean(data: SaveData): void {
+/** Declares `data` as already persisted so autosave skips it (used right after load/import); null forgets it. */
+export function markClean(data: SaveData | null): void {
   cleanData = data
   clearTimer()
 }
 
-/** Writes the current game data to the current slot now, if it changed since the last write. */
-export async function flushAutosave(): Promise<void> {
+/**
+ * Writes the current game data to the current slot now, if it changed since the last write.
+ * Resolves false only when a write was attempted and failed. While writes are blocked (the slot
+ * could not be read at load) nothing is written and this resolves true.
+ */
+export async function flushAutosave(): Promise<boolean> {
   clearTimer()
   const { data, loaded } = useGame.getState()
-  if (!loaded || data === cleanData) return
+  const status = usePersistStatus.getState()
+  if (!loaded || data === cleanData || status.writeBlocked) return true
   const ok = await saveSlot(useApp.getState().slotId, data)
-  if (ok) cleanData = data
+  if (ok) {
+    cleanData = data
+    if (usePersistStatus.getState().error === 'save') usePersistStatus.getState().set({ error: null })
+  } else {
+    usePersistStatus.getState().set({ error: 'save' })
+  }
+  return ok
 }
 
 function requestPersistentStorage() {

@@ -5,6 +5,7 @@ import { downloadSave, pickAndImportSave } from '../persistence/file'
 import { listSlots, type SlotSummary } from '../persistence/saves'
 import { deleteSlotById, importIntoCurrentSlot, switchSlot } from '../persistence/session'
 import { useApp, type SlotId } from '../state/useApp'
+import { usePersistStatus } from '../persistence/status'
 import { useGame } from '../state/useGame'
 import { useT } from './i18n'
 
@@ -20,6 +21,7 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
   const [pending, setPending] = useState<Pending | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const persistError = usePersistStatus((s) => s.error)
 
   const refresh = useCallback(async () => {
     await flushAutosave()
@@ -38,11 +40,13 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
     }
   }, [])
 
-  const run = async (fn: () => Promise<void>) => {
+  const run = async (fn: () => Promise<boolean>) => {
     if (busy) return
     setBusy(true)
+    setError(null)
     try {
-      await fn()
+      const ok = await fn()
+      if (!ok) setError(t('saveFailed'))
       await refresh()
     } finally {
       setBusy(false)
@@ -66,7 +70,7 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
     setPending(null)
     if (!p) return
     if (p.kind === 'delete') void run(() => deleteSlotById(p.id))
-    else void run(async () => void (await importIntoCurrentSlot(p.data)))
+    else void run(() => importIntoCurrentSlot(p.data))
   }
 
   const dateFmt = new Intl.DateTimeFormat(lang, { dateStyle: 'medium', timeStyle: 'short' })
@@ -140,6 +144,11 @@ export default function SlotMenu({ onClose }: { onClose: () => void }) {
             ⬆️ {t('importSave')}
           </button>
         </div>
+        {persistError === 'load' && (
+          <p className="bt-error" data-testid="slot-load-warning" role="alert">
+            ⚠️ {t('loadWarning')}
+          </p>
+        )}
         {error && (
           <p className="bt-error" data-testid="slot-error" role="alert">
             {error}

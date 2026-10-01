@@ -6,8 +6,13 @@ import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
 import { AUTOSAVE_DELAY_MS, flushAutosave, startAutosave } from './autosave'
 import { db } from './db'
-import { loadSlot } from './saves'
+import { loadSlot as loadSlotResult } from './saves'
 import { applySave, switchSlot } from './session'
+
+async function loadSlot(id: number) {
+  const r = await loadSlotResult(id)
+  return r.status === 'ok' ? r.data : null
+}
 
 const brick = { id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0 as const, c: 0 }
 
