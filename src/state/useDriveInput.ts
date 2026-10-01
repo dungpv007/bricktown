@@ -60,17 +60,29 @@ export function combineDriveInput({ stick, gas, reverse, keys }: DriveControls):
 
 export type Pedal = 'gas' | 'reverse'
 
+/** Where to set the car down: ground position and heading (radians around +Y, 0 = facing -Z). */
+export interface VehiclePlacement {
+  x: number
+  z: number
+  yaw: number
+}
+
 export interface DriveInputState extends DriveControls {
   /** Pointers (fingers) holding each pedal: it stays down until the last one lifts. */
   pedalPointers: Readonly<Record<Pedal, ReadonlySet<number>>>
   /** Incremented by the flip button; the car rights itself whenever it changes. */
   flipSeq: number
+  /** Incremented by `requestPlace`; the car is then set down at `placeTarget`. */
+  placeSeq: number
+  placeTarget: VehiclePlacement | null
   setStick: (stick: number) => void
   pressPedal: (pedal: Pedal, pointerId: number) => void
   releasePedal: (pedal: Pedal, pointerId: number) => void
   keyDown: (code: string) => void
   keyUp: (code: string) => void
   requestFlip: () => void
+  /** Sets the car down, at rest, at (x, z) facing `yaw` (0 = -Z); e.g. back to a maze's start. */
+  requestPlace: (place: VehiclePlacement) => void
   honk: () => void
   /** Releases every control (leaving the scene, window blur, app hidden). */
   reset: () => void
@@ -115,6 +127,8 @@ export const useDriveInput = create<DriveInputState>()((set, get) => ({
   keys: NO_KEYS,
   pedalPointers: NO_PEDALS,
   flipSeq: 0,
+  placeSeq: 0,
+  placeTarget: null,
   setStick: (stick) => set({ stick: clamp1(stick) }),
   pressPedal: (pedal, pointerId) => {
     const held = get().pedalPointers[pedal]
@@ -139,6 +153,7 @@ export const useDriveInput = create<DriveInputState>()((set, get) => ({
     set({ keys })
   },
   requestFlip: () => set({ flipSeq: get().flipSeq + 1 }),
+  requestPlace: (place) => set({ placeSeq: get().placeSeq + 1, placeTarget: place }),
   honk: () => horn(),
   reset: () => set({ stick: 0, gas: false, reverse: false, keys: NO_KEYS, pedalPointers: NO_PEDALS }),
   read: () => combineDriveInput(get()),

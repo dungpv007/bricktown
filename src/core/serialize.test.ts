@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { figPreset } from './figures'
+import { DEFAULT_MAZE_WALL_COLOR, createEmptyMaze, setEntry, setExit, toggleCoin, toggleWall, type Maze } from './maze'
 import { SCHEMA_VERSION, createEmptySave, exportSave, importSave, migrate } from './serialize'
+import { buildMazePackage, decodeShare, encodeShare, isShareError } from './share'
+import { applyImport, planImport } from './shareImport'
 
 describe('serialize', () => {
   it('createEmptySave has the spec defaults', () => {
@@ -13,6 +16,7 @@ describe('serialize', () => {
       completedTemplates: [],
       sharedTemplates: [],
       mazes: [],
+      mazeRecords: {},
       mazeChallenges: {},
     })
   })
@@ -75,8 +79,8 @@ describe('serialize', () => {
     const save = createEmptySave()
     expect(migrate(save)).toEqual(save)
   })
-  it('is schema version 2', () => {
-    expect(SCHEMA_VERSION).toBe(2)
+  it('is schema version 3', () => {
+    expect(SCHEMA_VERSION).toBe(3)
   })
   it('loads a v1 save unchanged apart from the version', () => {
     const brick = { id: 'a', p: 'brick_2x4', x: 1, y: 0, z: 2, r: 1 as const, c: 15 }
@@ -94,9 +98,9 @@ describe('serialize', () => {
       completedTemplates: ['tree'],
     }
     const json = JSON.stringify({ app: 'bricktown', ...v1 })
-    const shareDefaults = { sharedTemplates: [], mazes: [], mazeChallenges: {} }
-    expect(importSave(json)).toEqual({ ...v1, ...shareDefaults, schemaVersion: 2 })
-    expect(migrate(structuredClone(v1))).toEqual({ ...v1, ...shareDefaults, schemaVersion: 2 })
+    const v3 = { ...v1, schemaVersion: 3, sharedTemplates: [], mazes: [], mazeRecords: {}, mazeChallenges: {} }
+    expect(importSave(json)).toEqual(v3)
+    expect(migrate(structuredClone(v1))).toEqual(v3)
   })
   it('round-trips a v2 save with plate colours and the new colours', () => {
     const save = createEmptySave()
@@ -117,7 +121,7 @@ describe('serialize', () => {
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 99 } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 'red' } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
   })
-  it('round-trips figures with their style (an additive field: still schema 2)', () => {
+  it('round-trips figures with their style (an additive field)', () => {
     const save = createEmptySave()
     save.workshop.bricks.push({ id: 'f', p: 'minifig', x: 0, y: 0, z: 0, r: 2, c: 21, fig: figPreset('police') })
     save.blueprints.push({
@@ -151,13 +155,13 @@ describe('serialize', () => {
     expect(out.workshop.bricks).toEqual([brick])
   })
 
-  describe('sharing fields (optional, additive: folded into the next schema bump)', () => {
+  describe('sharing fields', () => {
     const base = { schemaVersion: SCHEMA_VERSION, blueprints: [], city: {}, workshop: {} }
     const template = {
       id: 'shared_1', name: { vi: 'Xe', en: 'Xe' }, difficulty: 1, kind: 'vehicle', tags: [], baseplate: { w: 8, d: 8 },
       bricks: [{ id: 'shared_1-0', p: 'minifig', x: 0, y: 0, z: 0, r: 0, c: 0, fig: figPreset('chef') }], steps: [[0]],
     }
-    it('fills in the defaults for an older save', () => {
+    it('fills in the defaults for a save without them', () => {
       const out = migrate(base)
       expect(out.sharedTemplates).toEqual([])
       expect(out.mazes).toEqual([])
@@ -166,7 +170,7 @@ describe('serialize', () => {
     it('round-trips shared templates, mazes and challenges', () => {
       const save = createEmptySave()
       save.sharedTemplates = [template as never]
-      save.mazes = [{ id: 'maze_1', name: 'm', w: 7, h: 7, walls: ['0,0'], entry: null, exit: null, coins: [], wallColor: 6, createdAt: 1, updatedAt: 1 }]
+      save.mazes = [createEmptyMaze(7, 7, { id: 'maze_1', name: 'm', now: 1 })]
       save.mazeChallenges = { maze_1: { timeMs: 4200 }, maze_2: { timeMs: 900, from: 'An' } }
       expect(importSave(exportSave(save))).toEqual(save)
     })
@@ -180,14 +184,140 @@ describe('serialize', () => {
           { ...template, id: 'odd_steps', steps: [5] }, // a shape validateTemplate does not expect
         ],
         mazes: [{ id: 'm' }, 'maze', null],
-        mazeChallenges: { a: { timeMs: 10 }, b: { timeMs: -1 }, c: 'fast', d: { timeMs: 5, from: 7 }, e: { timeMs: NaN } },
+        mazeChallenges: {
+          a: { timeMs: 10 }, b: { timeMs: -1 }, c: 'fast', d: { timeMs: 5, from: 7 }, e: { timeMs: NaN },
+          constructor: { timeMs: 3 },
+        },
       })
       const { fig: _fig, ...plain } = template.bricks[0]
       void _fig
       expect(out.sharedTemplates).toEqual([template, { ...template, bricks: [plain] }])
-      expect(out.mazes).toEqual([{ id: 'm' }])
+      expect(out.mazes).toEqual([]) // no size: not a maze
       expect(out.mazeChallenges).toEqual({ a: { timeMs: 10 }, d: { timeMs: 5 } })
       expect(migrate({ ...base, sharedTemplates: 'x', mazes: {}, mazeChallenges: [] })).toMatchObject({ sharedTemplates: [], mazes: [], mazeChallenges: {} })
     })
+  })
+})
+
+describe('serialize: mazes (schema 3)', () => {
+  /** A valid 7x7 maze: solid outer ring with an entry on the west edge, an exit on the east edge, one wall and one coin inside. */
+  function maze(extra: Partial<Maze> = {}): Maze {
+    let m = createEmptyMaze(7, 7, { id: 'm1', name: 'Mê cung 1', now: 5 })
+    m = toggleWall(m, { cx: 2, cz: 2 }, true)
+    m = toggleCoin(m, { cx: 3, cz: 3 })
+    const a = setEntry(m, { cx: 0, cz: 1 })
+    if ('error' in a) throw new Error(a.error)
+    const b = setExit(a.maze, { cx: 6, cz: 5 })
+    if ('error' in b) throw new Error(b.error)
+    return { ...b.maze, ...extra }
+  }
+  const ring = (w: number, h: number) => {
+    const out: string[] = []
+    for (let cz = 0; cz < h; cz++) for (let cx = 0; cx < w; cx++) if (cx === 0 || cz === 0 || cx === w - 1 || cz === h - 1) out.push(`${cx},${cz}`)
+    return out
+  }
+
+  it('loads a v2 save without mazes, adding empty maze fields', () => {
+    const v2: Record<string, unknown> = { ...createEmptySave(), schemaVersion: 2 }
+    for (const k of ['sharedTemplates', 'mazes', 'mazeRecords', 'mazeChallenges']) delete v2[k]
+    const out = migrate(structuredClone(v2))
+    expect(out.schemaVersion).toBe(3)
+    expect(out).toMatchObject({ sharedTemplates: [], mazes: [], mazeRecords: {}, mazeChallenges: {} })
+    expect(importSave(JSON.stringify({ app: 'bricktown', ...v2 }))).toEqual(createEmptySave())
+  })
+
+  it('keeps what a late v2 save already had (shared mazes, challenges) through the migration', () => {
+    const v2 = { ...createEmptySave(), schemaVersion: 2, mazes: [maze({ id: 'shared' })], mazeChallenges: { shared: { timeMs: 5000, from: 'An' } } }
+    const { mazeRecords: _r, ...withoutRecords } = v2
+    void _r
+    const out = migrate(structuredClone(withoutRecords))
+    expect(out.mazes).toEqual([maze({ id: 'shared' })])
+    expect(out.mazeChallenges).toEqual({ shared: { timeMs: 5000, from: 'An' } })
+    expect(out.mazeRecords).toEqual({})
+  })
+
+  it('round-trips mazes and records', () => {
+    const save = createEmptySave()
+    const { floorColor: _f, ...noFloor } = maze({ id: 'm2', templateId: 'heart', wallColor: 29 })
+    void _f
+    save.mazes.push(maze(), noFloor)
+    save.mazeRecords = { m1: { timeMs: 12345, stars: 3, coins: 2 }, 'tpl:easy': { timeMs: 900, stars: 1, coins: 0 } }
+    expect(importSave(exportSave(save))).toEqual(save)
+  })
+
+  it('a maze imported from a share link survives a save and a reload', () => {
+    const save = createEmptySave()
+    const pkg = decodeShare(encodeShare(buildMazePackage(maze({ id: 'theirs', name: 'Của bạn' }), { timeMs: 9000, stars: 3 })))
+    if (isShareError(pkg)) throw new Error(pkg.error)
+    const plan = planImport(save, pkg)
+    const imported = applyImport(save, plan)
+    expect(imported.mazes).toHaveLength(1)
+    const reloaded = importSave(exportSave(imported))
+    expect(reloaded.mazes).toEqual(imported.mazes)
+    expect(reloaded.mazeChallenges).toEqual(imported.mazeChallenges)
+    expect(reloaded.mazeRecords).toEqual({})
+  })
+
+  it('drops mazes it cannot use and cleans up the fields of the rest', () => {
+    const out = migrate({
+      ...createEmptySave(),
+      mazes: [
+        maze(),
+        'nope',
+        { ...maze({ id: 'even' }), w: 8 },
+        { ...maze({ id: 'big' }), h: 23 },
+        maze({ id: '' }),
+        maze({ id: 'm1', name: 'duplicate' }),
+        {
+          ...maze({ id: 'm3' }),
+          name: 7,
+          walls: ['0,0', 'x', '9,9', 3, '-1,2', '1.5,2', '0,0', '2,2'],
+          coins: ['3,3', '99,1', '2,2'],
+          entry: { cx: 'a', cz: 1 },
+          exit: { cx: 6, cz: 40 },
+          wallColor: 99,
+          floorColor: 'red',
+          createdAt: 'yesterday',
+          templateId: 4,
+        },
+      ],
+    })
+    expect(out.mazes.map((m) => m.id)).toEqual(['m1', 'm3'])
+    expect(out.mazes[0]).toEqual(maze())
+    const m3 = out.mazes[1]
+    expect(m3).toMatchObject({ name: '', coins: ['3,3'], entry: null, exit: null, wallColor: DEFAULT_MAZE_WALL_COLOR, createdAt: 0, updatedAt: 5 })
+    expect(new Set(m3.walls)).toEqual(new Set([...ring(7, 7), '2,2'])) // the door gaps are walled up again
+    expect(m3.walls).toHaveLength(new Set(m3.walls).size)
+    expect('floorColor' in m3).toBe(false)
+    expect('templateId' in m3).toBe(false)
+  })
+
+  it('drops doors that break the maze rules, walling their gap', () => {
+    const doorsAt = (entry: object | null, exit: object | null, extra: Partial<Maze> = {}) =>
+      migrate({ ...createEmptySave(), mazes: [{ ...maze(), ...extra, entry, exit }] }).mazes[0]
+    expect(doorsAt({ cx: 0, cz: 0 }, { cx: 6, cz: 5 }).entry).toBeNull() // corner
+    expect(doorsAt({ cx: 3, cz: 3 }, { cx: 6, cz: 5 }).entry).toBeNull() // inside
+    const same = doorsAt({ cx: 0, cz: 1 }, { cx: 0, cz: 1 })
+    expect(same.entry).toEqual({ cx: 0, cz: 1 })
+    expect(same.exit).toBeNull() // the same cell as the entry
+    expect(same.walls).toContain('6,5') // the old exit gap is wall again
+    const onWall = doorsAt({ cx: 0, cz: 1 }, { cx: 6, cz: 3 }) // (6,3) is part of the solid ring
+    expect(onWall.exit).toBeNull()
+    expect(onWall.walls).toContain('6,5')
+    const coinOnDoor = doorsAt({ cx: 0, cz: 1 }, { cx: 6, cz: 5 }, { coins: ['0,1', '3,3'] })
+    expect(coinOnDoor.coins).toEqual(['3,3'])
+  })
+
+  it('keeps only well-formed records, never prototype keys', () => {
+    const raw = JSON.parse(
+      '{"ok":{"timeMs":1000,"stars":2,"coins":1},"badStars":{"timeMs":1000,"stars":4,"coins":1},' +
+        '"badTime":{"timeMs":-1,"stars":1,"coins":0},"badCoins":{"timeMs":1,"stars":1,"coins":1.5},"notObject":5,' +
+        '"__proto__":{"timeMs":1,"stars":1,"coins":0},"constructor":{"timeMs":1,"stars":1,"coins":0}}',
+    )
+    const out = migrate({ ...createEmptySave(), mazeRecords: raw })
+    expect(out.mazeRecords).toEqual({ ok: { timeMs: 1000, stars: 2, coins: 1 } })
+    expect(Object.keys(out.mazeRecords)).toEqual(['ok'])
+    expect(migrate({ ...createEmptySave(), mazeRecords: [] }).mazeRecords).toEqual({})
+    expect(migrate({ ...createEmptySave(), mazes: {} }).mazes).toEqual([])
   })
 })

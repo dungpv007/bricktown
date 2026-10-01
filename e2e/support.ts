@@ -53,3 +53,39 @@ export const waitForCameraStill = (page: Page) =>
       { message: 'the workshop camera comes to rest' },
     )
     .toBe(true)
+
+interface MazeScreenWindow {
+  __bt: { mazeScreen: { cellToClient: ((cx: number, cz: number) => { x: number; y: number }) | null } }
+}
+
+/**
+ * Waits until the maze editor camera is at rest: two cells project to the same screen pixels over
+ * two rendered frames. The maze counterpart of `waitForCameraStill` (after the framing glide, a
+ * pan or a pinch), instead of fixed sleeps.
+ */
+export const waitForMazeCameraStill = (page: Page) =>
+  expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const screen = (window as unknown as MazeScreenWindow).__bt.mazeScreen
+          const probe = () => {
+            const at = screen.cellToClient
+            if (!at) return null
+            return JSON.stringify([at(0, 0), at(1, 1)].map((p) => [Math.round(p.x), Math.round(p.y)]))
+          }
+          const start = probe()
+          if (!start) return false
+          return new Promise<boolean>((resolve) => {
+            let frames = 0
+            const check = () => {
+              if (probe() !== start) resolve(false)
+              else if (++frames >= 2) resolve(true)
+              else requestAnimationFrame(check)
+            }
+            requestAnimationFrame(check)
+          })
+        }),
+      { message: 'the maze camera comes to rest' },
+    )
+    .toBe(true)
