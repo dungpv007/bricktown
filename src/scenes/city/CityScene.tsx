@@ -4,21 +4,23 @@ import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { addRoads, CELL, footprintCells } from '../../core/city'
-import { clampCell, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
-import { paintRoadLine } from '../../core/roads'
-import type { Blueprint, CityState } from '../../core/types'
-import { createGestureTracker, sampleOf } from '../../input/tapGesture'
+import { clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
+import { paintRoadLine, roadKey } from '../../core/roads'
+import type { Baseplate, Blueprint, CityPlacement, CityState } from '../../core/types'
+import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import BakedMeshes from '../../render/BakedMeshes'
 import { createGhostMaterial } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
-import { useCityEditor, type CityTool } from '../../state/useCityEditor'
+import { useCityEditor } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
 import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
+import PlacementHighlight from './PlacementHighlight'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
 import Roads from './Roads'
+import { useCityGestures, type CityPick, type GroundPoint } from './useCityGestures'
 
 const SKY = '#87ceeb'
 const SHADOW_MAP_SIZE = 2048
@@ -95,13 +97,13 @@ function contentCenter(city: CityState, blueprints: Blueprint[]): [number, numbe
 
 const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE }
 const PAN_MOUSE = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
-// Road tool: one finger / the left button paints (no mapping = controls ignore it), so the camera
+// Road mode: one finger / the left button paints (no mapping = controls ignore it), so the camera
 // moves with two fingers / the right button.
 const PAINT_TOUCHES = { TWO: THREE.TOUCH.DOLLY_PAN }
 const PAINT_MOUSE = { MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }
 
 /** Top-down-ish camera with map controls (one-finger pan, pinch zoom, two-finger rotate), kept over the city. */
-function CameraRig({ size, tool }: { size: number; tool: CityTool }) {
+function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
   const [start] = useState(() => {
     const { city, blueprints } = useGame.getState().data
     const [x, z] = contentCenter(city, blueprints)
@@ -129,7 +131,6 @@ function CameraRig({ size, tool }: { size: number; tool: CityTool }) {
     t.z = z
   }, [span])
 
-  const painting = tool === 'road'
   return (
     <>
       <PerspectiveCamera makeDefault position={start.position} fov={45} near={1} far={2000} />
@@ -142,8 +143,8 @@ function CameraRig({ size, tool }: { size: number; tool: CityTool }) {
         minDistance={25}
         maxDistance={340}
         maxPolarAngle={1.2}
-        touches={painting ? PAINT_TOUCHES : PAN_TOUCHES}
-        mouseButtons={painting ? PAINT_MOUSE : PAN_MOUSE}
+        touches={roadMode ? PAINT_TOUCHES : PAN_TOUCHES}
+        mouseButtons={roadMode ? PAINT_MOUSE : PAN_MOUSE}
         onChange={keepOverCity}
       />
     </>
@@ -162,8 +163,12 @@ function FootprintMarker({ cx, cz, cw, cd, color, opacity }: { cx: number; cz: n
 
 const ghostMatrix = new THREE.Matrix4()
 
-/** Preview of the model the place tool would drop, tinted green (fits) or red (does not). */
-function PlacementGhost({ source, plan, blueprints }: { source: string; plan: PlacementPlan; blueprints: Blueprint[] }) {
+/**
+ * Preview of a model where it would go (a quick-place under the mouse, a Kho card or a placement
+ * being dragged), tinted green (fits) or red (does not). A model nothing can draw shows only its
+ * footprint.
+ */
+function PlacementGhost({ source, plan, blueprints, sizeOf }: { source: string; plan: PlacementPlan; blueprints: Blueprint[]; sizeOf: (source: string) => Baseplate }) {
   const resolved = useMemo(() => resolveRenderable(source, { blueprints }), [source, blueprints])
   const baked = resolved?.baked
   const material = useMemo(() => createGhostMaterial(), [])
@@ -184,74 +189,118 @@ function PlacementGhost({ source, plan, blueprints }: { source: string; plan: Pl
     )
   }, [plan, resolved])
 
-  if (!resolved || !baked) return null
-  const { cw, cd } = footprintCells(resolved.baseplate, plan.rot)
+  const { cw, cd } = footprintCells(resolved?.baseplate ?? sizeOf(source), plan.rot)
   return (
     <>
       <FootprintMarker cx={plan.cx} cz={plan.cz} cw={cw} cd={cd} color={valid ? VALID : INVALID} opacity={0.35} />
-      <group ref={group}>
-        <BakedMeshes baked={baked} material={material} />
-      </group>
+      {baked && (
+        <group ref={group}>
+          <BakedMeshes baked={baked} material={material} />
+        </group>
+      )}
     </>
   )
 }
 
-const samePlan = (a: PlacementPlan | null, b: PlacementPlan | null) =>
-  a === b || (a !== null && b !== null && a.cx === b.cx && a.cz === b.cz && a.rot === b.rot && a.error === b.error)
+/** The ghost on screen: which model, where. */
+interface Preview {
+  source: string
+  plan: PlacementPlan
+}
+
+const samePreview = (a: Preview | null, b: Preview | null) =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.source === b.source &&
+    a.plan.cx === b.plan.cx &&
+    a.plan.cz === b.plan.cz &&
+    a.plan.rot === b.plan.rot &&
+    a.plan.error === b.plan.error)
+
+/** A placement being dragged: which one, and the offset from the finger to its footprint centre. */
+interface Move {
+  placement: CityPlacement
+  dx: number
+  dz: number
+  /** Where it would land; null while the finger is off the ground. */
+  plan: PlacementPlan | null
+}
+
+/** A road stroke in progress: painting an L from `from` to `to`, or erasing every cell passed over. */
+type Stroke = { kind: 'paint'; from: Cell; to: Cell } | { kind: 'erase'; last: Cell; keys: Set<string> }
 
 interface HitBox {
   id: string
   box: THREE.Box3
 }
 
+const rayHit = new THREE.Vector3()
+
 function CityWorld() {
   const city = useGame((s) => s.data.city)
   const blueprints = useGame((s) => s.data.blueprints)
-  const tool = useCityEditor((s) => s.tool)
+  const roadMode = useCityEditor((s) => s.roadMode)
   const selectedSource = useCityEditor((s) => s.selectedSource)
   const selectedPlacementId = useCityEditor((s) => s.selectedPlacementId)
+  const errorSeq = useCityEditor((s) => s.errorSeq)
   const el = useThree((s) => s.gl.domElement)
   const getThree = useThree((s) => s.get)
 
   const sizeOf = useMemo(() => makeSizeOf({ blueprints }), [blueprints])
 
-  // Road being dragged: shown merged into the real roads so the auto-tiling previews live.
-  const [paint, setPaint] = useState<{ from: Cell; to: Cell } | null>(null)
-  const displayRoads = useMemo(() => {
-    if (!paint) return city.roads
-    const keys = paintRoadLine([], clampCell(paint.from, city.size), clampCell(paint.to, city.size))
-    return addRoads(city, keys, sizeOf).roads
-  }, [paint, city, sizeOf])
-
-  // Place-tool preview at the hovered / touched point.
-  const hover = useRef<{ x: number; z: number } | null>(null)
-  const [plan, setPlanState] = useState<PlacementPlan | null>(null)
-  const planRef = useRef<PlacementPlan | null>(null)
-  const setPlan = useCallback((next: PlacementPlan | null) => {
-    if (samePlan(planRef.current, next)) return
-    planRef.current = next
-    setPlanState(next)
+  // Road being dragged: shown merged into (or cut out of) the real roads so the auto-tiling previews live.
+  const [stroke, setStrokeState] = useState<Stroke | null>(null)
+  const strokeRef = useRef<Stroke | null>(null)
+  const setStroke = useCallback((next: Stroke | null) => {
+    strokeRef.current = next
+    setStrokeState(next)
   }, [])
-  const updatePlan = useCallback(
-    (point: { x: number; z: number } | null) => {
-      hover.current = point
-      const { tool: t, selectedSource: source } = useCityEditor.getState()
-      if (!point || t !== 'place' || source === null) {
-        setPlan(null)
+  const displayRoads = useMemo(() => {
+    if (!stroke) return city.roads
+    if (stroke.kind === 'erase') return city.roads.filter((k) => !stroke.keys.has(k))
+    const keys = paintRoadLine([], clampCell(stroke.from, city.size), clampCell(stroke.to, city.size))
+    return addRoads(city, keys, sizeOf).roads
+  }, [stroke, city, sizeOf])
+
+  // The ghost: stored only when it changes, so pointer moves within one cell re-render nothing.
+  const [preview, setPreviewState] = useState<Preview | null>(null)
+  const previewRef = useRef<Preview | null>(null)
+  const setPreview = useCallback((next: Preview | null) => {
+    if (samePreview(previewRef.current, next)) return
+    previewRef.current = next
+    setPreviewState(next)
+  }, [])
+
+  /** Ghost of a new placement of `source` where a tap / drop at `point` would put it (facing a road). */
+  const showQuickPlace = useCallback(
+    (point: GroundPoint | null, source: string | null) => {
+      if (!point || source === null) {
+        setPreview(null)
         return
       }
       const { data } = useGame.getState()
-      setPlan(planPlacement(data.city, source, point.x, point.z, makeSizeOf(data)))
+      setPreview({ source, plan: planPlacement(data.city, source, point.x, point.z, makeSizeOf(data)) })
     },
-    [setPlan],
+    [setPreview],
   )
-  // The city or the source changed under a visible ghost: re-check it.
+  // Mouse hover over the ground previews a quick-place of the picked Kho card.
+  const hover = useRef<GroundPoint | null>(null)
+  const updateHover = useCallback(
+    (point: GroundPoint | null) => {
+      hover.current = point
+      const { roadMode: road, selectedSource: source } = useCityEditor.getState()
+      showQuickPlace(road ? null : point, source)
+    },
+    [showQuickPlace],
+  )
+  // The city or the source changed under a visible hover ghost: re-check it.
   useEffect(() => {
-    if (hover.current) updatePlan(hover.current)
-  }, [city, tool, selectedSource, blueprints, updatePlan])
+    if (hover.current) updateHover(hover.current)
+  }, [city, roadMode, selectedSource, blueprints, updateHover])
 
   // Tap targets: footprint x model height boxes (cheaper and easier to hit than triangles). Placements
-  // that cannot be drawn get their placeholder block's box, so the erase tool can still remove them.
+  // that cannot be drawn get their placeholder block's box, so they can still be selected and deleted.
   const hitBoxes = useMemo<HitBox[]>(() => {
     const heights = new Map<string, number>()
     const heightOf = (source: string) => {
@@ -273,144 +322,151 @@ function CityWorld() {
     hitBoxesRef.current = hitBoxes
   }, [hitBoxes])
 
-  useEffect(() => {
-    const raycaster = new THREE.Raycaster()
-    const ndc = new THREE.Vector2()
-    const hit = new THREE.Vector3()
-    const gestures = createGestureTracker()
-    /** The gesture in progress started with a mouse (its hover ghost survives a camera drag). */
-    let mouseGesture = false
-    let painting: { id: number; from: Cell; to: Cell } | null = null
-
-    const aim = (e: PointerEvent) => {
+  const raycaster = useMemo(() => new THREE.Raycaster(), [])
+  const pick = useCallback(
+    (x: number, y: number): CityPick => {
       const rect = el.getBoundingClientRect()
-      ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1)
+      const ndc = new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1)
       raycaster.setFromCamera(ndc, getThree().camera)
-    }
-    const groundPoint = (e: PointerEvent): { x: number; z: number } | null => {
-      aim(e)
-      const p = raycaster.ray.intersectPlane(GROUND_PLANE, hit)
-      return p ? { x: p.x, z: p.z } : null
-    }
-    const placementUnder = (e: PointerEvent): string | null => {
-      aim(e)
-      let best: string | null = null
+      let placementId: string | null = null
       let bestDist = Infinity
       for (const { id, box } of hitBoxesRef.current) {
-        const p = raycaster.ray.intersectBox(box, hit)
+        const p = raycaster.ray.intersectBox(box, rayHit)
         if (!p) continue
         const d = p.distanceToSquared(raycaster.ray.origin)
         if (d < bestDist) {
           bestDist = d
-          best = id
+          placementId = id
         }
       }
-      return best
-    }
-    const stopPainting = () => {
-      painting = null
-      setPaint(null)
-    }
+      const hit = raycaster.ray.intersectPlane(GROUND_PLANE, rayHit)
+      const point = hit ? { x: hit.x, z: hit.z } : null
+      const span = useGame.getState().data.city.size * CELL
+      const inside = point !== null && point.x >= 0 && point.z >= 0 && point.x < span && point.z < span
+      return { placementId, point, inside }
+    },
+    [el, getThree, raycaster],
+  )
 
-    const onDown = (e: PointerEvent) => {
-      if (!gestures.down(sampleOf(e))) {
-        // Second finger: this is a pinch / rotate, not a tap or a road.
-        stopPainting()
-        updatePlan(null)
-        return
-      }
-      mouseGesture = e.pointerType === 'mouse'
-      if (painting) stopPainting() // left over from a gesture whose release was lost
-      if (e.button !== 0) return // only the primary button edits; others move the camera
-      const point = groundPoint(e)
-      const { tool: t } = useCityEditor.getState()
-      if (t === 'road' && point) {
-        const cell = pointToCell(point.x, point.z)
-        painting = { id: e.pointerId, from: cell, to: cell }
-        setPaint({ from: cell, to: cell })
-      } else if (t === 'place') {
-        updatePlan(point)
-      }
-    }
+  // The placement being dragged: hidden from the city while its ghost follows the finger.
+  const moveRef = useRef<Move | null>(null)
+  const [movingId, setMovingId] = useState<string | null>(null)
 
-    const onMove = (e: PointerEvent) => {
-      if (painting && e.pointerId === painting.id) {
-        const point = groundPoint(e)
-        if (!point) return
-        const cell = pointToCell(point.x, point.z)
-        if (cell.cx === painting.to.cx && cell.cz === painting.to.cz) return
-        painting = { ...painting, to: cell }
-        setPaint({ from: painting.from, to: cell })
-        return
-      }
-      // Mouse hover moves the ghost; a held button means the camera is being dragged.
-      if (e.pointerType === 'mouse' && e.buttons === 0) updatePlan(e.target === el ? groundPoint(e) : null)
-    }
-
-    const onUp = (e: PointerEvent) => {
-      const gesture = gestures.up(sampleOf(e))
-      if (!gesture.ended) return
-      if (painting && painting.id === e.pointerId) {
-        const { from, to } = painting
-        stopPainting()
-        if (!gesture.multi) useCityEditor.getState().paintRoad(from, to)
-        return
-      }
-      if (!gesture.tap) {
-        if (!mouseGesture) updatePlan(null) // a touch ghost does not follow the camera drag
-        return
-      }
-      const ed = useCityEditor.getState()
-      const placementId = placementUnder(e)
-      if (placementId) {
-        ed.tapPlacement(placementId)
-        updatePlan(null)
-        return
-      }
-      const point = groundPoint(e)
-      if (!point) return
-      ed.tapGround(point.x, point.z)
+  useCityGestures(el, {
+    pick,
+    roadMode: () => useCityEditor.getState().roadMode,
+    setPan: (on) => {
+      const controls = getThree().controls as MapControlsImpl | null
+      if (controls) controls.enablePan = on
+    },
+    tapPlacement: (id) => useCityEditor.getState().selectPlacement(id),
+    tapGround: ({ x, z }) => {
+      useCityEditor.getState().tapGround(x, z)
       // The ghost would now sit inside the new model; hide it until the pointer moves again.
-      if (useCityEditor.getState().lastError === null) updatePlan(null)
-    }
+      if (useCityEditor.getState().lastError === null) updateHover(null)
+    },
+    tapOutside: () => useCityEditor.getState().selectPlacement(null),
+    dragStart: (id, from) => {
+      const placement = useGame.getState().data.city.placements.find((p) => p.id === id)
+      if (!placement) return
+      const c = placementCenter(placement, sizeOf(placement.source))
+      moveRef.current = { placement, dx: c.x - from.x, dz: c.z - from.z, plan: null }
+      useCityEditor.getState().selectPlacement(id)
+      setMovingId(id)
+    },
+    dragMove: (point) => {
+      const m = moveRef.current
+      if (!m) return
+      if (!point) {
+        m.plan = null
+        setPreview(null)
+        return
+      }
+      const { data } = useGame.getState()
+      m.plan = planMove(data.city, m.placement, point.x + m.dx, point.z + m.dz, makeSizeOf(data))
+      setPreview({ source: m.placement.source, plan: m.plan })
+    },
+    dragEnd: (drop) => {
+      const m = moveRef.current
+      moveRef.current = null
+      setMovingId(null)
+      setPreview(null)
+      // A rejected drop leaves it where it was; the store's error shakes the highlight.
+      if (drop && m?.plan) useCityEditor.getState().movePlacement(m.placement.id, m.plan.cx, m.plan.cz)
+    },
+    roadStart: (point) => {
+      const cell = pointToCell(point.x, point.z)
+      const erase = useCityEditor.getState().roadTool === 'erase'
+      setStroke(erase ? { kind: 'erase', last: cell, keys: new Set([roadKey(cell.cx, cell.cz)]) } : { kind: 'paint', from: cell, to: cell })
+    },
+    roadMove: (point) => {
+      const s = strokeRef.current
+      if (!s) return
+      const cell = pointToCell(point.x, point.z)
+      if (s.kind === 'paint') {
+        if (cell.cx !== s.to.cx || cell.cz !== s.to.cz) setStroke({ ...s, to: cell })
+      } else if (cell.cx !== s.last.cx || cell.cz !== s.last.cz) {
+        // Every cell between two samples too, so a fast finger leaves no gaps.
+        setStroke({ kind: 'erase', last: cell, keys: new Set(paintRoadLine([...s.keys], s.last, cell)) })
+      }
+    },
+    roadEnd: (apply) => {
+      const s = strokeRef.current
+      setStroke(null)
+      if (!apply || !s) return
+      const ed = useCityEditor.getState()
+      if (s.kind === 'paint') ed.paintRoad(s.from, s.to)
+      else ed.eraseRoads([...s.keys])
+    },
+    hover: updateHover,
+  })
 
-    const onCancel = (e: PointerEvent) => {
-      gestures.cancel(e.pointerId)
-      if (painting?.id === e.pointerId) stopPainting()
+  // Kho cards dragged onto the map: a ghost under the finger, placed (and selected) on release.
+  useEffect(() => {
+    const groundAt = (p: ClientPoint): GroundPoint | null => {
+      if (document.elementFromPoint(p.x, p.y) !== el) return null
+      const hit = pick(p.x, p.y)
+      return hit.inside ? hit.point : null
     }
-    const onLeave = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse') updatePlan(null)
-    }
+    return registerPaletteDropTarget({
+      hover: (p) => {
+        const ed = useCityEditor.getState()
+        if (!p) ed.setDraggedSource(null) // cancelled
+        showQuickPlace(p && groundAt(p), ed.draggedSource)
+      },
+      drop: (p) => {
+        const ed = useCityEditor.getState()
+        const source = ed.draggedSource
+        const point = groundAt(p)
+        ed.setDraggedSource(null)
+        setPreview(null)
+        if (source !== null && point) ed.dropSource(source, point.x, point.z)
+      },
+    })
+  }, [el, pick, setPreview, showQuickPlace])
 
-    el.addEventListener('pointerdown', onDown)
-    el.addEventListener('pointerleave', onLeave)
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp, true)
-    window.addEventListener('pointercancel', onCancel, true)
-    return () => {
-      el.removeEventListener('pointerdown', onDown)
-      el.removeEventListener('pointerleave', onLeave)
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp, true)
-      window.removeEventListener('pointercancel', onCancel, true)
-    }
-  }, [el, getThree, updatePlan])
-
-  const selected = useMemo(() => {
-    const p = city.placements.find((q) => q.id === selectedPlacementId)
-    if (!p) return null
-    return { ...p, ...footprintCells(sizeOf(p.source), p.rot) }
-  }, [city.placements, selectedPlacementId, sizeOf])
+  const shown = useMemo(
+    () => (movingId === null ? city.placements : city.placements.filter((p) => p.id !== movingId)),
+    [city.placements, movingId],
+  )
+  const selected = useMemo(
+    () => (selectedPlacementId === movingId ? null : (city.placements.find((p) => p.id === selectedPlacementId) ?? null)),
+    [city.placements, selectedPlacementId, movingId],
+  )
+  const selectedCells = selected && footprintCells(sizeOf(selected.source), selected.rot)
 
   return (
     <>
-      <CameraRig size={city.size} tool={tool} />
+      <CameraRig size={city.size} roadMode={roadMode} />
       <Lights size={city.size} />
       <CityGround size={city.size} />
       <Roads roads={displayRoads} />
-      <Placements placements={city.placements} blueprints={blueprints} />
-      {selected && <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selected.cw} cd={selected.cd} color={SELECTED} opacity={0.55} />}
-      {plan && selectedSource && <PlacementGhost source={selectedSource} plan={plan} blueprints={blueprints} />}
+      <Placements placements={shown} blueprints={blueprints} />
+      {selected && selectedCells && (
+        <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selectedCells.cw} cd={selectedCells.cd} color={SELECTED} opacity={0.55} />
+      )}
+      <PlacementHighlight placement={selected} blueprints={blueprints} sizeOf={sizeOf} shakeKey={errorSeq} />
+      {preview && <PlacementGhost source={preview.source} plan={preview.plan} blueprints={blueprints} sizeOf={sizeOf} />}
     </>
   )
 }

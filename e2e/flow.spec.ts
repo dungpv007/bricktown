@@ -51,7 +51,7 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
   const box = (await canvas.boundingBox())!
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
-  await page.getByTestId('city-tool-road').click()
+  await page.getByTestId('city-road-mode').click()
   // The canvas may still be sizing itself right after it appears: repeat the (idempotent) drag until it paints.
   await expect
     .poll(async () => {
@@ -63,6 +63,7 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
       return (await liveData(page)).city.roads.length
     })
     .toBeGreaterThan(3)
+  await page.getByTestId('city-road-mode').click() // back to selecting and placing
   await page.getByTestId(`src-${treeId}`).click()
   await expect
     .poll(async () => {

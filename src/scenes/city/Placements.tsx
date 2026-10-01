@@ -83,13 +83,13 @@ function SourceGroup({ source, placements }: { source: RenderableSource; placeme
 }
 
 // Shared app-wide (also used by the drive scene): never disposed.
-const placeholderGeometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)
+export const placeholderGeometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)
 const placeholderMaterial = new THREE.MeshStandardMaterial({ color: '#9aa0a6', roughness: 0.8, metalness: 0 })
 const NO_ROTATION = new THREE.Quaternion()
 const tmpPos = new THREE.Vector3()
 const tmpScale = new THREE.Vector3()
 /** Inset so neighbouring placeholders read as separate blocks. */
-const PLACEHOLDER_GAP = 0.5
+export const PLACEHOLDER_GAP = 0.5
 
 /** Grey blocks for placements whose blueprint is gone or broken, so they stay visible and erasable. */
 function Placeholders({ placements, sizeOf }: { placements: CityPlacement[]; sizeOf: (source: string) => Baseplate }) {

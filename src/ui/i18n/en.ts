@@ -95,7 +95,7 @@ export const en: Record<keyof typeof vi, string> = {
   confirmReplaceBuild: 'Drop the model you are building and start this one?',
   deleteFailed: 'Could not delete',
   cityToolRoad: 'Roads',
-  cityToolPlace: 'Place',
+  cityRoadEraser: 'Erase roads',
   cityDrawer: 'Library',
   cityEdit: 'Edit in workshop',
   drivePick: 'Pick a car to drive',

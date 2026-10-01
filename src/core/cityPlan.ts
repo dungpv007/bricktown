@@ -83,9 +83,41 @@ export function placementCenter(p: Pick<CityPlacement, 'cx' | 'cz' | 'rot'>, bas
   return { x: (p.cx + cw / 2) * CELL, z: (p.cz + cd / 2) * CELL }
 }
 
-/** The city without the road at (cx, cz); null when there is no road there. */
-export function removeRoad(city: CityState, cx: number, cz: number): CityState | null {
-  const key = roadKey(cx, cz)
-  if (!city.roads.includes(key)) return null
-  return { ...city, roads: city.roads.filter((k) => k !== key) }
+/** The city without those of `keys` that are roads; null when none of them is. */
+export function removeRoads(city: CityState, keys: Iterable<string>): CityState | null {
+  const gone = new Set(keys)
+  const roads = city.roads.filter((k) => !gone.has(k))
+  return roads.length === city.roads.length ? null : { ...city, roads }
+}
+
+/**
+ * Where moving `placement` so its footprint is centred on world point (x, z) puts it: same rotation,
+ * slid inside the grid; `error` says why it cannot go there (the placement itself is not in the way).
+ */
+export function planMove(city: CityState, placement: CityPlacement, x: number, z: number, sizeOf: SizeOf): PlacementPlan {
+  const { cw, cd } = footprintCells(sizeOf(placement.source), placement.rot)
+  const o = footprintOrigin(x, z, cw, cd)
+  const cx = Math.max(0, Math.min(city.size - cw, o.cx))
+  const cz = Math.max(0, Math.min(city.size - cd, o.cz))
+  const error = canPlaceInCity(city, { ...placement, cx, cz }, sizeOf, placement.id)
+  return { cx, cz, rot: placement.rot, error }
+}
+
+/**
+ * Where a copy of `placement` (same source and rotation) goes: the first free spot right next to it,
+ * trying +X, -X, +Z, -Z, then one footprint further out in the same order, then the four corners.
+ * Null when none of them fits.
+ */
+export function duplicateCell(city: CityState, placement: CityPlacement, sizeOf: SizeOf): Cell | null {
+  const { cw, cd } = footprintCells(sizeOf(placement.source), placement.rot)
+  const steps: Array<[number, number]> = [
+    [1, 0], [-1, 0], [0, 1], [0, -1],
+    [2, 0], [-2, 0], [0, 2], [0, -2],
+    [1, 1], [-1, 1], [1, -1], [-1, -1],
+  ]
+  for (const [sx, sz] of steps) {
+    const cell = { cx: placement.cx + sx * cw, cz: placement.cz + sz * cd }
+    if (canPlaceInCity(city, { ...placement, id: '__copy__', ...cell }, sizeOf) === null) return cell
+  }
+  return null
 }

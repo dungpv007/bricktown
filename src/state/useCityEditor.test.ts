@@ -11,13 +11,13 @@ const at = (cx: number, cz: number): [number, number] => [(cx + 0.5) * CELL, (cz
 
 beforeEach(() => {
   useGame.setState({ data: createEmptySave() })
-  useCityEditor.setState({ tool: 'place', selectedSource: null, errorSeq: 0 })
+  useCityEditor.setState({ selectedSource: null, errorSeq: 0 })
   ed().reset()
 })
 
 describe('useCityEditor roads', () => {
   it('paints an L-shaped road and undoes it in one step', () => {
-    ed().setTool('road')
+    ed().setRoadMode(true)
     ed().paintRoad({ cx: 1, cz: 1 }, { cx: 3, cz: 2 })
     expect(new Set(city().roads)).toEqual(new Set(['1,1', '2,1', '3,1', '3,2']))
     expect(ed().canUndo).toBe(true)
@@ -35,31 +35,46 @@ describe('useCityEditor roads', () => {
     expect(ed().errorSeq).toBe(seq + 1)
   })
 
-  it('a road-tool tap paints one cell; the erase tool removes it', () => {
-    ed().setTool('road')
-    ed().tapGround(...at(5, 6))
-    expect(city().roads).toEqual(['5,6'])
-    ed().setTool('erase')
-    ed().tapGround(...at(5, 6))
-    expect(city().roads).toEqual([])
+  it('erases the dragged-over road cells in one undo step; nothing to erase is rejected', () => {
+    ed().paintRoad({ cx: 1, cz: 1 }, { cx: 4, cz: 1 })
+    ed().eraseRoads(['2,1', '3,1', '9,9'])
+    expect(new Set(city().roads)).toEqual(new Set(['1,1', '4,1']))
+    const seq = ed().errorSeq
+    ed().eraseRoads(['9,9'])
+    expect(ed().errorSeq).toBe(seq + 1)
+    ed().undo()
+    expect(city().roads).toHaveLength(4)
+    ed().redo()
+    expect(city().roads).toHaveLength(2)
   })
 })
 
 describe('useCityEditor placements', () => {
-  it('selecting a source switches to the place tool; a tap places it centred on the point', () => {
-    ed().setTool('road')
+  const placed = () => city().placements
+
+  it('a ground tap quick-places the picked source centred on the point and selects it', () => {
     ed().selectSource('tpl:house_small')
-    expect(ed().tool).toBe('place')
     ed().tapGround(10 * CELL, 10 * CELL) // 16x16 -> 2x2 cells centred on the corner point
-    expect(city().placements).toHaveLength(1)
-    expect(city().placements[0]).toMatchObject({ source: 'tpl:house_small', cx: 9, cz: 9, rot: 2 })
+    expect(placed()).toHaveLength(1)
+    expect(placed()[0]).toMatchObject({ source: 'tpl:house_small', cx: 9, cz: 9, rot: 2 })
+    expect(ed().selectedPlacementId).toBe(placed()[0].id)
+  })
+
+  it('picking the picked card again unpicks it; without a source a ground tap only deselects', () => {
+    ed().selectSource('tpl:tree')
+    ed().selectSource('tpl:tree')
+    expect(ed().selectedSource).toBeNull()
+    ed().dropSource('tpl:tree', ...at(4, 4))
+    expect(ed().selectedPlacementId).not.toBeNull()
+    ed().tapGround(...at(8, 8))
+    expect(placed()).toHaveLength(1)
+    expect(ed().selectedPlacementId).toBeNull()
   })
 
   it('turns the front of a new placement towards a road', () => {
     ed().paintRoad({ cx: 5, cz: 3 }, { cx: 12, cz: 3 })
-    ed().selectSource('tpl:house_small')
-    ed().tapGround(10 * CELL, 5 * CELL)
-    expect(city().placements[0]).toMatchObject({ cx: 9, cz: 4, rot: 0 })
+    ed().dropSource('tpl:house_small', 10 * CELL, 5 * CELL)
+    expect(placed()[0]).toMatchObject({ cx: 9, cz: 4, rot: 0 })
   })
 
   it('rejects an overlapping placement without touching history', () => {
@@ -67,43 +82,60 @@ describe('useCityEditor placements', () => {
     ed().tapGround(...at(4, 4))
     const seq = ed().errorSeq
     ed().tapGround(...at(4, 4))
-    expect(city().placements).toHaveLength(1)
+    expect(placed()).toHaveLength(1)
     expect(ed().errorSeq).toBe(seq + 1)
     expect(ed().lastError).toBe('overlap')
     ed().undo()
-    expect(city().placements).toHaveLength(0)
+    expect(placed()).toHaveLength(0)
   })
 
-  it('without a selected source the place tool does nothing on the ground', () => {
-    ed().tapGround(...at(4, 4))
-    expect(city().placements).toHaveLength(0)
-  })
-
-  it('place-tool tap on a placement selects it; rotate and erase act on it', () => {
-    ed().selectSource('tpl:tree')
-    ed().tapGround(...at(4, 4))
-    const id = city().placements[0].id
-    ed().tapPlacement(id)
-    expect(ed().selectedPlacementId).toBe(id)
-
-    ed().setTool('rotate')
+  it('the action bar rotates, duplicates next to it and deletes the selected placement', () => {
+    ed().dropSource('tpl:tree', ...at(4, 4))
+    const [tree] = placed()
+    ed().rotateSelected()
+    expect(placed()[0].rot).toBe((tree.rot + 1) % 4)
+    ed().duplicateSelected()
+    expect(placed()).toHaveLength(2)
+    const copy = placed()[1]
+    expect(copy).toMatchObject({ source: 'tpl:tree', cx: tree.cx + 1, cz: tree.cz, rot: (tree.rot + 1) % 4 })
+    expect(ed().selectedPlacementId).toBe(copy.id)
+    ed().deleteSelected()
+    expect(placed().map((p) => p.id)).toEqual([tree.id])
     expect(ed().selectedPlacementId).toBeNull()
-    const rot = city().placements[0].rot
-    ed().tapPlacement(id)
-    expect(city().placements[0].rot).toBe((rot + 1) % 4)
-
-    ed().setTool('erase')
-    ed().tapPlacement(id)
-    expect(city().placements).toHaveLength(0)
     ed().undo()
     ed().undo()
-    expect(city().placements[0].rot).toBe(rot)
+    ed().undo()
+    expect(placed()[0].rot).toBe(tree.rot)
   })
 
-  it('reset forgets the undo history', () => {
+  it('moves a placement in one undo step; a blocked move leaves it where it was', () => {
+    ed().dropSource('tpl:tree', ...at(4, 4))
+    ed().dropSource('tpl:tree', ...at(8, 8))
+    const [a, b] = placed()
+    ed().movePlacement(a.id, 6, 4)
+    expect(placed()[0]).toMatchObject({ cx: 6, cz: 4 })
+    expect(ed().selectedPlacementId).toBe(a.id)
+    const seq = ed().errorSeq
+    ed().movePlacement(a.id, b.cx, b.cz)
+    expect(placed()[0]).toMatchObject({ cx: 6, cz: 4 })
+    expect(ed().errorSeq).toBe(seq + 1)
+    ed().undo()
+    expect(placed()[0]).toMatchObject({ cx: a.cx, cz: a.cz })
+  })
+
+  it('road mode drops the selection', () => {
+    ed().dropSource('tpl:tree', ...at(4, 4))
+    ed().setRoadMode(true)
+    expect(ed().selectedPlacementId).toBeNull()
+    expect(ed().roadTool).toBe('paint')
+  })
+
+  it('reset forgets the undo history and leaves road mode', () => {
+    ed().setRoadMode(true)
     ed().paintRoad({ cx: 0, cz: 0 }, { cx: 0, cz: 0 })
     ed().reset()
     expect(ed().canUndo).toBe(false)
+    expect(ed().roadMode).toBe(false)
     ed().undo()
     expect(city().roads).toEqual(['0,0'])
   })
@@ -151,10 +183,13 @@ describe('useCityEditor stale sources', () => {
     expect(ed().selectedSource).toBeNull()
   })
 
-  it('the erase tool removes a placement whose source is gone', () => {
+  it('a placement whose source is gone can be selected and deleted, never duplicated', () => {
     useGame.getState().setCity({ size: 48, roads: [], placements: [{ id: 'ghost', source: 'gone', cx: 3, cz: 3, rot: 0 }] })
-    ed().setTool('erase')
-    ed().tapPlacement('ghost')
+    ed().selectPlacement('ghost')
+    ed().duplicateSelected()
+    expect(city().placements).toHaveLength(1)
+    expect(ed().lastError).toBe('nothing')
+    ed().deleteSelected()
     expect(city().placements).toHaveLength(0)
   })
 })
