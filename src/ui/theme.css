@@ -314,6 +314,27 @@
   background: #ffd7d9;
 }
 
+/* Action buttons (selected brick / placement, City size control): half the HUD button size. */
+.bt-actionbar {
+  --bt-act: calc(var(--bt-touch) / 2);
+  gap: calc(4px * var(--bt-s));
+  padding: calc(3px * var(--bt-s));
+  border-radius: calc(var(--bt-radius) / 2);
+}
+
+.bt-actionbar .bt-btn {
+  min-width: var(--bt-act);
+  min-height: var(--bt-act);
+  border-radius: calc(var(--bt-radius) / 2);
+  box-shadow: 0 calc(3px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
+}
+
+.bt-actionbar .bt-icon-btn {
+  width: var(--bt-act);
+  height: var(--bt-act);
+  font-size: calc(16px * var(--bt-s));
+}
+
 @keyframes bt-actionbar-in {
   from { transform: translateX(-24px); opacity: 0; }
 }
@@ -1640,16 +1661,16 @@ form.bt-dialog,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: var(--bt-touch);
-  padding: calc(2px * var(--bt-s)) 0;
-  font-size: calc(22px * var(--bt-s));
+  width: var(--bt-act);
+  padding: calc(1px * var(--bt-s)) 0;
+  font-size: calc(11px * var(--bt-s));
   font-weight: 800;
   line-height: 1.1;
   color: var(--bt-ink);
 }
 
 .bt-city-scale-value > span:first-child {
-  font-size: calc(20px * var(--bt-s));
+  font-size: calc(10px * var(--bt-s));
 }
 
 .bt-city-drive {

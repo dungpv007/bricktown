@@ -188,7 +188,8 @@ async function expectCityActionsFit(page: Page) {
     expect(a.y, `${a.name} on screen`).toBeGreaterThanOrEqual(-1)
     expect(a.x + a.w, `${a.name} on screen`).toBeLessThanOrEqual(r.vw + 1)
     expect(a.y + a.h, `${a.name} on screen`).toBeLessThanOrEqual(r.vh + 1)
-    if (a.button) expect(Math.min(a.w, a.h), `${a.name} is a big touch target`).toBeGreaterThanOrEqual(44)
+    // Action buttons are half the HUD button size (user request): 32px on tablets, 22px on phones.
+    if (a.button) expect(Math.min(a.w, a.h), `${a.name} is still tappable`).toBeGreaterThanOrEqual(22)
   }
   for (let i = 0; i < r.parts.length; i++) {
     for (let j = i + 1; j < r.parts.length; j++) {
