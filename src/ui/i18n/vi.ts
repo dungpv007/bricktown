@@ -25,7 +25,7 @@ export const vi = {
   difficultyEasy: 'Dễ',
   difficultyNormal: 'Thường',
   language: 'Ngôn ngữ',
-  slot: 'Ô lưu',
+  slot: 'Lưu',
   newModel: 'Mô hình mới',
   rotatePart: 'Xoay gạch',
   cantPlace: 'Không đặt được',
