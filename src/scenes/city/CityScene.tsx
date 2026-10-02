@@ -3,6 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
+import { currentCity } from '../../core/cities'
 import { addRoads, CELL, placementCells, scaleOf } from '../../core/city'
 import { cellsOnLine, clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
 import { addRails, eraseRails, eraseRoads } from '../../core/rails'
@@ -206,7 +207,9 @@ function stopGlide(controls: MapControlsImpl) {
 function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
   const viewport = useThree((s) => s.size)
   const [start] = useState(() => {
-    const { city, blueprints } = useGame.getState().data
+    const { data } = useGame.getState()
+    const { blueprints } = data
+    const city = currentCity(data)
     let [x, z] = contentCenter(city, blueprints)
     let distance = startDistance(city, blueprints)
     const fit = fitCityFrame(framePoints(city, blueprints), {
@@ -360,7 +363,7 @@ interface HitBox {
 const rayHit = new THREE.Vector3()
 
 function CityWorld() {
-  const city = useGame((s) => s.data.city)
+  const city = useGame((s) => currentCity(s.data))
   const blueprints = useGame((s) => s.data.blueprints)
   const roadMode = useCityEditor((s) => s.roadMode)
   const selectedSource = useCityEditor((s) => s.selectedSource)
@@ -414,7 +417,7 @@ function CityWorld() {
         return
       }
       const { data } = useGame.getState()
-      setPreview({ source, plan: planPlacement(data.city, source, point.x, point.z, makeSizeOf(data)) })
+      setPreview({ source, plan: planPlacement(currentCity(data), source, point.x, point.z, makeSizeOf(data)) })
     },
     [setPreview],
   )
@@ -476,7 +479,7 @@ function CityWorld() {
       }
       const hit = raycaster.ray.intersectPlane(GROUND_PLANE, rayHit)
       const point = hit ? { x: hit.x, z: hit.z } : null
-      const span = useGame.getState().data.city.size * CELL
+      const span = currentCity(useGame.getState().data).size * CELL
       const inside = point !== null && point.x >= 0 && point.z >= 0 && point.x < span && point.z < span
       return { placementId, point, inside }
     },
@@ -506,7 +509,7 @@ function CityWorld() {
     },
     tapOutside: () => useCityEditor.getState().selectPlacement(null),
     dragStart: (id, from) => {
-      const placement = useGame.getState().data.city.placements.find((p) => p.id === id)
+      const placement = currentCity(useGame.getState().data).placements.find((p) => p.id === id)
       if (!placement) return
       const c = placementCenter(placement, sizeOf(placement.source))
       moveRef.current = { placement, dx: c.x - from.x, dz: c.z - from.z, plan: null }
@@ -522,7 +525,7 @@ function CityWorld() {
         return
       }
       const { data } = useGame.getState()
-      m.plan = planMove(data.city, m.placement, point.x + m.dx, point.z + m.dz, makeSizeOf(data))
+      m.plan = planMove(currentCity(data), m.placement, point.x + m.dx, point.z + m.dz, makeSizeOf(data))
       setPreview({ source: m.placement.source, plan: m.plan })
     },
     dragEnd: (drop) => {

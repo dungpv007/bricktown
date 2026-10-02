@@ -50,7 +50,10 @@ export interface ShareImportState {
   /** A share link's hash (`#s=...`). */
   receiveHash: (hash: string) => void
   receiveFile: (file: ShareFile) => Promise<void>
-  /** Adds the previewed creation to the save; returns what was added (null when nothing was previewed). */
+  /**
+   * Adds the previewed creation to the save; returns what was added (null when nothing was previewed,
+   * or for a city while the kid already has the most cities a slot keeps: the preview stays open).
+   */
   confirm: () => ImportPlan | null
   /** Closes the preview, the error card or the "added!" card. */
   dismiss: () => void
@@ -144,10 +147,16 @@ export const useShareImport = create<ShareImportState>()((set, get) => {
       // Planned again against the save as it is now, so the new ids cannot collide with anything added meanwhile.
       const game = useGame.getState()
       const plan = planImport(game.data, incoming.pkg)
+      if (plan.kind === 'city' && plan.full) {
+        set({ incoming: { ...incoming, plan } }) // the preview shows "delete a city first"
+        return null
+      }
       game.update((d) => applyImport(d, plan))
       if (plan.kind === 'city') {
-        notifyCityReplaced() // the City editor forgets its undo history: undo must not bring the old city back
-        // Driving collides with the city that was just replaced: go back to the city instead.
+        // The shared city is added and becomes the current one: the City editor forgets its undo
+        // history (it belonged to the city before) and the camera re-frames.
+        notifyCityReplaced()
+        // Driving collides with the city that was current before: go back to the city instead.
         if (useApp.getState().mode === 'drive') useApp.getState().setMode('city')
       }
       set({ incoming: null, done: plan })

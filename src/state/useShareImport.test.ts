@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getTemplate } from '../content/templates'
+import { MAX_CITIES, currentCity, emptyCity } from '../core/cities'
 import { createEmptyMaze, setEntry, setExit, type Maze } from '../core/maze'
 import { createEmptySave } from '../core/serialize'
 import { buildCityPackage, buildMazePackage, buildModelPackage, shareFileText, shareLink } from '../core/share'
@@ -88,21 +89,36 @@ describe('useShareImport', () => {
     expect(data().mazeChallenges[maze.id]).toEqual({ timeMs: 42_000 })
   })
 
-  it('replaces the city and adds the models it uses', () => {
-    useGame.setState({ data: { ...createEmptySave(), city: { size: 48, roads: ['0,0'], placements: [] } } })
+  it('adds the city as a new current city (the kid\'s own kept) with the models it uses', () => {
+    useGame.getState().setCity({ size: 48, roads: ['0,0'], placements: [] })
     const city = { size: 24, roads: ['5,5', '6,5'], placements: [{ id: 'p', source: 'bp_car', cx: 1, cz: 1, rot: 0 as const }] }
     s().receiveText(shareLink(buildCityPackage(city, [car], { name: 'Phố' }), BASE), 'paste')
     const incoming = s().incoming
-    expect(incoming?.status === 'preview' && incoming.plan.kind === 'city' && incoming.plan.replaces).toEqual({ placements: 0, roads: 1 })
+    expect(incoming?.status === 'preview' && incoming.plan.kind === 'city' && incoming.plan.full).toBe(false)
     s().confirm()
-    expect(data().city.roads).toEqual(['5,5', '6,5'])
+    expect(data().cities.map((c) => c.name)).toEqual(['', 'Phố'])
+    expect(data().cities[0].city.roads).toEqual(['0,0'])
+    expect(currentCity(data()).roads).toEqual(['5,5', '6,5'])
     expect(data().blueprints).toHaveLength(1)
-    expect(data().city.placements[0].source).toBe(data().blueprints[0].id)
+    expect(currentCity(data()).placements[0].source).toBe(data().blueprints[0].id)
   })
 
-  it('confirming a city import clears the city undo history, so undo cannot bring the old city back', () => {
-    const oldCity = { size: 48, roads: [], placements: [] }
-    useGame.setState({ data: { ...createEmptySave(), city: oldCity } })
+  it('at the city cap nothing is added and the preview stays open', () => {
+    for (let i = 1; i < MAX_CITIES; i++) useGame.getState().addCity(emptyCity(), `c${i}`)
+    const before = data()
+    s().receiveText(shareLink(buildCityPackage({ size: 24, roads: ['5,5'], placements: [] }, [car], { name: 'Phố' }), BASE), 'paste')
+    expect(s().confirm()).toBeNull()
+    expect(data()).toBe(before)
+    const incoming = s().incoming
+    expect(incoming?.status === 'preview' && incoming.plan.kind === 'city' && incoming.plan.full).toBe(true)
+    // One city deleted: now it fits.
+    useGame.getState().deleteCity(before.cities[1].id)
+    expect(s().confirm()).not.toBeNull()
+    expect(data().cities).toHaveLength(MAX_CITIES)
+    expect(currentCity(data()).roads).toEqual(['5,5'])
+  })
+
+  it('confirming a city import clears the city undo history, so undo cannot touch the new current city', () => {
     useCityEditor.getState().reset()
     useCityEditor.getState().paintRoad({ cx: 2, cz: 2 }, { cx: 5, cz: 2 })
     expect(useCityEditor.getState().canUndo).toBe(true)
@@ -111,8 +127,9 @@ describe('useShareImport', () => {
     s().confirm()
     expect(useCityEditor.getState().canUndo).toBe(false)
     useCityEditor.getState().undo()
-    expect(data().city.roads).toEqual(['5,5', '6,5'])
-    expect(data().city.size).toBe(24)
+    expect(currentCity(data()).roads).toEqual(['5,5', '6,5'])
+    expect(currentCity(data()).size).toBe(24)
+    expect(data().cities[0].city.roads).toEqual(['2,2', '3,2', '4,2', '5,2']) // the kid's city, untouched
   })
 
   it('a city import while driving returns to the city', () => {

@@ -56,9 +56,10 @@ describe('sample town', () => {
   })
 
   it('survives a save round trip and a share link unchanged', () => {
-    const save = { ...createEmptySave(), city: sampleCity() }
-    expect(importSave(exportSave(save)).city).toEqual(save.city)
-    const decoded = decodeShare(encodeShare(buildCityPackage(save.city, [], { name: 'x' })))
+    const save = createEmptySave()
+    save.cities[0].city = sampleCity()
+    expect(importSave(exportSave(save)).cities[0].city).toEqual(save.cities[0].city)
+    const decoded = decodeShare(encodeShare(buildCityPackage(save.cities[0].city, [], { name: 'x' })))
     expect('error' in decoded).toBe(false)
   })
 

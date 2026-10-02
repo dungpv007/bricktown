@@ -132,6 +132,16 @@ export interface CityState {
   rails?: string[]
 }
 
+/** One of the kid's cities: a save slot holds many (see core/cities). */
+export interface SavedCity {
+  id: string
+  /** As the kid typed it, cleaned (see `sanitizeCityName`); '' = the default name, shown in the kid's language. */
+  name: string
+  city: CityState
+  createdAt: number
+  updatedAt: number
+}
+
 export interface WorkshopState {
   kind: BlueprintKind
   baseplate: Baseplate
@@ -163,7 +173,10 @@ export interface MazeChallenge {
 export interface SaveData {
   schemaVersion: number
   blueprints: Blueprint[]
-  city: CityState
+  /** The kid's cities, in the order they were made (at least one, at most `MAX_CITIES`). */
+  cities: SavedCity[]
+  /** The city the City editor and Drive use; always one of `cities` (normalised on load). */
+  currentCityId: string
   workshop: WorkshopState
   guided: GuidedState | null
   completedTemplates: string[]

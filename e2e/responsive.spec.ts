@@ -4,7 +4,7 @@ interface BtWindow {
   __bt: {
     useEditor: { getState(): { place(x: number, y: number, z: number): void } }
     useApp: { getState(): { setDifficulty(d: 'easy' | 'normal'): void } }
-    useGame: { getState(): { setCity(city: unknown): void; upsertBlueprint(bp: unknown): void } }
+    useGame: { getState(): { setCity(city: unknown): void; upsertBlueprint(bp: unknown): void; addCity(city: unknown, name: string): string | null } }
     useCityEditor: { getState(): { selectPlacement(id: string | null): void } }
   }
 }
@@ -243,6 +243,41 @@ async function expectCityToolsFit(page: Page) {
   }
 }
 
+/**
+ * The City's 🏙️ picker (opened through ⋯ when the top row is folded): the dialog stays on screen,
+ * never scrolls sideways, and every card's buttons are big touch targets inside their card.
+ */
+async function checkCityPicker(page: Page) {
+  if (await page.getByTestId('topright-more').isVisible()) await page.getByTestId('topright-more').click()
+  await page.getByTestId('city-picker').click()
+  await expect(page.getByTestId('city-picker-dialog')).toBeVisible()
+  const r = await page.evaluate(() => {
+    const dialog = document.querySelector('[data-testid="city-picker-dialog"]')!
+    const d = dialog.getBoundingClientRect()
+    const buttons = [...dialog.querySelectorAll('button')].map((b) => {
+      const box = b.getBoundingClientRect()
+      const card = b.closest('.bt-city-card')?.getBoundingClientRect()
+      const inCard = !card || (box.left >= card.left - 1 && box.right <= card.right + 1)
+      return { name: b.getAttribute('data-testid') ?? b.className, w: box.width, h: box.height, inCard }
+    })
+    return {
+      inside: d.left >= -1 && d.top >= -1 && d.right <= innerWidth + 1 && d.bottom <= innerHeight + 1,
+      sideways: dialog.scrollWidth > dialog.clientWidth + 1,
+      cards: dialog.querySelectorAll('.bt-city-card').length,
+      buttons,
+    }
+  })
+  expect(r.inside, 'the city picker is on screen').toBe(true)
+  expect(r.sideways, 'the city picker scrolls sideways').toBe(false)
+  expect(r.cards).toBe(3)
+  for (const b of r.buttons) {
+    expect(b.inCard, `${b.name} stays inside its card`).toBe(true)
+    if (b.name !== 'city-open') expect(Math.min(b.w, b.h), `${b.name} is a big touch target`).toBeGreaterThanOrEqual(40)
+  }
+  await page.getByTestId('city-picker-close').click()
+  await expect(page.getByTestId('city-picker-dialog')).toHaveCount(0)
+}
+
 /** Opens the Sound dialog on the menu, checks it, and closes it with a backdrop tap. */
 async function checkAudioDialog(page: Page) {
   await page.getByTestId('audio-settings').click()
@@ -334,6 +369,14 @@ for (const [width, height] of [
     await expect(page.getByTestId('city-terrain-grass')).toBeAttached()
     await expectTidy(page, 'city, terrain mode')
     await expectCityToolsFit(page)
+    await page.getByTestId('city-terrain-mode').click()
+    // The 🏙️ picker with three cities (the third one becomes current).
+    await page.evaluate(() => {
+      const game = (window as unknown as BtWindow).__bt.useGame.getState()
+      game.addCity({ size: 48, roads: ['1,1', '2,1'], placements: [] }, 'Thành phố có một cái tên rất dài để thử')
+      game.addCity({ size: 48, roads: [], placements: [] }, 'Ba')
+    })
+    await checkCityPicker(page)
     await page.getByTestId('back').click()
 
     await page.getByTestId('menu-drive').click()

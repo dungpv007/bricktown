@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { flushAutosave, savedSlotData } from './support'
+import { flushAutosave, savedCity, savedSlotData, type SavedCities } from './support'
 
 interface CityData {
   size: number
@@ -10,14 +10,20 @@ interface CityData {
 }
 interface BtWindow {
   __bt: {
-    useGame: { getState(): { data: { city: CityData }; setCity(city: CityData): void } }
+    useGame: { getState(): { setCity(city: CityData): void; data: { cities: Array<{ id: string }>; currentCityId: string } } }
     useCityEditor: { getState(): { selectSource(source: string): void; tapGround(x: number, z: number): void } }
+    currentCity(): CityData
     npcCount(): number
   }
 }
 
-const cityData = (page: Page) => page.evaluate(() => (window as unknown as BtWindow).__bt.useGame.getState().data.city)
+const cityData = (page: Page) => page.evaluate(() => (window as unknown as BtWindow).__bt.currentCity())
 const npcCount = (page: Page) => page.evaluate(() => (window as unknown as BtWindow).__bt.npcCount())
+const cityIds = (page: Page) =>
+  page.evaluate(() => {
+    const { cities, currentCityId } = (window as unknown as BtWindow).__bt.useGame.getState().data
+    return { ids: cities.map((c) => c.id), current: currentCityId }
+  })
 
 /** The sample town: its railway loop, its lake and well over a hundred models. */
 const isSampleTown = (city: CityData) =>
@@ -52,7 +58,7 @@ test.describe('a fresh profile', () => {
   })
 })
 
-test('🏙️ replaces an edited city with the sample town after a yes, and undo cannot bring the old one back', async ({ page }) => {
+test('🏙️ ➕ adds a copy of the sample town as a new city: the kid\'s own city stays, undo starts fresh', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/')
@@ -62,8 +68,8 @@ test('🏙️ replaces an edited city with the sample town after a yes, and undo
 
   // The kid's own city: a road and a house (placed with the editor, so there is something to undo).
   await page.evaluate(() => {
-    const game = (window as unknown as BtWindow).__bt.useGame.getState()
-    game.setCity({ ...game.data.city, roads: ['5,5', '6,5', '7,5'], placements: [] })
+    const bt = (window as unknown as BtWindow).__bt
+    bt.useGame.getState().setCity({ ...bt.currentCity(), roads: ['5,5', '6,5', '7,5'], placements: [] })
   })
   await page.evaluate(() => {
     const ed = (window as unknown as BtWindow).__bt.useCityEditor.getState()
@@ -72,23 +78,23 @@ test('🏙️ replaces an edited city with the sample town after a yes, and undo
   })
   await expect.poll(async () => (await cityData(page)).placements.length).toBe(1)
   await expect(page.getByTestId('city-undo')).toBeEnabled()
+  const own = await cityIds(page)
 
-  const button = page.getByTestId('city-load-sample')
-  await button.click()
-  await expect(page.getByTestId('confirm-dialog')).toBeVisible()
-  await page.getByTestId('confirm-no').click()
-  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0)
-  expect((await cityData(page)).placements).toHaveLength(1)
-
-  await button.click()
-  await page.getByTestId('confirm-yes').click()
+  await page.getByTestId('city-picker').click()
+  await page.getByTestId('city-new').click()
+  await page.getByTestId('city-new-sample').click()
+  await expect(page.getByTestId('city-picker-dialog')).toHaveCount(0)
   await expect.poll(async () => isSampleTown(await cityData(page))).toBe(true)
-  expect((await cityData(page)).roads).not.toContain('5,5')
+  const after = await cityIds(page)
+  expect(after.ids).toHaveLength(2)
+  expect(after.current).not.toBe(own.current)
   await expect(page.getByTestId('city-undo')).toBeDisabled()
   await expect.poll(() => npcCount(page)).toBeGreaterThan(10)
 
-  // It is the kid's city now: saved like any edit.
+  // Saved like any edit, the kid's own city kept beside it.
   await flushAutosave(page)
-  await expect.poll(async () => isSampleTown((await savedSlotData<{ city: CityData }>(page))!.city)).toBe(true)
+  await expect.poll(async () => isSampleTown(savedCity(await savedSlotData<SavedCities<CityData>>(page))!)).toBe(true)
+  const saved = (await savedSlotData<SavedCities<CityData>>(page))!
+  expect(saved.cities.find((c) => c.id === own.current)!.city.roads).toEqual(['5,5', '6,5', '7,5'])
   expect(errors).toEqual([])
 })

@@ -1,4 +1,5 @@
 import { expect, test, type Browser, type Page } from '@playwright/test'
+import { savedCity } from './support'
 
 interface Cell {
   cx: number
@@ -13,7 +14,8 @@ interface BtWindow {
           sharedTemplates: Array<{ id: string }>
           mazes: Array<{ id: string; name: string }>
           mazeChallenges: Record<string, { timeMs: number }>
-          city: { size: number; roads: string[]; placements: Array<{ source: string }> }
+          cities: Array<{ id: string; name: string; city: { size: number; roads: string[]; placements: Array<{ source: string }> } }>
+          currentCityId: string
           guided: unknown
           completedTemplates: string[]
         }
@@ -174,7 +176,7 @@ test('share a maze with the best time: the friend gets it with a challenge badge
   await other.context().close()
 })
 
-test('share a city: the friend replaces their own city after a second ✓', async ({ page, browser, baseURL }) => {
+test('share a city: the friend gets it as one more city, their own city kept', async ({ page, browser, baseURL }) => {
   await openWith(
     page,
     (bt, bp) => {
@@ -200,14 +202,24 @@ test('share a city: the friend replaces their own city after a second ✓', asyn
   await other.goto(link)
   await expect(other.getByTestId('import-preview')).toHaveAttribute('data-kind', 'city')
   await expect(other.getByTestId('import-placements')).toContainText('2')
+  await expect(other.getByTestId('import-confirm')).toContainText('➕')
   await shot(other, '5-import-city')
   await other.getByTestId('import-confirm').click()
-  await expect(other.getByTestId('confirm-dialog')).toBeVisible() // the kid's city would be lost
-  await other.getByTestId('confirm-yes').click()
+  await expect(other.getByTestId('confirm-dialog')).toHaveCount(0) // nothing is lost: no second question
   await expect(other.getByTestId('import-done')).toBeVisible()
-  const { city, blueprints } = await dataOf(other)
+  const data = await dataOf(other)
+  expect(data.cities).toHaveLength(2)
+  expect(data.cities[0].city.roads).toEqual(['1,1']) // the friend's own city, untouched
+  const city = savedCity(data)!
+  expect(data.currentCityId).toBe(data.cities[1].id)
   expect(city.roads).toEqual(['10,10', '11,10', '12,10'])
-  expect(city.placements.map((p) => p.source)).toEqual(['tpl:house_small', blueprints[0].id])
+  expect(city.placements.map((p) => p.source)).toEqual(['tpl:house_small', data.blueprints[0].id])
+
+  // "Go to the city" opens the new one; the picker lists both.
+  await other.getByTestId('import-go').click()
+  await other.getByTestId('city-picker').click()
+  await expect(other.getByTestId(`city-card-${data.cities[1].id}`)).toHaveAttribute('data-current', 'true')
+  await expect(other.getByTestId(`city-card-${data.cities[0].id}`)).toHaveAttribute('data-current', 'false')
   await other.context().close()
 })
 
