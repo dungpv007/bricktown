@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { bakedGeometries, type BakedKind, type BakedModel } from '../../core/bake'
-import { CELL, footprintCells } from '../../core/city'
+import { CELL, placementCells, scaleOf } from '../../core/city'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { bakedMaterials, castsShadow } from '../../render/materials'
@@ -18,15 +18,15 @@ export function bakedHeight(baked: BakedModel): number {
   return Math.max(1, top)
 }
 
-/** Height (studs) of the grey block shown for a placement whose model cannot be drawn. */
+/** Height (studs) of the grey block shown for a placement whose model cannot be drawn (x its size). */
 export const PLACEHOLDER_HEIGHT = 2
 
-/** World-space footprint (studs) of a placement: its rotated footprint cells. */
+/** World-space footprint (studs) of a placement: its rotated (and scaled) footprint cells. */
 export function footprintBox(
-  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot'>,
+  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's'>,
   baseplate: Baseplate,
 ): { x0: number; z0: number; x1: number; z1: number } {
-  const { cw, cd } = footprintCells(baseplate, p.rot)
+  const { cw, cd } = placementCells(p, baseplate)
   return { x0: p.cx * CELL, z0: p.cz * CELL, x1: (p.cx + cw) * CELL, z1: (p.cz + cd) * CELL }
 }
 
@@ -101,7 +101,7 @@ function Placeholders({ placements, sizeOf }: { placements: CityPlacement[]; siz
     placements.forEach((p, i) => {
       const b = footprintBox(p, sizeOf(p.source))
       tmpPos.set((b.x0 + b.x1) / 2, 0, (b.z0 + b.z1) / 2)
-      tmpScale.set(b.x1 - b.x0 - PLACEHOLDER_GAP, PLACEHOLDER_HEIGHT, b.z1 - b.z0 - PLACEHOLDER_GAP)
+      tmpScale.set(b.x1 - b.x0 - PLACEHOLDER_GAP, PLACEHOLDER_HEIGHT * scaleOf(p), b.z1 - b.z0 - PLACEHOLDER_GAP)
       mesh.setMatrixAt(i, tmpMatrix.compose(tmpPos, NO_ROTATION, tmpScale))
     })
     mesh.count = placements.length
@@ -115,6 +115,7 @@ function Placeholders({ placements, sizeOf }: { placements: CityPlacement[]; siz
 
 /**
  * Every city placement, drawn with its baked model: one InstancedMesh per source and material kind.
+ * A scaled placement is the same shared geometry with a bigger instance matrix (see `placementMatrix`).
  * Placements whose source is missing or cannot be baked show as grey placeholder blocks.
  */
 export default function Placements({ placements, blueprints }: { placements: CityPlacement[]; blueprints: Blueprint[] }) {

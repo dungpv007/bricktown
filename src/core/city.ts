@@ -8,6 +8,31 @@ export type PlaceError = 'out_of_bounds' | 'overlap' | 'road'
 
 type SizeOf = (source: string) => Baseplate
 
+/** Smallest and biggest size multiplier of a placement (`CityPlacement.s`). */
+export const MIN_SCALE = 1
+export const MAX_SCALE = 10
+
+/** A placement's size multiplier (absent = 1). */
+export const scaleOf = (p: Pick<CityPlacement, 's'>): number => p.s ?? MIN_SCALE
+
+/**
+ * A stored size multiplier made safe: numbers are rounded and clamped into MIN_SCALE..MAX_SCALE,
+ * anything else (absent, NaN, a string...) is 1.
+ */
+export function normalizeScale(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return MIN_SCALE
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(v)))
+}
+
+/** Whether `v` is a valid stored size multiplier: an integer in MIN_SCALE..MAX_SCALE. */
+export const isScale = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isInteger(v) && v >= MIN_SCALE && v <= MAX_SCALE
+
+/** The plate a model covers when drawn `s` times bigger (studs x s). */
+export function scaledBaseplate(baseplate: Baseplate, s: number): Baseplate {
+  return s === 1 ? baseplate : { ...baseplate, w: baseplate.w * s, d: baseplate.d * s }
+}
+
 /** Footprint of a baseplate in city cells for the given rotation (w/d swapped for odd rot). */
 export function footprintCells(baseplate: Baseplate, rot: Rot): { cw: number; cd: number } {
   const cw = Math.ceil(baseplate.w / CELL)
@@ -15,8 +40,16 @@ export function footprintCells(baseplate: Baseplate, rot: Rot): { cw: number; cd
   return rot % 2 === 1 ? { cw: cd, cd: cw } : { cw, cd }
 }
 
+/**
+ * Footprint in cells of a placement of a model on `baseplate`: rotated, and `s` times bigger (a
+ * scaled placement covers the cells an unscaled model on a plate `s` times as big would).
+ */
+export function placementCells(p: Pick<CityPlacement, 'rot' | 's'>, baseplate: Baseplate): { cw: number; cd: number } {
+  return footprintCells(scaledBaseplate(baseplate, scaleOf(p)), p.rot)
+}
+
 function cellsOf(p: CityPlacement, sizeOf: SizeOf): { cw: number; cd: number } {
-  return footprintCells(sizeOf(p.source), p.rot)
+  return placementCells(p, sizeOf(p.source))
 }
 
 export function canPlaceInCity(
@@ -87,6 +120,45 @@ export function movePlacement(
   sizeOf: SizeOf,
 ): CityState | null {
   return replacePlacement(city, id, (p) => ({ ...p, cx, cz }), sizeOf)
+}
+
+/**
+ * `p` drawn at size `s` (clamped into MIN_SCALE..MAX_SCALE), growing / shrinking in place: the
+ * footprint keeps its centre (an odd change in cells grows towards -X / -Z and shrinks back
+ * exactly), then slides back inside the grid if it would hang over an edge. `s` = 1 drops the field.
+ */
+export function scaledPlacement(city: CityState, p: CityPlacement, s: number, sizeOf: SizeOf): CityPlacement {
+  const scale = normalizeScale(s)
+  const baseplate = sizeOf(p.source)
+  const from = placementCells(p, baseplate)
+  const to = placementCells({ rot: p.rot, s: scale }, baseplate)
+  const slide = (v: number, span: number) => Math.max(0, Math.min(city.size - span, v))
+  const { s: _old, ...rest } = p
+  void _old
+  return {
+    ...rest,
+    cx: slide(p.cx + Math.trunc((from.cw - to.cw) / 2), to.cw),
+    cz: slide(p.cz + Math.trunc((from.cd - to.cd) / 2), to.cd),
+    ...(scale === MIN_SCALE ? {} : { s: scale }),
+  }
+}
+
+/**
+ * Resizes placement `id` to `s` (see `scaledPlacement`). `error` says why it is refused (the bigger
+ * model would not fit the city, or would cover another model or a road); the city is then null.
+ */
+export function scalePlacement(
+  city: CityState,
+  id: string,
+  s: number,
+  sizeOf: SizeOf,
+): { city: CityState | null; error: PlaceError | null } {
+  const current = city.placements.find((p) => p.id === id)
+  if (!current) return { city: null, error: 'out_of_bounds' }
+  const updated = scaledPlacement(city, current, s, sizeOf)
+  const error = canPlaceInCity(city, updated, sizeOf, id)
+  if (error !== null) return { city: null, error }
+  return { city: { ...city, placements: city.placements.map((p) => (p.id === id ? updated : p)) }, error: null }
 }
 
 /** Add road cells, silently skipping cells outside the grid or covered by a placement. */

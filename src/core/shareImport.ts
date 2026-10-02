@@ -1,5 +1,5 @@
 import { PLATE_MAX } from './baseplate'
-import { CELL, canPlaceInCity } from './city'
+import { CELL, canPlaceInCity, isScale } from './city'
 import { COLORS } from './colors'
 import { isFigure, parseFig } from './figures'
 import { newId } from './ids'
@@ -335,7 +335,8 @@ function checkMazeSection(z: Loose, time: number, fallbackName: string): NonNull
 
 /**
  * Roads and placements on the map; each placement fits where it is (inside the city, not on a road,
- * not overlapping an earlier one), sized by its blueprint's plate or the template's (`templateSize`).
+ * not overlapping an earlier one), sized by its blueprint's plate or the template's (`templateSize`)
+ * times its optional size multiplier `s` (an integer 1..10, else the link is invalid).
  * Only the blueprints a placement uses are kept.
  */
 function checkCity(c: Loose, time: number, fallbackName: string, opts: ShareImportOptions): NonNullable<SharePackage['city']> {
@@ -353,11 +354,13 @@ function checkCity(c: Loose, time: number, fallbackName: string, opts: ShareImpo
   const placed: CityState = { size, roads: checkKeys(city.roads, size, size), placements: [] }
   for (const v of list(city.placements, size * size)) {
     const p = record(v)
-    const { id, source, cx, cz, rot } = p
+    const { id, source, cx, cz, rot, s } = p
     if (typeof id !== 'string' || typeof source !== 'string') fail('invalid')
     if (!TEMPLATE_SOURCE.test(source) && !byId.has(source)) fail('invalid')
     if (!isInt(cx) || !isInt(cz) || !isRot(rot)) fail('invalid')
-    const placement: CityPlacement = { id, source, cx, cz, rot }
+    // Size multiplier: absent (x1, older links) or an integer 1..10; anything else is a broken link.
+    if (s !== undefined && !isScale(s)) fail('invalid')
+    const placement: CityPlacement = s === undefined || s === 1 ? { id, source, cx, cz, rot } : { id, source, cx, cz, rot, s }
     if (canPlaceInCity(placed, placement, sizeOf) !== null) fail('invalid')
     placed.placements.push(placement)
   }

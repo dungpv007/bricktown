@@ -31,10 +31,13 @@ const MODELS: Model[] = [
 ]
 
 const ROTS: Rot[] = [0, 1, 2, 3]
-const SPOTS = [
+/** [cx, cz, scale (absent = unscaled)] */
+const SPOTS: Array<[number, number, number?]> = [
   [0, 0],
   [3, 5],
   [11, 2],
+  [2, 1, 3],
+  [7, 4, 10],
 ]
 
 // Baked vertices are float32, hence 4 digits.
@@ -51,9 +54,9 @@ describe('placementMatrix agrees with placementWorldBox', () => {
       })
 
       for (const rot of ROTS) {
-        for (const [cx, cz] of SPOTS) {
-          it(`rot ${rot} at cell (${cx}, ${cz})`, () => {
-            const p = { cx, cz, rot }
+        for (const [cx, cz, s] of SPOTS) {
+          it(`rot ${rot} at cell (${cx}, ${cz})${s ? ` x${s}` : ''}`, () => {
+            const p = s ? { cx, cz, rot, s } : { cx, cz, rot }
             const matrix = placementMatrix(new THREE.Matrix4(), p, model.baseplate)
             const expected = placementWorldBox(p, model.baseplate, box)
 
@@ -91,6 +94,18 @@ describe('placementMatrix agrees with placementWorldBox', () => {
     expect(c.x).toBeCloseTo(40, 6)
     expect(c.z).toBeCloseTo(52, 6)
   })
+
+  it('a scaled model grows around the centre of its scaled footprint, from the ground', () => {
+    // 8x16 x3 = 24x48 studs: 3x6 cells, turned a quarter 6x3 cells from (4, 6): centre (7 * 8, 7.5 * 8).
+    const baseplate = { w: 8, d: 16 }
+    const m = placementMatrix(new THREE.Matrix4(), { cx: 4, cz: 6, rot: 1, s: 3 }, baseplate)
+    const c = new THREE.Vector3(baseplate.w / 2, 0, baseplate.d / 2).applyMatrix4(m)
+    expect(c.x).toBeCloseTo(56, 6)
+    expect(c.y).toBeCloseTo(0, 6)
+    expect(c.z).toBeCloseTo(60, 6)
+    const top = new THREE.Vector3(baseplate.w / 2, 2, baseplate.d / 2).applyMatrix4(m)
+    expect(top.y).toBeCloseTo(6, 6)
+  })
 })
 
 describe('flat placements', () => {
@@ -100,5 +115,12 @@ describe('flat placements', () => {
     expect(isSolidBox(boxOf(brick('g', 'plate_4x4', 0, 0, 0)))).toBe(false)
     expect(isSolidBox(boxOf(brick('g', 'plate_4x4', 0, 0, 0), brick('h', 'plate_2x2', 0, 1, 0)))).toBe(true)
     expect(isSolidBox(boxOf(brick('b', 'brick_1x1', 0, 0, 0)))).toBe(true)
+  })
+
+  it('a scaled-up garden is tall enough to block the car (the placed box counts)', () => {
+    const garden = boxOf(brick('g', 'plate_4x4', 0, 0, 0))
+    const plate = { w: 8, d: 8 }
+    expect(isSolidBox(placementWorldBox({ cx: 0, cz: 0, rot: 0 }, plate, garden))).toBe(false)
+    expect(isSolidBox(placementWorldBox({ cx: 0, cz: 0, rot: 0, s: 2 }, plate, garden))).toBe(true)
   })
 })

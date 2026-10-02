@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { bakedGeometries } from '../../core/bake'
+import { scaleOf } from '../../core/city'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { selectionGlowMaterial, selectionRimMaterial } from '../../render/materials'
 import { bakedModelBox, placementMatrix } from '../../render/placementTransform'
@@ -25,7 +26,8 @@ const SHAKE_AMPLITUDE = 0.6
 const noRaycast = () => null
 const tmpMatrix = new THREE.Matrix4()
 
-const grow = (v: number) => (v > 0 ? (v + 2 * THICKNESS) / v : 1)
+/** Scale that adds `thickness` on both sides of a span `v`. */
+const grow = (v: number, thickness: number) => (v > 0 ? (v + 2 * thickness) / v : 1)
 
 /**
  * The selected placement glows yellow inside a see-through rim, the same way the Workshop's
@@ -39,15 +41,17 @@ export default function PlacementHighlight({ placement, blueprints, sizeOf, shak
   const modelRef = useRef<THREE.Group>(null)
 
   const source = placement?.source ?? null
+  // The rim is drawn in model space and then scaled with the model: keep it as thick on screen.
+  const k = placement ? scaleOf(placement) : 1
   const resolved = useMemo(() => (source === null ? null : resolveRenderable(source, { blueprints })), [source, blueprints])
   const model = useMemo(() => {
     if (!resolved) return null
     const box = bakedModelBox(resolved.baked)
     if (!box) return null
     const center = box.min.map((v, i) => (v + box.max[i]) / 2) as [number, number, number]
-    const scale = box.min.map((v, i) => grow(box.max[i] - v)) as [number, number, number]
+    const scale = box.min.map((v, i) => grow(box.max[i] - v, THICKNESS / k)) as [number, number, number]
     return { geometries: bakedGeometries(resolved.baked).map(([, g]) => g), center, scale }
-  }, [resolved])
+  }, [resolved, k])
 
   useLayoutEffect(() => {
     const group = modelRef.current
@@ -79,16 +83,17 @@ export default function PlacementHighlight({ placement, blueprints, sizeOf, shak
   const b = footprintBox(placement, sizeOf(placement.source))
   const w = b.x1 - b.x0 - PLACEHOLDER_GAP
   const d = b.z1 - b.z0 - PLACEHOLDER_GAP
+  const h = PLACEHOLDER_HEIGHT * k
   const position: [number, number, number] = [(b.x0 + b.x1) / 2, 0, (b.z0 + b.z1) / 2]
   const rimPosition: [number, number, number] = [position[0], -THICKNESS, position[2]]
   return (
     <group ref={shakeRef}>
-      <mesh geometry={placeholderGeometry} material={selectionGlowMaterial} position={position} scale={[w, PLACEHOLDER_HEIGHT, d]} raycast={noRaycast} dispose={null} renderOrder={RIM_ORDER - 1} />
+      <mesh geometry={placeholderGeometry} material={selectionGlowMaterial} position={position} scale={[w, h, d]} raycast={noRaycast} dispose={null} renderOrder={RIM_ORDER - 1} />
       <mesh
         geometry={placeholderGeometry}
         material={selectionRimMaterial}
         position={rimPosition}
-        scale={[w + 2 * THICKNESS, PLACEHOLDER_HEIGHT + 2 * THICKNESS, d + 2 * THICKNESS]}
+        scale={[w + 2 * THICKNESS, h + 2 * THICKNESS, d + 2 * THICKNESS]}
         raycast={noRaycast}
         dispose={null}
         renderOrder={RIM_ORDER}

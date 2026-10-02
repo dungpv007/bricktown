@@ -123,6 +123,41 @@ describe('useCityEditor placements', () => {
     expect(placed()[0]).toMatchObject({ cx: a.cx, cz: a.cz })
   })
 
+  it('scales the selected model in place, one undo step each, keeping it selected; refuses what does not fit', () => {
+    ed().dropSource('tpl:house_small', ...at(10, 10))
+    const [house] = placed()
+    ed().scaleSelected(1)
+    ed().scaleSelected(1)
+    expect(placed()[0]).toMatchObject({ id: house.id, cx: house.cx - 2, cz: house.cz - 2, s: 3 })
+    ed().undo()
+    expect(placed()[0]).toMatchObject({ cx: house.cx - 1, cz: house.cz - 1, s: 2 })
+    expect(ed().selectedPlacementId).toBe(house.id)
+    ed().scaleSelected(-1)
+    expect(placed()[0]).toEqual(house) // back to x1: no `s`
+    let seq = ed().errorSeq
+    ed().scaleSelected(-1) // already the smallest
+    expect(ed().errorSeq).toBe(seq + 1)
+    expect(placed()[0]).toEqual(house)
+    // A tree right next to it: growing over it is refused and changes nothing.
+    ed().dropSource('tpl:tree', ...at(house.cx + 2, house.cz))
+    ed().selectPlacement(house.id)
+    seq = ed().errorSeq
+    ed().scaleSelected(1)
+    expect(ed().lastError).toBe('overlap')
+    expect(ed().errorSeq).toBe(seq + 1)
+    expect(placed()[0]).toEqual(house)
+  })
+
+  it('a duplicate or a move of a scaled model keeps its size', () => {
+    ed().dropSource('tpl:tree', ...at(10, 10))
+    ed().scaleSelected(1)
+    const [tree] = placed()
+    ed().duplicateSelected()
+    expect(placed()[1]).toMatchObject({ source: 'tpl:tree', s: 2 })
+    ed().movePlacement(tree.id, 30, 30)
+    expect(placed()[0]).toMatchObject({ cx: 30, cz: 30, s: 2 })
+  })
+
   it('road mode drops the selection', () => {
     ed().dropSource('tpl:tree', ...at(4, 4))
     ed().setRoadMode(true)

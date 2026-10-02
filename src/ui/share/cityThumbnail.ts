@@ -1,5 +1,5 @@
 import { getTemplate } from '../../content/templates'
-import { CELL, footprintCells } from '../../core/city'
+import { CELL, placementCells } from '../../core/city'
 import type { Baseplate, Blueprint, BlueprintKind, CityState } from '../../core/types'
 
 /**
@@ -29,7 +29,7 @@ export function cityThumbnail(city: CityState, blueprints: Blueprint[]): string 
     const template = p.source.startsWith('tpl:') ? getTemplate(p.source.slice(4)) : undefined
     const bp = byId.get(p.source)
     const plate: Baseplate = bp?.baseplate ?? template?.baseplate ?? { w: CELL, d: CELL }
-    const { cw, cd } = footprintCells(plate, p.rot)
+    const { cw, cd } = placementCells(p, plate)
     return { cx: p.cx, cz: p.cz, cw, cd, color: KIND_COLOR[bp?.kind ?? template?.kind ?? 'building'] }
   })
   // Framed on what was built (a margin of one cell, at least MIN_VIEW cells), not the whole empty map.

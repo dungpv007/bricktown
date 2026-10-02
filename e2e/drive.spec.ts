@@ -148,6 +148,19 @@ test('drive: a building stops the car at full speed', async ({ page }) => {
   expect(s.upY).toBeGreaterThan(0.95)
 })
 
+test('drive: a scaled-up (x3) building blocks with its scaled size', async ({ page }) => {
+  // At x1 at (21, 14) this house's walls (x 171..181) stand beside the car's lane (x ~161..167);
+  // grown in place to x3 it sits at (19, 12) and its walls span x 161..191, z 108..132.
+  await setUpCity(page, [{ id: 'giant', source: 'tpl:house_small', cx: 19, cz: 12, rot: 0, s: 3 }])
+  await startDriving(page, 'tpl:car')
+  await hold(page, 'drive-gas', 8000) // unblocked, this goes well past the house
+  await waitUntilStill(page)
+  const s = (await carState(page))!
+  expect(s.z).toBeGreaterThan(15 * CELL) // stopped against the giant house's front wall
+  expect(Math.abs(s.x - 20.5 * CELL)).toBeLessThan(2) // not slid around it
+  expect(s.upY).toBeGreaterThan(0.95)
+})
+
 test('drive: the stick steers and the flip button rights the car', async ({ page }) => {
   await setUpCity(page)
   await startDriving(page, 'tpl:car')

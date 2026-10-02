@@ -21,7 +21,8 @@ export default function Sun({ target }: { target: RefObject<THREE.Group | null> 
     cam.right = SHADOW_EXTENT
     cam.top = SHADOW_EXTENT
     cam.bottom = -SHADOW_EXTENT
-    cam.near = 1
+    // Negative near: a scaled-up (x10) model taller than the sun is high still casts its shadow.
+    cam.near = -200
     cam.far = 200
     cam.updateProjectionMatrix()
   }, [])

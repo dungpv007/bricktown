@@ -1,4 +1,4 @@
-import { CELL, footprintCells } from './city'
+import { CELL, placementCells, scaleOf } from './city'
 import { placementCenter } from './cityPlan'
 import { roadKey } from './roads'
 import { QUARTER_COS, QUARTER_SIN } from './rotation'
@@ -90,7 +90,7 @@ export function spawnPoint(city: CityState, sizeOf: SizeOf): { x: number; z: num
 
   const covered = new Set<string>()
   for (const p of city.placements) {
-    const { cw, cd } = footprintCells(sizeOf(p.source), p.rot)
+    const { cw, cd } = placementCells(p, sizeOf(p.source))
     for (let x = p.cx; x < p.cx + cw; x++) for (let z = p.cz; z < p.cz + cd; z++) covered.add(roadKey(x, z))
   }
   const mid = Math.floor(city.size / 2)
@@ -120,20 +120,24 @@ export interface Box {
  */
 export const MIN_SOLID_HEIGHT = 0.6
 
-/** Whether a placed model is tall enough to block the car (`box` is its model-space bounding box). */
+/**
+ * Whether a placed model is tall enough to block the car (`box` is its bounding box: model space,
+ * or the placed world box, which is what counts for a scaled model).
+ */
 export const isSolidBox = (box: Box): boolean => box.max[1] >= MIN_SOLID_HEIGHT
 
 /**
  * World AABB of a placed model, given its model-space bounding box. Matches `placementMatrix` (src/render/placementTransform.ts; a cross-test keeps them equal):
- * the model is turned `rot` quarter turns (counter-clockwise) around its baseplate centre and
- * centred on its footprint cells.
+ * the model is turned `rot` quarter turns (counter-clockwise) around its baseplate centre, made `s`
+ * times bigger around that centre (height from the ground) and centred on its footprint cells.
  */
 export function placementWorldBox(
-  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot'>,
+  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's'>,
   baseplate: Baseplate,
   model: Box,
 ): Box {
   const { x: wx, z: wz } = placementCenter(p, baseplate)
+  const k = scaleOf(p)
   const cos = QUARTER_COS[p.rot]
   const sin = QUARTER_SIN[p.rot]
   let minX = Infinity
@@ -142,8 +146,8 @@ export function placementWorldBox(
   let maxZ = -Infinity
   for (const mx of [model.min[0], model.max[0]]) {
     for (const mz of [model.min[2], model.max[2]]) {
-      const lx = mx - baseplate.w / 2
-      const lz = mz - baseplate.d / 2
+      const lx = (mx - baseplate.w / 2) * k
+      const lz = (mz - baseplate.d / 2) * k
       const x = lx * cos + lz * sin + wx
       const z = -lx * sin + lz * cos + wz
       minX = Math.min(minX, x)
@@ -152,7 +156,7 @@ export function placementWorldBox(
       maxZ = Math.max(maxZ, z)
     }
   }
-  return { min: [minX, model.min[1], minZ], max: [maxX, model.max[1], maxZ] }
+  return { min: [minX, model.min[1] * k, minZ], max: [maxX, model.max[1] * k, maxZ] }
 }
 
 /**

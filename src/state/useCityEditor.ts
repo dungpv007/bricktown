@@ -1,6 +1,17 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
-import { addPlacement, addRoads, movePlacement, removePlacement, rotatePlacement, type PlaceError } from '../core/city'
+import {
+  addPlacement,
+  addRoads,
+  MAX_SCALE,
+  MIN_SCALE,
+  movePlacement,
+  removePlacement,
+  rotatePlacement,
+  scaleOf,
+  scalePlacement,
+  type PlaceError,
+} from '../core/city'
 import { clampCell, duplicateCell, planPlacement, removeRoads, type Cell } from '../core/cityPlan'
 import { newId } from '../core/ids'
 import { paintRoadLine } from '../core/roads'
@@ -55,7 +66,12 @@ export interface CityEditorState {
   /** Moves a placement to min-corner cell (cx, cz); rejected (it stays) when it does not fit there. */
   movePlacement: (id: string, cx: number, cz: number) => void
   rotateSelected: () => void
-  /** Copies the selected placement next to it and selects the copy. */
+  /**
+   * Makes the selected model one size bigger (+1) or smaller (-1), x1..x10, growing in place (one
+   * undo step). Refused (nothing changes) past x1 / x10, or when the bigger model does not fit.
+   */
+  scaleSelected: (delta: 1 | -1) => void
+  /** Copies the selected placement (same size) next to it and selects the copy. */
   duplicateSelected: () => void
   deleteSelected: () => void
   undo: () => void
@@ -118,9 +134,12 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
     return id === null ? undefined : city().placements.find((p) => p.id === id)
   }
 
+  /** Undo / redo: the selection stays on a placement that is still there (e.g. after a resize). */
   const restore = (snapshot: CityState | undefined) => {
     if (snapshot) game().setCity(snapshot)
-    set({ lastError: null, selectedPlacementId: null, ...historyFlags() })
+    const id = get().selectedPlacementId
+    const kept = id !== null && city().placements.some((p) => p.id === id)
+    set({ lastError: null, selectedPlacementId: kept ? id : null, ...historyFlags() })
   }
 
   return {
@@ -181,6 +200,19 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
       if (!p) return
       const before = city()
       commit(before, rotatePlacement(before, p.id, sizeOf()), 'overlap', sfx.snap)
+    },
+
+    scaleSelected: (delta) => {
+      const p = selected()
+      if (!p) return
+      const s = scaleOf(p) + delta
+      if (s < MIN_SCALE || s > MAX_SCALE) {
+        reject('nothing') // already the smallest / biggest
+        return
+      }
+      const before = city()
+      const result = scalePlacement(before, p.id, s, sizeOf())
+      commit(before, result.city, result.error ?? 'overlap', sfx.thunk)
     },
 
     duplicateSelected: () => {

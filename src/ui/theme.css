@@ -1599,17 +1599,57 @@ form.bt-dialog,
   pointer-events: none;
 }
 
-.bt-city-left > .bt-toolbar,
-.bt-city-left > .bt-actionbar {
+.bt-city-left > .bt-toolbar {
   position: static;
   flex: none;
   max-height: none;
   pointer-events: auto;
 }
 
-.bt-city-left > .bt-actionbar {
+/*
+ * The selected placement's action bar and its size control: two panels side by side (tablets: two
+ * columns; phones: two rows of buttons, on one line when they fit, else the size control wraps under
+ * the actions). Separate panels so neither pushes the ✕ out of view.
+ */
+.bt-city-left > .bt-city-actions {
   flex: 0 1 auto;
   min-height: 0;
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--bt-gap);
+  pointer-events: none; /* the gaps pass taps through to the map */
+}
+
+.bt-city-actions > .bt-actionbar {
+  position: static;
+  max-height: 100%;
+  pointer-events: auto;
+}
+
+/* Tablets: + on top, the size, then − (a phone row reads − ×N + from the left). */
+.bt-city-actions > .bt-city-scale {
+  flex-direction: column-reverse;
+  align-items: center;
+}
+
+.bt-city-scale-value {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: var(--bt-touch);
+  padding: calc(2px * var(--bt-s)) 0;
+  font-size: calc(22px * var(--bt-s));
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--bt-ink);
+}
+
+.bt-city-scale-value > span:first-child {
+  font-size: calc(20px * var(--bt-s));
 }
 
 .bt-city-drive {
@@ -2428,6 +2468,11 @@ form.bt-dialog,
     overflow-x: auto;
     overflow-y: hidden;
     animation-name: bt-actionbar-up;
+  }
+
+  /* City size control: a row like the action bar beside it. */
+  .bt-city-actions > .bt-city-scale {
+    flex-direction: row;
   }
 }
 

@@ -102,6 +102,11 @@ export interface CityPlacement {
   cx: number // cell x of min corner
   cz: number // cell z of min corner
   rot: Rot
+  /**
+   * Size multiplier, an integer from 1 to 10 (`MIN_SCALE`..`MAX_SCALE` in core/city); absent = 1.
+   * The model is drawn `s` times bigger and its footprint is the plate's studs x `s`, in cells.
+   */
+  s?: number
 }
 
 export interface CityState {

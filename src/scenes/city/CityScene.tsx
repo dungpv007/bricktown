@@ -3,7 +3,7 @@ import { Canvas, useThree } from '@react-three/fiber'
 import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
-import { addRoads, CELL, footprintCells } from '../../core/city'
+import { addRoads, CELL, placementCells, scaleOf } from '../../core/city'
 import { cellsOnLine, clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
 import { paintRoadLine, roadKey } from '../../core/roads'
 import type { Baseplate, Blueprint, CityPlacement, CityState } from '../../core/types'
@@ -30,6 +30,10 @@ const SELECTED = '#ffd500'
 /** Initial camera distance and tilt from straight down (radians). */
 const START_DISTANCE = 120
 const START_TILT = 0.75
+/** Furthest the camera zooms out. */
+const MAX_DISTANCE = 340
+/** Start distance per stud of the tallest model, so a scaled-up giant is in view, not cut off. */
+const DISTANCE_PER_HEIGHT = 3
 
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
 
@@ -47,7 +51,9 @@ function Lights({ size }: { size: number }) {
     cam.right = extent
     cam.top = extent
     cam.bottom = -extent
-    cam.near = 1
+    // From behind the light too: a x10 model can be taller than the light is high, and its top must
+    // still cast a shadow (an orthographic shadow camera takes a negative near plane).
+    cam.near = -span
     cam.far = span * 2
     cam.updateProjectionMatrix()
   }, [span])
@@ -88,11 +94,30 @@ function contentCenter(city: CityState, blueprints: Blueprint[]): [number, numbe
     add(cx, cz)
   }
   for (const p of city.placements) {
-    const { cw, cd } = footprintCells(sizeOf(p.source), p.rot)
+    const { cw, cd } = placementCells(p, sizeOf(p.source))
     add(p.cx, p.cz, cw, cd)
   }
   if (minX === Infinity) return [(city.size * CELL) / 2, (city.size * CELL) / 2]
   return [((minX + maxX) / 2) * CELL, ((minZ + maxZ) / 2) * CELL]
+}
+
+/**
+ * How far the camera starts: the usual distance, or further back when a (scaled-up) model is so
+ * tall that it would not fit the view, up to the zoom-out limit.
+ */
+function startDistance(city: CityState, blueprints: Blueprint[]): number {
+  const heights = new Map<string, number>()
+  let tallest = 0
+  for (const p of city.placements) {
+    let h = heights.get(p.source)
+    if (h === undefined) {
+      const r = resolveRenderable(p.source, { blueprints })
+      h = r ? bakedHeight(r.baked) : PLACEHOLDER_HEIGHT
+      heights.set(p.source, h)
+    }
+    tallest = Math.max(tallest, h * scaleOf(p))
+  }
+  return Math.min(MAX_DISTANCE, Math.max(START_DISTANCE, tallest * DISTANCE_PER_HEIGHT))
 }
 
 // Two fingers always pinch-zoom and pan (in both modes), so the map can still be moved when the
@@ -124,11 +149,12 @@ function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
   const [start] = useState(() => {
     const { city, blueprints } = useGame.getState().data
     const [x, z] = contentCenter(city, blueprints)
+    const distance = startDistance(city, blueprints)
     const target: [number, number, number] = [x, 0, z]
     const position: [number, number, number] = [
       x,
-      START_DISTANCE * Math.cos(START_TILT),
-      z + START_DISTANCE * Math.sin(START_TILT),
+      distance * Math.cos(START_TILT),
+      z + distance * Math.sin(START_TILT),
     ]
     return { target, position }
   })
@@ -158,7 +184,7 @@ function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
         enableDamping
         dampingFactor={0.12}
         minDistance={25}
-        maxDistance={340}
+        maxDistance={MAX_DISTANCE}
         maxPolarAngle={1.2}
         touches={roadMode ? PAINT_TOUCHES : PAN_TOUCHES}
         mouseButtons={roadMode ? PAINT_MOUSE : PAN_MOUSE}
@@ -206,7 +232,7 @@ function PlacementGhost({ source, plan, blueprints, sizeOf }: { source: string; 
     )
   }, [plan, resolved])
 
-  const { cw, cd } = footprintCells(resolved?.baseplate ?? sizeOf(source), plan.rot)
+  const { cw, cd } = placementCells(plan, resolved?.baseplate ?? sizeOf(source))
   return (
     <>
       <FootprintMarker cx={plan.cx} cz={plan.cz} cw={cw} cd={cd} color={valid ? VALID : INVALID} opacity={0.35} />
@@ -233,6 +259,7 @@ const samePreview = (a: Preview | null, b: Preview | null) =>
     a.plan.cx === b.plan.cx &&
     a.plan.cz === b.plan.cz &&
     a.plan.rot === b.plan.rot &&
+    a.plan.s === b.plan.s &&
     a.plan.error === b.plan.error)
 
 /** A placement being dragged: which one, and the offset from the finger to its footprint centre. */
@@ -316,7 +343,7 @@ function CityWorld() {
     if (hover.current) updateHover(hover.current)
   }, [city, roadMode, selectedSource, blueprints, updateHover])
 
-  // Tap targets: footprint x model height boxes (cheaper and easier to hit than triangles). Placements
+  // Tap targets: footprint x model height boxes, both scaled with the placement (cheaper and easier to hit than triangles). Placements
   // that cannot be drawn get their placeholder block's box, so they can still be selected and deleted.
   const hitBoxes = useMemo<HitBox[]>(() => {
     const heights = new Map<string, number>()
@@ -331,7 +358,8 @@ function CityWorld() {
     }
     return city.placements.map((p) => {
       const b = footprintBox(p, sizeOf(p.source))
-      return { id: p.id, box: new THREE.Box3(new THREE.Vector3(b.x0, 0, b.z0), new THREE.Vector3(b.x1, heightOf(p.source), b.z1)) }
+      const top = heightOf(p.source) * scaleOf(p)
+      return { id: p.id, box: new THREE.Box3(new THREE.Vector3(b.x0, 0, b.z0), new THREE.Vector3(b.x1, top, b.z1)) }
     })
   }, [city.placements, blueprints, sizeOf])
   const hitBoxesRef = useRef(hitBoxes)
@@ -476,7 +504,7 @@ function CityWorld() {
     () => (selectedPlacementId === movingId ? null : (city.placements.find((p) => p.id === selectedPlacementId) ?? null)),
     [city.placements, selectedPlacementId, movingId],
   )
-  const selectedCells = selected && footprintCells(sizeOf(selected.source), selected.rot)
+  const selectedCells = selected && placementCells(selected, sizeOf(selected.source))
 
   return (
     <>
