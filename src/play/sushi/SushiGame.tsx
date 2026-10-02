@@ -207,6 +207,9 @@ export default function SushiGame({ gameId, onExit }: GameSceneProps) {
   const portrait = usePortrait()
   const layout = portrait ? TALL : WIDE
   const later = useTimers()
+  /** Cancels the coin flight in progress (leaving the game or starting over ends it). */
+  const cancelFlight = useRef<(() => void) | null>(null)
+  useEffect(() => () => cancelFlight.current?.(), [])
 
   const [plan, setPlan] = useState(newRoundPlan)
   const [cook, setCook] = useState<Cook>(() => newCook(plan.orders[0]))
@@ -270,7 +273,8 @@ export default function SushiGame({ gameId, onExit }: GameSceneProps) {
       const from = project.current?.([layout.place[0], 6.5, CUSTOMER_Z])
       const count = coinsFor(served.mistakes)
       if (layer && pill && from) {
-        flyCoins(layer, from, pill, count, () => {
+        cancelFlight.current?.()
+        cancelFlight.current = flyCoins(layer, from, pill, count, () => {
           setBanked((b) => b + 1)
           coin()
         })
@@ -310,6 +314,8 @@ export default function SushiGame({ gameId, onExit }: GameSceneProps) {
   }
 
   const again = () => {
+    cancelFlight.current?.()
+    cancelFlight.current = null
     const fresh = newRoundPlan()
     setPlan(fresh)
     setCook(newCook(fresh.orders[0]))

@@ -138,3 +138,58 @@ test('sushi: make a maki by drag and tap, serve it, and the coins go up', async 
   await expect(page.getByTestId('sticker-sushi_first')).toBeVisible()
   expect(errors).toEqual([])
 })
+
+test('sushi: leaving mid-drag removes the drag listeners, and releasing later changes nothing', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByTestId('menu-play').click()
+  await page.getByTestId('play-game-sushi').click()
+  await page.getByTestId('round-start').click()
+  await expect(page.getByTestId('order-bubble')).toBeVisible()
+  await waitStep(page, 'seaweed')
+  const coinsBefore = await page.getByTestId('play-coins').getAttribute('data-coins')
+  // Track the window 'pointerup' listeners that are alive.
+  await page.evaluate(() => {
+    const w = window as unknown as { __up: Set<unknown> }
+    w.__up = new Set()
+    const add = window.addEventListener.bind(window)
+    const remove = window.removeEventListener.bind(window)
+    window.addEventListener = ((t: string, fn: unknown, ...r: unknown[]) => {
+      if (t === 'pointerup') w.__up.add(fn)
+      return (add as (...a: unknown[]) => void)(t, fn, ...r)
+    }) as typeof window.addEventListener
+    window.removeEventListener = ((t: string, fn: unknown, ...r: unknown[]) => {
+      if (t === 'pointerup') w.__up.delete(fn)
+      return (remove as (...a: unknown[]) => void)(t, fn, ...r)
+    }) as typeof window.removeEventListener
+  })
+  const a = await point(page, 'seaweed')
+  const b = await point(page, 'mat')
+  await page.mouse.move(a.x, a.y)
+  await page.mouse.down()
+  await page.mouse.move(b.x, b.y, { steps: 4 })
+  // Whatever listeners the drag added, now: they must all be gone after leaving.
+  await page.evaluate(() => {
+    const w = window as unknown as { __up: Set<unknown>; __held: unknown[] }
+    w.__held = [...w.__up]
+  })
+  expect(await page.evaluate(() => (window as unknown as { __held: unknown[] }).__held.length)).toBeGreaterThan(0)
+  // Back with another "finger" while the item is still held.
+  await page.getByTestId('back').dispatchEvent('click')
+  await expect(page.getByTestId('mode-play')).toHaveCount(0)
+  // The 3D scene unmounts a moment after the screen does.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const w = window as unknown as { __up: Set<unknown>; __held: unknown[] }
+        return w.__held.filter((f) => w.__up.has(f)).length
+      }),
+    )
+    .toBe(0)
+  await page.mouse.up()
+  await page.waitForTimeout(500)
+  expect(errors).toEqual([])
+  await page.getByTestId('menu-play').click()
+  await expect(page.getByTestId('play-coins')).toHaveAttribute('data-coins', coinsBefore ?? '0')
+})

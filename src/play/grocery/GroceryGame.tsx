@@ -254,6 +254,7 @@ export default function GroceryGame({ gameId, onExit }: GameSceneProps) {
 
   const giveCoin = (c: number): boolean => {
     if (step !== 'change' || !customer) return false
+    if (changeDone(given, customer.change)) return false // complete: a late tap is not a mistake
     const next = giveChange(given, c, customer.change)
     if (next === null) {
       round.mistake()

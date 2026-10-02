@@ -39,7 +39,10 @@ export function buy(id: string): { stickers: string[] } | { error: BuyError } {
 }
 
 /** Opens game `gameId` from the menu (Back returns to the menu). */
-export const startGameFromMenu = (gameId: GameId): void => useApp.getState().startPlay({ gameId, from: 'menu' })
+export const startGameFromMenu = (gameId: GameId): void => {
+  usePlayUi.getState().closeShop() // started from the shop popup: it must not stay over the game
+  useApp.getState().startPlay({ gameId, from: 'menu' })
+}
 
 /** Leaves the game in progress: back to the City (same view) or the menu it was started from. */
 export function exitGame(): void {

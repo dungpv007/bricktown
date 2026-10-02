@@ -67,13 +67,18 @@ function StationStage({ ringing, onAnswer }: { ringing: boolean; onAnswer: () =>
 function useRingSound(ringing: boolean) {
   useEffect(() => {
     if (!ringing) return
+    let second = 0
     const ring = () => {
       pop()
-      window.setTimeout(pop, 160)
+      window.clearTimeout(second)
+      second = window.setTimeout(pop, 160)
     }
     ring()
     const id = window.setInterval(ring, 1400)
-    return () => window.clearInterval(id)
+    return () => {
+      window.clearInterval(id)
+      window.clearTimeout(second)
+    }
   }, [ringing])
 }
 

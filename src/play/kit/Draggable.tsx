@@ -164,6 +164,22 @@ export function DragItem({ id, position, lift = 1.5, grabSize = [3, 3, 3], onDro
     }
   })
 
+  /** Removes the active drag's window listeners; the item leaving mid-drag drops nothing. */
+  const detachRef = useRef<(() => void) | null>(null)
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      if (detachRef.current) {
+        detachRef.current()
+        arena.setDragging(null)
+        arena.setHovered(null)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount only
+  }, [])
+
   const start = (e: ThreeEvent<PointerEvent>) => {
     if (disabled || arena.dragging !== null) return
     e.stopPropagation()
@@ -188,7 +204,7 @@ export function DragItem({ id, position, lift = 1.5, grabSize = [3, 3, 3], onDro
     pop()
     invalidate()
     const move = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointerId) return
+      if (ev.pointerId !== pointerId || !alive.current) return
       const p = project(ev.clientX, ev.clientY)
       if (!p) return
       g.position.x = p.x + (offset?.x ?? 0)
@@ -196,11 +212,11 @@ export function DragItem({ id, position, lift = 1.5, grabSize = [3, 3, 3], onDro
       arena.setHovered(nearestTarget(arena.targets, g.position.x, g.position.z))
       invalidate()
     }
+    const detach = () => detachRef.current?.()
     const end = (ev: PointerEvent) => {
       if (ev.pointerId !== pointerId) return
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', end)
-      window.removeEventListener('pointercancel', end)
+      detach()
+      if (!alive.current) return
       const target = ev.type === 'pointercancel' ? null : nearestTarget(arena.targets, g.position.x, g.position.z)
       arena.setDragging(null)
       arena.setHovered(null)
@@ -213,6 +229,12 @@ export function DragItem({ id, position, lift = 1.5, grabSize = [3, 3, 3], onDro
         wobble.current = target ? 1 : 0.5
       }
       setGliding(true)
+    }
+    detachRef.current = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      detachRef.current = null
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
