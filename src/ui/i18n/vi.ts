@@ -114,6 +114,7 @@ export const vi = {
   cityScale: 'Kích thước',
   cityScaleUp: 'Phóng to',
   cityScaleDown: 'Thu nhỏ',
+  cityNpc: 'Xe cộ và người đi bộ',
   drivePick: 'Chọn xe để lái',
   driveNeedsWheels: 'Cần thêm bánh xe',
   driveTurnWheels: 'Xoay bánh xe cho thẳng',

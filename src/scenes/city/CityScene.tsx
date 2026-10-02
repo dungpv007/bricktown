@@ -15,10 +15,12 @@ import { createGhostMaterial } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
+import { useApp } from '../../state/useApp'
 import { useCityEditor } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
 import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
+import NpcLife from './NpcLife'
 import PlacementHighlight from './PlacementHighlight'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
 import Rails from './Rails'
@@ -299,6 +301,7 @@ function CityWorld() {
   const selectedSource = useCityEditor((s) => s.selectedSource)
   const selectedPlacementId = useCityEditor((s) => s.selectedPlacementId)
   const errorSeq = useCityEditor((s) => s.errorSeq)
+  const npcOn = useApp((s) => s.npcOn)
   const el = useThree((s) => s.gl.domElement)
   const getThree = useThree((s) => s.get)
 
@@ -535,6 +538,8 @@ function CityWorld() {
       <Roads roads={display.roads} />
       {display.rails && <Rails rails={display.rails} roads={display.roads} />}
       <Placements placements={shown} blueprints={blueprints} />
+      {/* Ambient life follows the saved city (not a stroke in progress); picking ignores it (see `pick`). */}
+      {npcOn && <NpcLife city={city} blueprints={blueprints} />}
       {selected && selectedCells && (
         <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selectedCells.cw} cd={selectedCells.cd} color={SELECTED} opacity={0.55} />
       )}

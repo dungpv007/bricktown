@@ -116,6 +116,7 @@ export const en: Record<keyof typeof vi, string> = {
   cityScale: 'Size',
   cityScaleUp: 'Make bigger',
   cityScaleDown: 'Make smaller',
+  cityNpc: 'Traffic and people',
   drivePick: 'Pick a car to drive',
   driveNeedsWheels: 'Needs wheels',
   driveTurnWheels: 'Turn the wheels to face forward',

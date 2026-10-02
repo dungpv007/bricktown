@@ -22,6 +22,8 @@ export interface AppState {
   sfxVolume: number
   /** Workshop colour picker folded into one button, per device class (unset: see `colorsCollapsed`). */
   colorsCollapsed: Partial<Record<DeviceClass, boolean>>
+  /** Ambient City life (cars, trains, people) on; off by default when the device asks for reduced motion. */
+  npcOn: boolean
   setMode: (mode: Mode) => void
   setLang: (lang: Lang) => void
   setDifficulty: (difficulty: Difficulty) => void
@@ -31,6 +33,7 @@ export interface AppState {
   setMusicVolume: (volume: number) => void
   setSfxVolume: (volume: number) => void
   setColorsCollapsed: (deviceClass: DeviceClass, collapsed: boolean) => void
+  setNpcOn: (on: boolean) => void
 }
 
 /** Whether the colour picker is folded on `deviceClass`: the kid's choice, else folded on portrait phones only. */
@@ -44,6 +47,10 @@ export function normalizeVolume(value: unknown, fallback: number = DEFAULT_VOLUM
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
   return Math.min(1, Math.max(0, value))
 }
+
+/** Whether the device asks for reduced motion (false where it cannot be asked, e.g. in node tests). */
+export const prefersReducedMotion = (): boolean =>
+  typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const noopStorage: StateStorage = {
   getItem: () => null,
@@ -76,7 +83,7 @@ const LANGS: readonly Lang[] = ['vi', 'en']
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal']
 const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
 
-type Prefs = Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed'>
+type Prefs = Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed' | 'npcOn'>
 
 /**
  * Keeps only persisted preference values that are valid; anything else falls back to defaults.
@@ -97,6 +104,7 @@ export function sanitizePrefs(persisted: unknown): Partial<Prefs> {
   // Saves from before the volume sliders have neither field: the defaults apply.
   if (typeof p.musicVolume === 'number' && Number.isFinite(p.musicVolume)) out.musicVolume = normalizeVolume(p.musicVolume)
   if (typeof p.sfxVolume === 'number' && Number.isFinite(p.sfxVolume)) out.sfxVolume = normalizeVolume(p.sfxVolume)
+  if (typeof p.npcOn === 'boolean') out.npcOn = p.npcOn
   if (typeof p.colorsCollapsed === 'object' && p.colorsCollapsed !== null) {
     const saved = p.colorsCollapsed as Record<string, unknown>
     const kept: Partial<Record<DeviceClass, boolean>> = {}
@@ -118,6 +126,7 @@ export const useApp = create<AppState>()(
       musicVolume: DEFAULT_VOLUME,
       sfxVolume: DEFAULT_VOLUME,
       colorsCollapsed: {},
+      npcOn: !prefersReducedMotion(),
       setMode: (mode) => set({ mode }),
       setLang: (lang) => set({ lang }),
       setDifficulty: (difficulty) => set({ difficulty }),
@@ -128,6 +137,7 @@ export const useApp = create<AppState>()(
       setSfxVolume: (volume) => set({ sfxVolume: normalizeVolume(volume) }),
       setColorsCollapsed: (deviceClass, collapsed) =>
         set((s) => ({ colorsCollapsed: { ...s.colorsCollapsed, [deviceClass]: collapsed } })),
+      setNpcOn: (npcOn) => set({ npcOn }),
     }),
     {
       name: 'bricktown-prefs',
@@ -141,6 +151,7 @@ export const useApp = create<AppState>()(
         musicVolume: s.musicVolume,
         sfxVolume: s.sfxVolume,
         colorsCollapsed: s.colorsCollapsed,
+        npcOn: s.npcOn,
       }),
       merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),
     },
