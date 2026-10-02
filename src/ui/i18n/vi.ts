@@ -319,4 +319,11 @@ export const vi = {
   playBuy: 'Mua',
   playOwned: 'Đã có',
   playNotEnough: 'Chưa đủ xu',
+  groceryLevelSmall: 'Bé nhỏ',
+  groceryLevelBig: 'Bé lớn',
+  groceryTotal: 'Tổng tiền',
+  groceryPay: 'Trả tiền',
+  groceryPaid: 'Khách đưa',
+  groceryChange: 'Tiền thối',
+  groceryCoin: '{n} xu',
 } as const

@@ -1,0 +1,461 @@
+/* ---------- Grocery cashier (src/play/grocery) ---------- */
+
+/* Coin pictures: gold coins with their value; 5 is bigger; 10 and 20 are green notes. */
+.g-coin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: calc(30px * var(--bt-s));
+  height: calc(30px * var(--bt-s));
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3a0 0 18%, #ffd500 45%, #e0a800 100%);
+  border: calc(2px * var(--bt-s)) solid #b98500;
+  box-sizing: border-box;
+  color: #7a4f00;
+  font-size: calc(15px * var(--bt-s));
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.g-coin-2 {
+  background: radial-gradient(circle at 35% 30%, #ffe2c0 0 18%, #ffad5c 45%, #d97a18 100%);
+  border-color: #a85a0c;
+  color: #6b3600;
+}
+
+.g-coin-5 {
+  width: calc(38px * var(--bt-s));
+  height: calc(38px * var(--bt-s));
+  background: radial-gradient(circle at 35% 30%, #f4f6fa 0 18%, #c9ced8 45%, #8d95a3 100%);
+  border-color: #6c7480;
+  color: #2f3540;
+  font-size: calc(18px * var(--bt-s));
+}
+
+.g-coin-10,
+.g-coin-20 {
+  width: calc(46px * var(--bt-s));
+  height: calc(30px * var(--bt-s));
+  border-radius: calc(6px * var(--bt-s));
+  background: linear-gradient(135deg, #8fe39e, #3fae5a);
+  border-color: #237841;
+  color: #0d4220;
+}
+
+.g-coin-20 {
+  background: linear-gradient(135deg, #9fd0ff, #4d8fe0);
+  border-color: #0055bf;
+  color: #062e66;
+}
+
+.g-coin-big {
+  width: calc(64px * var(--bt-s));
+  height: calc(64px * var(--bt-s));
+  font-size: calc(30px * var(--bt-s));
+  border-width: calc(3px * var(--bt-s));
+}
+
+.g-coin-big.g-coin-5 {
+  width: calc(76px * var(--bt-s));
+  height: calc(76px * var(--bt-s));
+  font-size: calc(34px * var(--bt-s));
+}
+
+.g-coin-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(3px * var(--bt-s));
+}
+
+/* The till panel at the bottom centre. */
+.g-till {
+  position: absolute;
+  left: 50%;
+  bottom: calc(12px * var(--bt-s) + var(--bt-safe-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: calc(12px * var(--bt-s));
+  max-width: calc(100% - 24px * var(--bt-s));
+  padding: calc(10px * var(--bt-s)) calc(14px * var(--bt-s));
+  box-sizing: border-box;
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--bt-shadow);
+  transform: translateX(-50%);
+  animation: g-rise 0.3s ease-out both;
+  pointer-events: none;
+}
+
+.g-till button {
+  pointer-events: auto;
+}
+
+@keyframes g-rise {
+  from { transform: translate(-50%, 30px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.g-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(4px * var(--bt-s));
+  min-width: calc(110px * var(--bt-s));
+  padding: calc(6px * var(--bt-s)) calc(12px * var(--bt-s));
+  border-radius: calc(14px * var(--bt-s));
+  background: #17312a;
+  border: calc(3px * var(--bt-s)) solid #6c6e68;
+}
+
+.g-digits {
+  color: #8dff9e;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: calc(54px * var(--bt-s));
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 calc(10px * var(--bt-s)) rgba(141, 255, 158, 0.7);
+}
+
+.g-screen .g-coin-row {
+  flex-wrap: nowrap;
+  min-height: calc(30px * var(--bt-s));
+}
+
+.g-pay-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.g-hint {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  pointer-events: none;
+}
+
+.bt-btn.g-pay {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+  min-height: calc(88px * var(--bt-s));
+  padding: 0 calc(22px * var(--bt-s));
+  animation: g-pulse 1.4s ease-in-out infinite;
+}
+
+.g-pay .g-coin-row {
+  max-width: calc(200px * var(--bt-s));
+}
+
+.g-pay-check {
+  font-size: calc(40px * var(--bt-s));
+  font-weight: 900;
+}
+
+/* A glow, not a size change: the button stays a still target. */
+@keyframes g-pulse {
+  0%, 100% { box-shadow: var(--bt-shadow), 0 0 0 0 rgba(255, 213, 0, 0.8); }
+  60% { box-shadow: var(--bt-shadow), 0 0 0 calc(14px * var(--bt-s)) rgba(255, 213, 0, 0); }
+}
+
+/* Change: what the customer gave → the dots to count → the drawer's coins. */
+.g-change {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(8px * var(--bt-s));
+}
+
+.g-change-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(8px * var(--bt-s));
+}
+
+.g-paid {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4px * var(--bt-s));
+  font-size: calc(28px * var(--bt-s));
+}
+
+.g-arrow {
+  font-size: calc(26px * var(--bt-s));
+  color: var(--bt-ink);
+}
+
+.g-dots {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: calc(8px * var(--bt-s));
+  max-width: calc(300px * var(--bt-s));
+  justify-content: center;
+}
+
+.g-dot-group {
+  display: inline-flex;
+  gap: calc(3px * var(--bt-s));
+}
+
+.g-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(24px * var(--bt-s));
+  height: calc(24px * var(--bt-s));
+  border-radius: 50%;
+  background: #e3e8ec;
+  border: calc(2px * var(--bt-s)) dashed #a0a5a9;
+  box-sizing: border-box;
+  color: #7a4f00;
+  font-size: calc(11px * var(--bt-s));
+  font-weight: 900;
+}
+
+.g-dot[data-on='true'] {
+  background: var(--bt-yellow);
+  border: calc(2px * var(--bt-s)) solid #b98500;
+  animation: g-dot-on 0.3s ease-out both;
+}
+
+@keyframes g-dot-on {
+  0% { transform: scale(0.4); background: #e3e8ec; }
+  60% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+.g-count {
+  min-width: calc(48px * var(--bt-s));
+  color: var(--bt-ink);
+  font-size: calc(44px * var(--bt-s));
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  animation: g-count-pop 0.25s ease-out;
+}
+
+@keyframes g-count-pop {
+  0% { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+
+.g-drawer {
+  display: flex;
+  align-items: center;
+  gap: calc(14px * var(--bt-s));
+  padding: calc(6px * var(--bt-s)) calc(14px * var(--bt-s));
+  border-radius: calc(16px * var(--bt-s));
+  background: #583927;
+}
+
+.g-drawer-coin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--bt-touch);
+  min-height: var(--bt-touch);
+  padding: calc(4px * var(--bt-s));
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.08s;
+}
+
+.g-drawer-coin:active {
+  transform: scale(0.88);
+}
+
+.g-drawer-coin[data-wobble='true'] {
+  animation: g-wobble 0.45s ease-in-out;
+}
+
+@keyframes g-wobble {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-16deg); }
+  40% { transform: rotate(14deg); }
+  60% { transform: rotate(-9deg); }
+  80% { transform: rotate(5deg); }
+}
+
+/* Over the customer's head and above the scanner. */
+.g-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 18px;
+  background: var(--bt-white);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.18);
+  font-size: 32px;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  animation: bt-celebrate-in 0.35s ease-out both;
+}
+
+.g-bubble .g-coin-row {
+  flex-wrap: nowrap;
+}
+
+.g-price-pop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: var(--bt-white);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
+  font-size: 30px;
+  line-height: 1;
+  white-space: nowrap;
+  animation: g-price-up 1.1s ease-out both;
+}
+
+.g-price-pop .g-coin {
+  width: 40px;
+  height: 40px;
+  font-size: 22px;
+}
+
+@keyframes g-price-up {
+  0% { transform: translateY(20px) scale(0.4); opacity: 0; }
+  20% { transform: translateY(0) scale(1.15); opacity: 1; }
+  75% { transform: translateY(-30px) scale(1); opacity: 1; }
+  100% { transform: translateY(-50px) scale(0.9); opacity: 0; }
+}
+
+/* Coins flying up to the wallet. */
+.g-fly {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.g-fly-coin {
+  position: absolute;
+  left: 50%;
+  top: 55%;
+  font-size: calc(40px * var(--bt-s));
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  animation: g-fly 0.95s cubic-bezier(0.45, 0, 0.55, 1) both;
+}
+
+@keyframes g-fly {
+  0% { transform: translate(calc(-50% + var(--g-spread)), -50%) scale(0.3); opacity: 0; }
+  20% { transform: translate(calc(-50% + var(--g-spread)), calc(-50% - 60px)) scale(1.2); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--g-dx)), calc(-50% + var(--g-dy))) scale(0.6); opacity: 0.9; }
+}
+
+/* The level picker. */
+.g-levels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(16px * var(--bt-s));
+}
+
+.bt-btn.g-level {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6px * var(--bt-s));
+  min-width: calc(170px * var(--bt-s));
+  padding: calc(14px * var(--bt-s)) calc(18px * var(--bt-s));
+}
+
+.bt-btn.g-level-big {
+  background: var(--bt-orange);
+  color: var(--bt-white);
+}
+
+.bt-btn.g-level[data-last='true'] {
+  outline: calc(4px * var(--bt-s)) solid var(--bt-yellow);
+  outline-offset: calc(3px * var(--bt-s));
+}
+
+.g-level-icon {
+  font-size: calc(56px * var(--bt-s));
+  line-height: 1;
+}
+
+.g-level-name {
+  font-size: calc(24px * var(--bt-s));
+  font-weight: 800;
+}
+
+.g-level-pic {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(4px * var(--bt-s));
+  font-size: calc(20px * var(--bt-s));
+}
+
+/* Summary: progress toward the "super cashier" sticker. */
+.g-milestone {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16px * var(--bt-s) + var(--bt-safe-bottom));
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+  padding: calc(8px * var(--bt-s)) calc(14px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--bt-shadow);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.g-milestone-icon {
+  font-size: calc(40px * var(--bt-s));
+  line-height: 1;
+  filter: grayscale(0.7);
+  opacity: 0.75;
+}
+
+.g-milestone-dots {
+  display: inline-flex;
+  gap: calc(4px * var(--bt-s));
+}
+
+/* Phones held upright: the till stacks. */
+@media (max-width: 599.98px) {
+  .g-till {
+    flex-direction: column;
+    gap: calc(8px * var(--bt-s));
+  }
+}
+
+/*
+ * Held upright, the stage (fitted to its width) leaves room above and below: the till sits right
+ * under the counter instead of at the very bottom. The counter front is about 21vw under the
+ * middle of the screen at this camera.
+ */
+@media (orientation: portrait) {
+  .g-till {
+    top: calc(50% + 24vw);
+    bottom: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-btn.g-pay,
+  .g-price-pop,
+  .g-fly-coin,
+  .g-dot[data-on='true'] {
+    animation-duration: 0.01s;
+  }
+}

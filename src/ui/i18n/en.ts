@@ -321,4 +321,11 @@ export const en: Record<keyof typeof vi, string> = {
   playBuy: 'Buy',
   playOwned: 'Owned',
   playNotEnough: 'Not enough coins',
+  groceryLevelSmall: 'Little',
+  groceryLevelBig: 'Big',
+  groceryTotal: 'Total',
+  groceryPay: 'Pay',
+  groceryPaid: 'Customer gave',
+  groceryChange: 'Change',
+  groceryCoin: '{n} coins',
 }
