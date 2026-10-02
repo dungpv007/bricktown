@@ -1,20 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_HEIGHT_PLATES, canPlace, settleAnchor } from './model'
+import { MAX_HEIGHT_PLATES, canPlace, pointerAnchor, settleAnchor } from './model'
+import { Occupancy } from './occupancy'
 import { getPart } from './parts/catalog'
-import { targetAnchor, type PickHit } from './pick'
+import { targetAnchor, type PickHit, type Vec3 } from './pick'
+import { footprint } from './rotation'
 import type { Baseplate, Brick, Rot } from './types'
+import { platesToWorld } from './units'
 
 const bp: Baseplate = { w: 16, d: 16 }
 const UP: [number, number, number] = [0, 1, 0]
 const b = (id: string, p: string, x: number, y: number, z: number, r: Rot = 0): Brick => ({ id, p, x, y, z, r, c: 0 })
 
-/** What the Workshop does for a pointer hit: the raw anchor, then settling it. */
+/** What the Workshop does for a pointer hit (`pointerAnchor`), next to the raw `targetAnchor`. */
 function drop(bricks: Brick[], hit: PickHit, partId: string, r: Rot = 0, excludeId?: string) {
   const part = getPart(partId)
   const raw = targetAnchor(hit, part, r)
-  const settled = settleAnchor(bricks, part, r, raw, bp, excludeId)
+  const settled = pointerAnchor(bricks, hit, part, r, bp, excludeId)
   const err = canPlace(bricks, { id: 'n', p: partId, r, c: 0, ...settled }, bp, excludeId)
   return { raw, settled, err }
+}
+
+/** A plate hit seen from `origin`: the ray from `origin` through world point `through`, carried on to y = 0. */
+function plateHitThrough(origin: Vec3, through: Vec3): PickHit {
+  const t = origin[1] / (origin[1] - through[1])
+  const point: Vec3 = [origin[0] + (through[0] - origin[0]) * t, 0, origin[2] + (through[2] - origin[2]) * t]
+  return { point, normal: UP, brick: null, origin }
 }
 
 describe('settleAnchor', () => {
@@ -74,12 +84,14 @@ describe('settleAnchor', () => {
     expect(settleAnchor(bricks, part, 0, { x: -1, y: 0, z: 4 }, bp)).toEqual({ x: -1, y: 0, z: 4 })
   })
 
-  it('returns the original anchor when the stack reaches the height limit', () => {
+  it('on a stack at the height limit it rests on top, which canPlace rejects', () => {
     const tower: Brick[] = []
     for (let y = 0; y < MAX_HEIGHT_PLATES; y += 3) tower.push(b(`t${y}`, 'brick_2x2', 4, y, 4))
     const part = getPart('brick_2x2')
     const a = { x: 4, y: 0, z: 4 }
-    expect(settleAnchor(tower, part, 0, a, bp)).toEqual(a)
+    const top = settleAnchor(tower, part, 0, a, bp)
+    expect(top).toEqual({ x: 4, y: MAX_HEIGHT_PLATES, z: 4 })
+    expect(canPlace(tower, { id: 'n', p: 'brick_2x2', r: 0, c: 0, ...top }, bp)).toBe('out_of_bounds')
     // One brick short of the limit: the last free level is the top.
     expect(settleAnchor(tower.slice(0, -1), part, 0, a, bp)).toEqual({ x: 4, y: MAX_HEIGHT_PLATES - 3, z: 4 })
   })
@@ -91,14 +103,13 @@ describe('settleAnchor', () => {
     expect(settleAnchor(bricks, part, 0, { x: 4, y: -2, z: 4 }, bp)).toEqual({ x: 4, y: 3, z: 4 })
   })
 
-  it('an overhang with nothing under it stays unsupported (original anchor, usual error)', () => {
+  it('an anchor in mid-air with nothing under it drops to the plate', () => {
     const bricks = [b('a', 'brick_2x2', 4, 0, 4)]
     const part = getPart('brick_1x1')
-    const a = { x: 9, y: 3, z: 9 }
-    expect(settleAnchor(bricks, part, 0, a, bp)).toEqual(a)
+    expect(settleAnchor(bricks, part, 0, { x: 9, y: 3, z: 9 }, bp)).toEqual({ x: 9, y: 0, z: 9 })
   })
 
-  it('agrees with a brute-force climb through canPlace on random models', () => {
+  it('agrees with a brick falling from the sky on random models, and canPlace accepts where it lands', () => {
     let seed = 12345
     const rnd = (n: number) => {
       seed = (seed * 1103515245 + 12345) & 0x7fffffff
@@ -118,15 +129,16 @@ describe('settleAnchor', () => {
         const p = parts[rnd(parts.length)]
         const r = rnd(4) as Rot
         const anchor = { x: rnd(9) - 1, y: rnd(14) - 2, z: rnd(9) - 1 }
-        let expected = anchor
-        for (let y = Math.max(0, anchor.y); y + getPart(p).h <= MAX_HEIGHT_PLATES; y++) {
-          const probe = { id: 'n', p, r, c: 0, x: anchor.x, y, z: anchor.z }
-          if (canPlace(bricks, probe, small, excludeId) === null) {
-            expected = { ...anchor, y }
-            break
-          }
-        }
-        expect(settleAnchor(bricks, getPart(p), r, anchor, small, excludeId)).toEqual(expected)
+        // Drop it from well above everything and let it fall one plate at a time until it would hit something.
+        const occ = Occupancy.from(bricks.filter((x) => x.id !== excludeId))
+        const probe = (y: number): Brick => ({ id: 'n', p, r, c: 0, x: anchor.x, y, z: anchor.z })
+        let y = 60
+        while (y > 0 && !occ.collides(probe(y - 1))) y--
+        const settled = settleAnchor(bricks, getPart(p), r, anchor, small, excludeId)
+        expect(settled).toEqual({ x: anchor.x, y, z: anchor.z })
+        const { fx, fz } = footprint(getPart(p), r)
+        const onPlate = anchor.x >= 0 && anchor.z >= 0 && anchor.x + fx <= small.w && anchor.z + fz <= small.d
+        expect(canPlace(bricks, probe(y), small, excludeId)).toBe(onPlate ? null : 'out_of_bounds')
       }
     }
   })
@@ -136,5 +148,95 @@ describe('settleAnchor', () => {
     const part = getPart('brick_2x4')
     // r=1: fx 4, fz 2 at x 4..7, z 4..5: covers the 2x2 and the plate above it, so the top is y 4.
     expect(settleAnchor(bricks, part, 1, { x: 4, y: 0, z: 4 }, bp)).toEqual({ x: 4, y: 4, z: 4 })
+  })
+})
+
+describe('pointerAnchor', () => {
+  // Left support 3 plates tall at x 4, right support 6 plates tall at x 7: 2 studs apart (x 5, 6).
+  const supports = [b('l', 'brick_1x1', 4, 0, 4), b('r0', 'brick_1x1', 7, 0, 4), b('r1', 'brick_1x1', 7, 3, 4)]
+  const ALONG_X: Rot = 1 // brick_1x6 is 1 wide and 6 deep: a quarter turn lays it along X
+  // The Workshop camera: high up, in front of the plate (+Z), looking down at it.
+  const camera: Vec3 = [8, 14, 22]
+
+  it('a 1x6 aimed at the plate between two supports rests on the taller one and bridges the gap', () => {
+    // A plate hit in the gap, cell (5, 4): the 1x6 spans x 3..8 and covers both supports.
+    const { raw, settled, err } = drop(supports, { point: [5.5, 0, 4.5], normal: UP, brick: null }, 'brick_1x6', ALONG_X)
+    expect(raw).toEqual({ x: 3, y: 0, z: 4 })
+    expect(settled).toEqual({ x: 3, y: 6, z: 4 })
+    expect(err).toBeNull()
+  })
+
+  it('the pointer over the gap at the height of the supports bridges them, though the ray hits the plate behind them', () => {
+    // Aimed where the bridge goes: above the gap (cell 5, row 4) at the tall support's top.
+    const hit = plateHitThrough(camera, [5.5, platesToWorld(6), 4.5])
+    const { raw, settled, err } = drop(supports, hit, 'brick_1x6', ALONG_X)
+    // The ray goes on past the supports: the plate hit alone puts the 1x6 on empty ground further back.
+    expect(raw.y).toBe(0)
+    expect(raw.z).toBeLessThan(4)
+    expect(settleAnchor(supports, getPart('brick_1x6'), ALONG_X, raw, bp).y).toBe(0)
+    expect(settled).toEqual({ x: 3, y: 6, z: 4 })
+    expect(err).toBeNull()
+  })
+
+  it('a brick aimed at the empty plate stays on the plate', () => {
+    const hit = plateHitThrough(camera, [11.5, 0, 12.5])
+    const { raw, settled, err } = drop(supports, hit, 'brick_2x4')
+    expect(settled).toEqual(raw)
+    expect(settled.y).toBe(0)
+    expect(err).toBeNull()
+  })
+
+  it('a brick aimed at the top of a single brick sits on it', () => {
+    const base = [b('a', 'brick_2x4', 6, 0, 6)]
+    const hit: PickHit = { point: [6.5, platesToWorld(3), 7.5], normal: UP, brick: base[0], origin: camera }
+    const { raw, settled, err } = drop(base, hit, 'brick_2x2')
+    expect(settled).toEqual({ x: 6, y: 3, z: 7 })
+    expect(settled).toEqual(raw)
+    expect(err).toBeNull()
+  })
+
+  it('a side hit picks the next cell, which then rests on the highest studs below it (here the plate)', () => {
+    // A 2x2 raised on another: its +X face at y 3..6 targets cell (6, 4) at y = 3, with nothing under it.
+    const bricks = [b('a', 'brick_2x2', 4, 0, 4), b('c', 'brick_2x2', 4, 3, 4)]
+    const hit: PickHit = { point: [6, platesToWorld(4), 4.5], normal: [1, 0, 0], brick: bricks[1], origin: camera }
+    const { raw, settled, err } = drop(bricks, hit, 'brick_1x1')
+    expect(raw).toEqual({ x: 6, y: 3, z: 4 })
+    expect(settled).toEqual({ x: 6, y: 0, z: 4 })
+    expect(err).toBeNull()
+  })
+
+  it('a hit on the underside of an overhang still places under it when that fits', () => {
+    // A 2x4 resting on a 1x1 at its corner: room for a brick under the rest of it.
+    const bricks = [b('post', 'brick_1x1', 4, 0, 4), b('roof', 'brick_2x4', 4, 3, 4)]
+    const low: Vec3 = [5.5, 0.6, 20]
+    const under: PickHit = { point: [5.5, platesToWorld(3), 6.5], normal: [0, -1, 0], brick: bricks[1], origin: low }
+    const brick = drop(bricks, under, 'brick_1x1')
+    expect(brick.settled).toEqual({ x: 5, y: 0, z: 6 })
+    expect(brick.err).toBeNull()
+    // A plate would hang in the air under the roof: it is lowered onto the roof from above instead.
+    const plate = drop(bricks, under, 'plate_1x1')
+    expect(plate.raw.y).toBe(2)
+    expect(plate.settled).toEqual({ x: 5, y: 6, z: 6 })
+    expect(plate.err).toBeNull()
+  })
+
+  it('keeps off-plate and over-height drops invalid', () => {
+    const off = drop([], plateHitThrough(camera, [15.5, 0, 8.5]), 'brick_2x4')
+    expect(off.settled.x).toBe(15)
+    expect(off.err).toBe('out_of_bounds')
+
+    const tower: Brick[] = []
+    for (let y = 0; y < MAX_HEIGHT_PLATES; y += 3) tower.push(b(`t${y}`, 'brick_2x2', 4, y, 4))
+    const top: PickHit = { point: [4.5, platesToWorld(MAX_HEIGHT_PLATES), 4.5], normal: UP, brick: tower.at(-1)!, origin: [4.5, 80, 30] }
+    const high = drop(tower, top, 'brick_1x1')
+    expect(high.settled.y).toBe(MAX_HEIGHT_PLATES)
+    expect(high.err).toBe('out_of_bounds')
+  })
+
+  it('a moved brick is not an obstacle to itself', () => {
+    // Moving the tall support's top brick: it no longer counts, so the 1x6 rests on the 3-plate tops.
+    const { settled, err } = drop(supports, { point: [5.5, 0, 4.5], normal: UP, brick: null, origin: camera }, 'brick_1x6', ALONG_X, 'r1')
+    expect(settled.y).toBe(3)
+    expect(err).toBeNull()
   })
 })

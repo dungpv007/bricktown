@@ -2,9 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
-import { bounds, canPlace, settleAnchor, type Bounds } from '../../core/model'
+import { bounds, canPlace, pointerAnchor, type Bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
-import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
+import { rotateNormalY, type PickHit, type Vec3 } from '../../core/pick'
 import type { Baseplate as BaseplateSize, Brick, PartDef, Rot } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import GhostBrick from '../../render/GhostBrick'
@@ -239,13 +239,13 @@ export function Ground({ size }: { size: BaseplateSize }) {
 type Preview = { kind: 'part'; hit: PickHit } | { kind: 'move'; brick: Brick; hit: PickHit | null }
 
 /**
- * Where a part dropped on `hit` goes: the pointer's target, climbed to the lowest free level when
- * those studs are already taken (so it stacks on top instead of failing). `movingId` is the brick
- * being moved, which is not an obstacle to itself.
+ * Where a part dropped on `hit` goes: lowered from above under the pointer onto the highest studs below
+ * its footprint, so it stacks on what is there and bridges gaps (see `pointerAnchor`). `movingId` is the
+ * brick being moved, which is not an obstacle to itself.
  */
 function dropAnchor(hit: PickHit, part: PartDef, r: Rot, movingId?: string): Anchor {
   const { bricks, baseplate } = useGame.getState().data.workshop
-  return settleAnchor(bricks, part, r, targetAnchor(hit, part, r), baseplate, movingId)
+  return pointerAnchor(bricks, hit, part, r, baseplate, movingId)
 }
 
 /** Where the preview's part would go, for the editor's current part and rotation. */
@@ -329,7 +329,13 @@ function WorkshopWorld() {
         const brick = brickOfInstance(h.object, h.instanceId) ?? null
         if (brick && brick.id === excludeId) continue
         const local: Vec3 = [h.face.normal.x, h.face.normal.y, h.face.normal.z]
-        return { point: [h.point.x, h.point.y, h.point.z], normal: brick ? rotateNormalY(local, brick.r) : local, brick }
+        const { origin } = raycaster.ray
+        return {
+          point: [h.point.x, h.point.y, h.point.z],
+          normal: brick ? rotateNormalY(local, brick.r) : local,
+          brick,
+          origin: [origin.x, origin.y, origin.z],
+        }
       }
       return null
     },

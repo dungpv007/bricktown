@@ -480,3 +480,38 @@ test('workshop: a brick moved onto occupied studs climbs on top instead of faili
   expect((await bricks(page)).find((b) => b.id === mover.id)).toMatchObject({ x: 7, y: 4, z: 7 })
   expect(await brickCount(page)).toBe(4)
 })
+
+test('workshop: a 1x6 dragged from the palette over the gap between two supports bridges them', async ({ page }) => {
+  await openWorkshop(page)
+  // Two 2x2 supports 2 studs apart: a short one (3 plates) at x 4..5 and a tall one (6 plates) at x 8..9.
+  await placeAt(page, 4, 0, 6, 'brick_2x2')
+  await placeAt(page, 8, 0, 6, 'brick_2x2')
+  await placeAt(page, 8, 3, 6, 'brick_2x2')
+  // The 1x6 turned to lie along X.
+  await page.evaluate(() =>
+    ((window as unknown as BtWindow).__bt.useEditor as unknown as { setState(s: { rot: number }): void }).setState({ rot: 1 }),
+  )
+  const button = await page.getByTestId('part-brick_1x6').boundingBox()
+  if (!button) throw new Error('no part button')
+  const from = { x: button.x + button.width / 2, y: button.y + button.height / 2 }
+  // Where the bridge goes: over the gap (cell x 6, row z 6) at the height of the tall support's top.
+  const to = await screenOf(page, [6.5, 2.4, 6.5])
+
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<{ x: number; y: number }>) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p) => ({ ...p, id: 1 })) })
+  await touch('touchStart', [from])
+  for (let i = 1; i <= 12; i++) {
+    await touch('touchMove', [{ x: from.x + ((to.x - from.x) * i) / 12, y: from.y + ((to.y - from.y) * i) / 12 }])
+    await page.waitForTimeout(16)
+  }
+  await waitForCameraStill(page)
+  await page.screenshot({ path: 'test-results/w1-bridge.png' })
+  await touch('touchEnd', [])
+  await cdp.detach()
+
+  await expect.poll(() => brickCount(page)).toBe(4)
+  await expect(page.getByTestId('place-error')).toHaveCount(0)
+  // Centred on cell x 6: spans x 4..9 and rests on the tall support's top (y = 6), bridging the gap.
+  expect((await bricks(page))[3]).toMatchObject({ p: 'brick_1x6', r: 1, x: 4, y: 6, z: 6 })
+})
