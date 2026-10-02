@@ -86,6 +86,42 @@ describe('useMazeRun', () => {
     expect(run().result).toBe(result)
   })
 
+  it('a run made of block steps is rated against the step limits; the same pace driven is not', () => {
+    // 2 s per cell: well within the driving three-star pace, but slow for steps (see STEP_STAR3_SEC_PER_CELL).
+    run().startIfReady(0)
+    let now = 2000
+    for (const cell of path.slice(1)) {
+      run().carAt(cell, now, 'step')
+      now += 2000
+    }
+    expect(run().stepCells).toBe(path.length - 1)
+    expect(run().result!.stars).toBe(2)
+
+    run().begin(easy, KEY)
+    run().startIfReady(0)
+    driveAlong(1, path.length - 1, 2000, 2000)
+    expect(run().driveCells).toBe(path.length - 1)
+    expect(run().result!.stars).toBe(3)
+  })
+
+  it('switching between driving and block steps counts every coin and the finish once', () => {
+    const [coin] = easy.coins
+    const [cx, cz] = coin.split(',').map(Number)
+    run().carAt({ cx, cz }, 1000, 'drive')
+    run().carAt({ cx, cz }, 1100, 'step') // the step mode starts in the same cell: nothing new
+    expect(run().coinsLeft).toHaveLength(easy.coins.length - 1)
+    expect(run().driveCells + run().stepCells).toBe(1)
+    run().carAt(path[1], 1200, 'step')
+    run().carAt({ cx, cz }, 1300, 'drive')
+    expect(run().coinsLeft).toHaveLength(easy.coins.length - 1)
+    run().carAt(easy.exit!, 2000, 'step')
+    const result = run().result
+    run().carAt(path[1], 2100, 'drive')
+    run().carAt(easy.exit!, 2200, 'step')
+    expect(run().result).toBe(result)
+    expect(useGame.getState().data.mazeRecords[KEY]).toEqual({ timeMs: result!.timeMs, stars: result!.stars, coins: 1 })
+  })
+
   it('a slower run keeps the old record', () => {
     useGame.getState().setMazeRecord(KEY, { timeMs: 1000, stars: 3, coins: 0 })
     run().startIfReady(0)

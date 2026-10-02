@@ -103,3 +103,22 @@ export function frameMaze(
   }
   return { target, position: at(target, distance), distance }
 }
+
+/** The drive's top-down view shows the whole maze up to this many cells along its longer side... */
+export const TOP_VIEW_WHOLE_MAX = 15
+/** ...and follows the car in bigger ones, showing about this many cells across the screen's short side. */
+export const TOP_VIEW_FOLLOW_CELLS = 10
+
+/** Whether the drive's top-down view frames the whole `w` x `h` maze (else it follows the car). */
+export const topViewShowsWhole = (w: number, h: number): boolean => Math.max(w, h) <= TOP_VIEW_WHOLE_MAX
+
+/**
+ * Camera distance from the point looked at (on the ground, seen from the south at `tilt`) that
+ * shows about `cells` maze cells across the short side of a screen of `aspect` (width / height).
+ * Up and down the screen, the ground is foreshortened by the tilt.
+ */
+export function followDistance(aspect: number, fovDeg: number, cells = TOP_VIEW_FOLLOW_CELLS, tilt = MAZE_TILT): number {
+  const span = cells * MAZE_CELL
+  const tanHalf = Math.tan((fovDeg * Math.PI) / 360)
+  return aspect >= 1 ? (span * Math.cos(tilt)) / (2 * tanHalf) : span / (2 * tanHalf * aspect)
+}

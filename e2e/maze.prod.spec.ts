@@ -2,8 +2,9 @@ import { expect, test, type Page } from '@playwright/test'
 import { savedSlotData } from './support'
 
 // Runs against the PRODUCTION build (see playwright.offline.config.ts): no StrictMode, no dev
-// handle. The car is driven with the real pedals, then set down cell by cell along the way out
-// through `window.__btMaze`, which the production build only installs under the test flag.
+// handle. The car takes a block step with the D-pad (top-down view), is driven with the real
+// pedals (chase view), then set down cell by cell along the way out through `window.__btMaze`,
+// which the production build only installs under the test flag.
 
 test.use({ serviceWorkers: 'block' })
 
@@ -42,12 +43,18 @@ test('production build: drive out of a ready-made maze, the best run is saved', 
   await expect(page.getByTestId('drive-status')).toHaveAttribute('data-controllers', '1', { timeout: 15_000 })
   await expect(run(page)).toHaveAttribute('data-phase', 'ready')
   await expect(run(page)).toHaveAttribute('data-cell', '0,5')
-  await page.waitForTimeout(500) // let the car settle on its wheels
 
-  // The real pedals move the car into the maze (east from the west entry) and start the clock.
+  // Top-down view (the default): one block step east with the D-pad starts the clock.
+  await page.getByTestId('maze-step-right').click()
+  await expect(run(page)).toHaveAttribute('data-cell', '1,5')
+  await expect(run(page)).toHaveAttribute('data-phase', 'running')
+
+  // Chase view: physics again, from that cell. The real pedals drive the car on east.
+  await page.getByTestId('maze-camera').click()
+  await expect(page.getByTestId('drive-gas')).toBeVisible()
+  await page.waitForTimeout(500) // let the car settle on its wheels
   const x0 = Number(await page.getByTestId('drive-status').getAttribute('data-x'))
   await hold(page, 'drive-gas', 800)
-  await expect(run(page)).toHaveAttribute('data-phase', 'running')
   await expect.poll(async () => Number(await page.getByTestId('drive-status').getAttribute('data-x'))).toBeGreaterThan(x0 + 2)
 
   const path = await page.evaluate(() => (window as unknown as W).__btMaze!.path())

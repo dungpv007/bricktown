@@ -3,6 +3,7 @@ import { HINT_COOLDOWN_MS } from '../../core/mazeRun'
 import { useMazeRun } from '../../state/useMazeRun'
 import Confetti from '../../ui/Confetti'
 import { useT } from '../../ui/i18n'
+import MazeStepPad from './MazeStepPad'
 import { formatSeconds } from './formatTime'
 
 /** How often the clock on screen (and the hint's time-out) is refreshed. */
@@ -91,6 +92,7 @@ function Hud() {
           💡
         </button>
       </div>
+      {camera === 'top' && <MazeStepPad />}
     </>
   )
 }
@@ -164,11 +166,12 @@ interface Actions {
   onMenu: () => void
 }
 
-/** The run's HUD over the drive controls (time, coins, camera, hint) and the finish card. */
+/** The run's HUD over the drive controls (time, coins, camera, hint, the top-down view's D-pad) and the finish card. */
 export default function MazeDriveUI(actions: Actions) {
   const won = useMazeRun((s) => s.phase === 'won')
+  const camera = useMazeRun((s) => s.camera)
   return (
-    <div className="bt-maze-hud" data-testid="maze-hud">
+    <div className="bt-maze-hud" data-testid="maze-hud" data-mode={camera}>
       <RunProbe />
       {won ? <WinOverlay {...actions} /> : <Hud />}
     </div>

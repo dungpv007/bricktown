@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { getMazeTemplate } from '../content/mazes'
 import { uprightYaw } from './drive'
-import { MAZE_CELL, cellKey, createEmptyMaze, rateRun, setEntry, setExit, solve, starThresholds, type Cell, type Maze } from './maze'
+import {
+  MAZE_CELL,
+  STAR3_SEC_PER_CELL,
+  STEP_STAR2_SEC_PER_CELL,
+  STEP_STAR3_SEC_PER_CELL,
+  cellKey,
+  createEmptyMaze,
+  rateRun,
+  setEntry,
+  setExit,
+  solve,
+  starThresholds,
+  type Cell,
+  type Maze,
+} from './maze'
+import { STEP_SECONDS } from './mazeStep'
 import {
   HINT_COOLDOWN_MS,
   HINT_SHOW_MS,
@@ -189,6 +204,18 @@ describe('rateMazeRun', () => {
   it('caps the stars at two once a hint was used', () => {
     expect(rateMazeRun(maze, 1000, 1)).toBe(2)
     expect(rateMazeRun(maze, twoSec * 1000 + 1, 3)).toBe(1)
+  })
+
+  it('block steps rate against their own limits, blended by the share of cells stepped', () => {
+    const L = solve(maze)!.length
+    expect(starThresholds(maze, 0)).toEqual(starThresholds(maze))
+    expect(starThresholds(maze, 1)).toEqual({ threeSec: L * STEP_STAR3_SEC_PER_CELL, twoSec: L * STEP_STAR2_SEC_PER_CELL })
+    expect(starThresholds(maze, 0.5).threeSec).toBeCloseTo((L * (STAR3_SEC_PER_CELL + STEP_STAR3_SEC_PER_CELL)) / 2)
+    // 2 s per cell: three stars driven, two stepped.
+    expect(rateMazeRun(maze, L * 2000, 0, 0)).toBe(3)
+    expect(rateMazeRun(maze, L * 2000, 0, 1)).toBe(2)
+    // Straight to the exit at the step speed, with a pause at every cell as long as the step: three.
+    expect(rateMazeRun(maze, (L - 1) * 2 * STEP_SECONDS * 1000, 0, 1)).toBe(3)
   })
 })
 

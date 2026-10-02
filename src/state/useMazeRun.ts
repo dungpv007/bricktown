@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
-import { cellKey, nextHintCells, type Cell, type Maze } from '../core/maze'
+import { nextHintCells, type Cell, type Maze } from '../core/maze'
 import {
   HINT_CELLS,
   NEW_CLOCK,
   clockElapsed,
+  enterCell,
   hintArrows,
   hintReady,
   hintShowing,
@@ -18,8 +19,10 @@ import {
 import type { MazeRecord } from '../core/types'
 import { useGame } from './useGame'
 
-/** Tilted top-down view that follows the car, or behind the car. */
+/** Tilted top-down view (the car moves block by block), or behind the car (driven with physics). */
 export type MazeCamera = 'top' | 'chase'
+/** How the car reached a cell: driven (physics) or one block step (top-down view). */
+export type MazeMove = 'drive' | 'step'
 /** Waiting for the first movement, driving (the clock runs), out of the maze. */
 export type MazeRunPhase = 'ready' | 'running' | 'won'
 
@@ -45,6 +48,9 @@ export interface MazeRunState {
   /** The cell under the car's centre. */
   carCell: Cell | null
   hintsUsed: number
+  /** Cells reached this run by block steps and by driving: the stars blend their time limits. */
+  stepCells: number
+  driveCells: number
   lastHintAt: number | null
   /** Arrows on the floor while a hint shows, else empty. */
   hintArrows: HintArrow[]
@@ -57,8 +63,11 @@ export interface MazeRunState {
   elapsed: (now: number) => number
   /** The car started moving: the clock starts (once). */
   startIfReady: (now: number) => void
-  /** The car's centre is in `cell` now: picks up coins, finishes at the exit, moves the hint along. */
-  carAt: (cell: Cell, now: number) => void
+  /**
+   * The car's centre is in `cell` now (`via` a block step or driving, default driving): picks up
+   * coins, finishes at the exit, moves the hint along. The same cell again does nothing.
+   */
+  carAt: (cell: Cell, now: number, via?: MazeMove) => void
   /** The app was hidden / shown again: the clock pauses meanwhile. */
   setHidden: (hidden: boolean, now: number) => void
   /** Shows the way for a few seconds; false while the last hint is still cooling down. */
@@ -80,7 +89,8 @@ export const useMazeRun = create<MazeRunState>()((set, get) => {
     const clock = pauseClock(startClock(s.clock, now), now)
     const timeMs = clockElapsed(clock, now)
     const coins = s.maze.coins.length - s.coinsLeft.length
-    const run: MazeRecord = { timeMs, stars: rateMazeRun(s.maze, timeMs, s.hintsUsed), coins }
+    const stepShare = s.stepCells / Math.max(1, s.stepCells + s.driveCells)
+    const run: MazeRecord = { timeMs, stars: rateMazeRun(s.maze, timeMs, s.hintsUsed, stepShare), coins }
     const best = s.recordKey === null ? undefined : useGame.getState().data.mazeRecords[s.recordKey]
     const newRecord = s.recordKey !== null && isBetterRecord(best, run)
     if (newRecord && s.recordKey !== null) useGame.getState().setMazeRecord(s.recordKey, run)
@@ -96,6 +106,8 @@ export const useMazeRun = create<MazeRunState>()((set, get) => {
     coinsLeft: [],
     carCell: null,
     hintsUsed: 0,
+    stepCells: 0,
+    driveCells: 0,
     lastHintAt: null,
     hintArrows: [],
     camera: 'top',
@@ -110,6 +122,8 @@ export const useMazeRun = create<MazeRunState>()((set, get) => {
         coinsLeft: [...maze.coins],
         carCell: maze.entry,
         hintsUsed: 0,
+        stepCells: 0,
+        driveCells: 0,
         lastHintAt: null,
         hintArrows: [],
         result: null,
@@ -122,16 +136,16 @@ export const useMazeRun = create<MazeRunState>()((set, get) => {
       set({ phase: 'running', clock: startClock(get().clock, now) })
     },
 
-    carAt: (cell, now) => {
+    carAt: (cell, now, via = 'drive') => {
       const s = get()
       if (!s.maze || s.phase === 'won' || sameCell(s.carCell, cell)) return
       if (s.phase === 'ready') get().startIfReady(now)
-      const key = cellKey(cell)
-      const coinsLeft = s.coinsLeft.includes(key) ? s.coinsLeft.filter((k) => k !== key) : s.coinsLeft
-      if (coinsLeft !== s.coinsLeft) sfx.coin()
+      const { coinsLeft, coin, exit } = enterCell(s.maze, s.coinsLeft, cell)
+      if (coin) sfx.coin()
       const arrows = hintShowing(s.lastHintAt, now) ? arrowsFrom(s.maze, cell) : s.hintArrows
-      set({ carCell: cell, coinsLeft, hintArrows: arrows })
-      if (s.maze.exit && sameCell(s.maze.exit, cell)) finish(now)
+      const counted = via === 'step' ? { stepCells: s.stepCells + 1 } : { driveCells: s.driveCells + 1 }
+      set({ carCell: cell, coinsLeft, hintArrows: arrows, ...counted })
+      if (exit) finish(now)
     },
 
     setHidden: (hidden, now) => {

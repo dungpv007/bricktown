@@ -76,12 +76,23 @@ function TapButton({ onTap, testId, labelKey, className, children }: ButtonProps
   )
 }
 
-/** Arrow keys / WASD drive, space brakes, H honks, F flips. */
-function useKeyboard() {
+/**
+ * Arrow keys / WASD drive, space brakes, H honks, F flips. With `stepMode` (the maze's block steps,
+ * which listen to the arrow keys themselves) only the horn is left.
+ */
+function useKeyboard(stepMode: boolean) {
+  const stepping = useRef(stepMode)
+  useEffect(() => {
+    stepping.current = stepMode
+    // Whatever was held while switching belongs to the other mode.
+    useDriveInput.getState().reset()
+  }, [stepMode])
   useEffect(() => {
     const input = useDriveInput.getState()
     const onDown = (e: KeyboardEvent) => {
-      if (DRIVE_KEYS.has(e.code)) {
+      if (stepping.current) {
+        if (!e.repeat && e.code === 'KeyH') input.honk()
+      } else if (DRIVE_KEYS.has(e.code)) {
         e.preventDefault()
         input.keyDown(e.code)
       } else if (!e.repeat && e.code === 'KeyH') input.honk()
@@ -177,29 +188,52 @@ function useHornKind(source: string) {
 /**
  * On-screen driving controls: steering stick on the left, pedals, flip and horn on the right.
  * Also runs the engine hum (silenced by `quietEngine`) and picks the horn for `source` (the vehicle being driven).
+ * `stepMode` (the maze's top-down view, where the car moves block by block with its own D-pad)
+ * leaves only the horn, in the bottom-left corner, and the change-vehicle button.
  */
 export default function DriveUI({
   source,
   onChangeVehicle,
   quietEngine = false,
+  stepMode = false,
 }: {
   source: string
   onChangeVehicle: () => void
   quietEngine?: boolean
+  stepMode?: boolean
 }) {
   const t = useT()
   const input = useDriveInput.getState()
-  useKeyboard()
+  useKeyboard(stepMode)
   useReleaseControls()
   useHornKind(source)
   useEngineHum(!quietEngine)
   return (
-    <div className="bt-drive-ui" data-testid="drive-ui">
+    <div className="bt-drive-ui" data-testid="drive-ui" data-step={stepMode ? 'true' : undefined}>
       <DriveStatusProbe />
       <RotateHint />
       <button className="bt-btn bt-icon-btn bt-drive-change" data-testid="drive-change" aria-label={t('driveChange')} onClick={onChangeVehicle}>
         🚙
       </button>
+      {stepMode ? (
+        <div className="bt-drive-step-left">
+          <TapButton testId="drive-horn" labelKey="driveHorn" className="bt-drive-small" onTap={input.honk}>
+            📯
+          </TapButton>
+        </div>
+      ) : (
+        <DriveControls />
+      )}
+    </div>
+  )
+}
+
+/** Stick on the left; horn, flip and the pedals on the right. */
+function DriveControls() {
+  const t = useT()
+  const input = useDriveInput.getState()
+  return (
+    <>
       <div className="bt-drive-left">
         <VirtualJoystick label={t('driveSteer')} onChange={input.setStick} />
       </div>
@@ -217,6 +251,6 @@ export default function DriveUI({
           ▲
         </HoldButton>
       </div>
-    </div>
+    </>
   )
 }

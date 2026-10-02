@@ -42,6 +42,22 @@ interface ControllerBinding {
 }
 export type DrivableSetup = Extract<DriveAnalysis, { ok: true }>
 
+/** Where a kinematically moved car is this physics step (see the `kinematic` prop). */
+export interface KinematicPose {
+  x: number
+  z: number
+  /** Heading (radians around +Y, 0 = facing -Z). */
+  yaw: number
+  /** Forward speed (studs / s): spins the wheels and drives the engine hum. */
+  speed: number
+}
+
+/**
+ * Asked every physics step (`dt` seconds) with where the car is (its heading too): a pose moves
+ * the car there kinematically; null drives it with physics.
+ */
+export type KinematicDriver = (dt: number, current: { x: number; z: number; yaw: number }) => KinematicPose | null
+
 /** World gravity (studs / s^2): stronger than 9.81 because a stud is ~0.5 m in toy scale. */
 export const GRAVITY = 20
 
@@ -65,6 +81,10 @@ const FALL_LIMIT = -20
 const FLIP_LIFT = 1
 /** The production-safe status (`useDriveStatus`) is refreshed every this many physics steps. */
 const STATUS_EVERY = 6
+/** A kinematic car stands with its wheels (the body origin) on the floor (y = 0)... */
+const KINEMATIC_Y = 0
+/** ...and is let go this little above it when physics takes over again. */
+const RELEASE_LIFT = 0.05
 
 const TWO_PI = Math.PI * 2
 
@@ -190,6 +210,12 @@ interface Props {
   steering?: SteerTuning
   /** Follows the (interpolated) chassis; read by the chase camera. */
   chassisRef: RefObject<THREE.Group | null>
+  /**
+   * Optional: moves the car without physics while it returns a pose (the maze's block steps). The
+   * rigid body then turns kinematic and the vehicle controller is left alone (kept, not stepped);
+   * once it returns null the body is dynamic again, at rest at the last pose.
+   */
+  kinematic?: KinematicDriver
 }
 
 /**
@@ -197,9 +223,9 @@ interface Props {
  * ray-cast vehicle controller for the wheels. Forward is -Z; every wheel drives, the front
  * ones steer. Mass sits at axle height and the inertia is padded so kids rarely flip it.
  */
-export default function Vehicle({ setup, spawn, spawnYaw = 0, steering: steerTuning = DRIVE, chassisRef }: Props) {
+export default function Vehicle({ setup, spawn, spawnYaw = 0, steering: steerTuning = DRIVE, chassisRef, kinematic }: Props) {
   const { config, wheelBricks, bodyBricks } = setup
-  const { world } = useRapier()
+  const { world, rapier } = useRapier()
   const body = useRef<RapierRigidBody>(null)
   const binding = useRef<ControllerBinding | null>(null)
   const steps = useRef(0)
@@ -211,6 +237,8 @@ export default function Vehicle({ setup, spawn, spawnYaw = 0, steering: steerTun
   const spin = useRef<number[]>([])
   const flipSeen = useRef(useDriveInput.getState().flipSeq)
   const placeSeen = useRef(useDriveInput.getState().placeSeq)
+  /** The last kinematic pose while the body is kinematic, else null. */
+  const kinematicPose = useRef<KinematicPose | null>(null)
   const steerGroups = useRef<Array<THREE.Group | null>>([])
   const spinGroups = useRef<Array<THREE.Group | null>>([])
 
@@ -255,6 +283,41 @@ export default function Vehicle({ setup, spawn, spawnYaw = 0, steering: steerTun
     const dt = w.timestep
     const drive = useDriveInput.getState()
 
+    if (kinematic) {
+      const t = rb.translation()
+      const f = forwardOf(rb)
+      const pose = kinematic(dt, { x: t.x, z: t.z, yaw: kinematicPose.current?.yaw ?? uprightYaw([f.x, f.y, f.z]) })
+      if (pose) {
+        if (!kinematicPose.current) {
+          rb.setLinvel({ x: 0, y: 0, z: 0 }, true)
+          rb.setAngvel({ x: 0, y: 0, z: 0 }, true)
+          rb.setBodyType(rapier.RigidBodyType.KinematicPositionBased, true)
+          steering.current = 0
+        }
+        kinematicPose.current = pose
+        // Flips and placements are the kinematic driver's business meanwhile: not replayed later.
+        flipSeen.current = drive.flipSeq
+        placeSeen.current = drive.placeSeq
+        const q = tmpQuat.setFromAxisAngle(UP, pose.yaw)
+        rb.setNextKinematicTranslation({ x: pose.x, y: KINEMATIC_Y, z: pose.z })
+        rb.setNextKinematicRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+        forwardSpeed.current = pose.speed
+        if (steps.current++ % STATUS_EVERY === 0) {
+          // The hum follows a step like a car at speed, never past the top speed.
+          useDriveStatus.getState().setPose(pose.x, pose.z, Math.max(-DRIVE.MAX_SPEED, Math.min(DRIVE.MAX_SPEED, pose.speed)))
+        }
+        if (import.meta.env.DEV) publishTelemetry(rb, pose.speed)
+        return
+      }
+    }
+    const last = kinematicPose.current
+    if (last) {
+      // Back to physics driving: from where the steps left the car, facing the same way, at rest.
+      kinematicPose.current = null
+      rb.setBodyType(rapier.RigidBodyType.Dynamic, true)
+      placeBody(rb, { x: last.x, y: KINEMATIC_Y + RELEASE_LIFT, z: last.z }, last.yaw)
+    }
+
     if (drive.flipSeq !== flipSeen.current) {
       flipSeen.current = drive.flipSeq
       flipUpright(rb, config.chassis)
@@ -296,6 +359,7 @@ export default function Vehicle({ setup, spawn, spawnYaw = 0, steering: steerTun
   useFrame((_, dt) => {
     const c = binding.current?.controller
     if (!c) return
+    const still = kinematicPose.current !== null // no suspension at work: the wheels sit where they were built
     mounts.forEach((mount, i) => {
       // Rolling towards -Z turns the top of the wheel forward: negative around +X. Wrapped each frame
       // (per wheel, as the radii differ) so the angle never grows large enough to lose float precision.
@@ -303,8 +367,8 @@ export default function Vehicle({ setup, spawn, spawnYaw = 0, steering: steerTun
       const steer = steerGroups.current[i]
       const spinGroup = spinGroups.current[i]
       if (!steer || !spinGroup) return
-      steer.position.y = mount.y - (c.wheelSuspensionLength(i) ?? SUSPENSION_REST)
-      steer.rotation.y = c.wheelSteering(i) ?? 0
+      steer.position.y = still ? config.wheels[i].position[1] : mount.y - (c.wheelSuspensionLength(i) ?? SUSPENSION_REST)
+      steer.rotation.y = still ? 0 : (c.wheelSteering(i) ?? 0)
       spinGroup.rotation.x = spin.current[i]
     })
   })

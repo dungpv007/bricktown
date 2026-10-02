@@ -124,9 +124,12 @@ export function clockElapsed(clock: RunClock, now: number): number {
   return clock.banked + (clock.since === null ? 0 : Math.max(0, now - clock.since))
 }
 
-/** Stars for a run: by time (see `rateRun`), at most two once a hint was used. */
-export function rateMazeRun(maze: Maze, timeMs: number, hintsUsed: number): 1 | 2 | 3 {
-  const stars = rateRun(maze, timeMs)
+/**
+ * Stars for a run: by time (see `rateRun`, `stepShare` is the share of cells crossed block by
+ * block), at most two once a hint was used.
+ */
+export function rateMazeRun(maze: Maze, timeMs: number, hintsUsed: number, stepShare = 0): 1 | 2 | 3 {
+  const stars = rateRun(maze, timeMs, stepShare)
   return hintsUsed > 0 && stars === 3 ? 2 : stars
 }
 
@@ -140,6 +143,18 @@ export function isBetterRecord(prev: MazeRecord | undefined, next: MazeRecord): 
   if (next.stars !== prev.stars) return next.stars > prev.stars
   if (next.timeMs !== prev.timeMs) return next.timeMs < prev.timeMs
   return next.coins > prev.coins
+}
+
+/** What reaching `cell` does: picks up its coin (if still there) and finishes the run at the exit. */
+export function enterCell(
+  maze: Pick<Maze, 'exit'>,
+  coinsLeft: string[],
+  cell: Cell,
+): { coinsLeft: string[]; coin: boolean; exit: boolean } {
+  const key = cellKey(cell)
+  const coin = coinsLeft.includes(key)
+  const exit = maze.exit !== null && maze.exit.cx === cell.cx && maze.exit.cz === cell.cz
+  return { coinsLeft: coin ? coinsLeft.filter((k) => k !== key) : coinsLeft, coin, exit }
 }
 
 /** How long the hint arrows stay on the floor... */

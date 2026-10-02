@@ -2377,6 +2377,65 @@ form.bt-dialog,
   pointer-events: auto;
 }
 
+/* Top-down view: the car moves block by block. A D-pad where the pedals are in the chase view. */
+.bt-maze-steppad {
+  position: absolute;
+  right: var(--bt-edge);
+  bottom: var(--bt-edge);
+  display: grid;
+  grid-template-columns: repeat(3, var(--bt-touch));
+  grid-template-rows: repeat(3, var(--bt-touch));
+  grid-template-areas:
+    '. up .'
+    'left . right'
+    '. down .';
+  gap: calc(6px * var(--bt-s));
+}
+
+.bt-maze-step {
+  width: var(--bt-touch);
+  height: var(--bt-touch);
+  padding: 0;
+  font-size: calc(30px * var(--bt-s));
+  line-height: 1;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bt-maze-step-up {
+  grid-area: up;
+}
+
+.bt-maze-step-down {
+  grid-area: down;
+}
+
+.bt-maze-step-left {
+  grid-area: left;
+}
+
+.bt-maze-step-right {
+  grid-area: right;
+}
+
+/* Held down (also while the finger slid off it): pressed in and yellow. */
+.bt-maze-step[data-held] {
+  background: var(--bt-yellow);
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* The horn, alone in the bottom-left corner while the D-pad has the right. */
+.bt-drive-step-left {
+  position: absolute;
+  left: var(--bt-edge);
+  bottom: var(--bt-edge);
+}
+
 /* The ring fills up again while the next hint cools down. */
 .bt-maze-hint {
   --bt-hint-ready: 1;
@@ -2586,8 +2645,8 @@ form.bt-dialog,
     max-height: calc(100% - var(--bt-top) - var(--bt-touch) - 12px * var(--bt-s) - var(--bt-gap) - var(--bt-edge));
   }
 
-  /* Maze drive: camera and hint under horn and flip. */
-  .bt-maze-hud-side {
+  /* Maze drive, chase view: camera and hint under horn and flip. */
+  .bt-maze-hud[data-mode='chase'] .bt-maze-hud-side {
     top: calc(var(--bt-top) + var(--bt-touch) + var(--bt-gap));
   }
 }

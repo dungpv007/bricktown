@@ -59,9 +59,19 @@ test('maze drive: gas starts the clock, hint arrows, camera toggle, coins, finis
   await expect(page.getByTestId('maze-editor')).toBeVisible()
   await startDrive(page)
 
-  // The car faces into the maze: gas drives it east from the west entry (0, 5).
+  // The top-down view (block steps, a D-pad) is the default; the chase view drives with stick and pedals.
   await expect(run(page)).toHaveAttribute('data-cell', '0,5')
   await expect(page.getByTestId('maze-timer')).toContainText('0.0s')
+  await expect(page.getByTestId('maze-camera')).toHaveAttribute('data-mode', 'top')
+  await expect(page.getByTestId('maze-step-up')).toBeVisible()
+  await expect(page.getByTestId('drive-gas')).toHaveCount(0)
+  await page.getByTestId('maze-camera').click()
+  await expect(page.getByTestId('maze-camera')).toHaveAttribute('data-mode', 'chase')
+  await expect(page.getByTestId('maze-steppad')).toHaveCount(0)
+  await expect(page.getByTestId('drive-gas')).toBeVisible()
+  await page.waitForTimeout(300) // the car is back on its wheels (physics) before the gas
+
+  // The car faces into the maze: gas drives it east from the west entry (0, 5).
   const x0 = Number(await page.getByTestId('drive-status').getAttribute('data-x'))
   await hold(page, 'drive-gas', 700)
   await expect(run(page)).toHaveAttribute('data-phase', 'running')
@@ -76,8 +86,10 @@ test('maze drive: gas starts the clock, hint arrows, camera toggle, coins, finis
   await expect(page.getByTestId('maze-hint')).toBeDisabled()
   await expect(run(page)).toHaveAttribute('data-arrows', '0', { timeout: 6000 })
 
-  // 📷: top-down follow <-> chase.
+  // 📷: chase -> top-down (block steps) -> chase -> top-down.
+  await page.getByTestId('maze-camera').click()
   await expect(page.getByTestId('maze-camera')).toHaveAttribute('data-mode', 'top')
+  await expect(page.getByTestId('maze-step-up')).toBeVisible()
   await page.getByTestId('maze-camera').click()
   await expect(page.getByTestId('maze-camera')).toHaveAttribute('data-mode', 'chase')
   await page.getByTestId('maze-camera').click()
@@ -121,6 +133,84 @@ test('maze drive: gas starts the clock, hint arrows, camera toggle, coins, finis
   // Back to the editor from the finish card.
   await page.getByTestId('maze-win-edit').click()
   await expect(page.getByTestId('maze-editor')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+const KEY_FOR: { [dir: string]: string } = { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' }
+
+/** The screen direction (top-down view: up is north, -Z) from a cell to its neighbour. */
+function dirOf(a: Cell, b: Cell): 'up' | 'down' | 'left' | 'right' {
+  if (b.cx > a.cx) return 'right'
+  if (b.cx < a.cx) return 'left'
+  return b.cz < a.cz ? 'up' : 'down'
+}
+
+const carXZ = async (page: Page) => {
+  const s = page.getByTestId('drive-status')
+  return { x: Number(await s.getAttribute('data-x')), z: Number(await s.getAttribute('data-z')) }
+}
+
+test('maze drive, top-down view: block steps with the D-pad and the arrow keys to the exit, a wall stops the car', async ({ page }) => {
+  test.setTimeout(90_000)
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByTestId('menu-maze').click()
+  await page.getByTestId('maze-tpl-easy').click()
+  await expect(page.getByTestId('maze-editor')).toBeVisible()
+  await startDrive(page)
+  await expect(page.getByTestId('maze-camera')).toHaveAttribute('data-mode', 'top')
+  await expect(run(page)).toHaveAttribute('data-cell', '0,5')
+
+  // Up from the entry (0, 5) is a wall: a bump, the car stays in the middle of its cell and the clock waits.
+  const centre = { x: 0.5 * 13, z: 5.5 * 13 }
+  await expect.poll(() => carXZ(page)).toEqual(centre)
+  await page.getByTestId('maze-step-up').click()
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(500)
+  await expect(run(page)).toHaveAttribute('data-cell', '0,5')
+  await expect.poll(() => carXZ(page)).toEqual(centre)
+  await expect(run(page)).toHaveAttribute('data-phase', 'ready')
+  // Modified arrows are not steps.
+  await page.keyboard.press('Control+ArrowRight')
+  await page.waitForTimeout(400)
+  await expect(run(page)).toHaveAttribute('data-cell', '0,5')
+
+  const path = (await page.evaluate(() => (window as unknown as BtWindow).__btMaze!.path()))!
+  expect(path[1]).toEqual({ cx: 1, cz: 5 })
+  // One step east (the D-pad): the clock starts.
+  await page.getByTestId('maze-step-right').click()
+  await expect(run(page)).toHaveAttribute('data-cell', '1,5')
+  await expect(run(page)).toHaveAttribute('data-phase', 'running')
+  await expect.poll(() => carXZ(page)).toEqual({ x: 1.5 * 13, z: 5.5 * 13 })
+
+  // Holding ▲ steps on, cell after cell, up the corridor to (1, 1), where a wall stops it.
+  expect(path.slice(2, 6)).toEqual([1, 2, 3, 4].map((i) => ({ cx: 1, cz: 5 - i })))
+  const up = (await page.getByTestId('maze-step-up').boundingBox())!
+  await page.mouse.move(up.x + up.width / 2, up.y + up.height / 2)
+  await page.mouse.down()
+  await expect(page.getByTestId('maze-step-up')).toHaveAttribute('data-held', 'true')
+  await expect(run(page)).toHaveAttribute('data-cell', '1,1')
+  await page.waitForTimeout(400)
+  await page.mouse.up()
+  await expect(run(page)).toHaveAttribute('data-cell', '1,1')
+
+  // The rest of the way: the arrow keys and the D-pad in turn.
+  for (let i = 6; i < path.length; i++) {
+    const dir = dirOf(path[i - 1], path[i])
+    if (i % 2 === 0) await page.keyboard.press(KEY_FOR[dir])
+    else await page.getByTestId(`maze-step-${dir}`).click()
+    if (i < path.length - 1) await expect(run(page)).toHaveAttribute('data-cell', `${path[i].cx},${path[i].cz}`)
+  }
+  await expect(page.getByTestId('maze-win')).toBeVisible()
+  await expect(run(page)).toHaveAttribute('data-phase', 'won')
+  const coins = Number(await run(page).getAttribute('data-coins'))
+  expect(coins).toBe(1) // the coin at (1, 3) on the way
+  await expect(page.getByTestId('maze-win-record')).toHaveAttribute('data-new', 'true')
+  const stars = Number(await page.getByTestId('maze-win-stars').getAttribute('data-stars'))
+  const saved = (await records(page))['tpl:easy']
+  expect(saved).toMatchObject({ stars, coins })
+  expect(saved.timeMs).toBeGreaterThan(0)
   expect(errors).toEqual([])
 })
 

@@ -56,6 +56,13 @@ export const DEFAULT_MAZE_FLOOR_COLOR = 24 // light bluish gray
 export const STAR3_SEC_PER_CELL = MAZE_CELL / 5
 /** ...two stars up to 3 studs / s; slower runs still earn one star. */
 export const STAR2_SEC_PER_CELL = MAZE_CELL / 3
+/**
+ * The same limits for cells crossed block by block (the top-down view's step mode): a step takes
+ * about 0.22 s, so the driving limits above would hand out three stars for any wandering. One second
+ * per cell of the shortest way still leaves room to stop, think and try a dead end or two.
+ */
+export const STEP_STAR3_SEC_PER_CELL = 1
+export const STEP_STAR2_SEC_PER_CELL = 2
 
 type Dims = Pick<Maze, 'w' | 'h'>
 
@@ -282,14 +289,23 @@ export interface StarThresholds {
   twoSec: number
 }
 
-/** Star time limits from the shortest path length L (in cells; 0 if the maze is unsolvable). */
-export function starThresholds(maze: Maze): StarThresholds {
+/**
+ * Star time limits from the shortest path length L (in cells; 0 if the maze is unsolvable).
+ * `stepShare` (0..1) is the share of the run's cells crossed in step mode: the limits per cell blend
+ * from the driving ones (0, the default) to the step ones (1).
+ */
+export function starThresholds(maze: Maze, stepShare = 0): StarThresholds {
   const length = solve(maze)?.length ?? 0
-  return { threeSec: length * STAR3_SEC_PER_CELL, twoSec: length * STAR2_SEC_PER_CELL }
+  const k = Math.min(1, Math.max(0, stepShare))
+  const per = (drive: number, step: number) => drive + (step - drive) * k
+  return {
+    threeSec: length * per(STAR3_SEC_PER_CELL, STEP_STAR3_SEC_PER_CELL),
+    twoSec: length * per(STAR2_SEC_PER_CELL, STEP_STAR2_SEC_PER_CELL),
+  }
 }
 
-export function rateRun(maze: Maze, timeMs: number): 1 | 2 | 3 {
-  const { threeSec, twoSec } = starThresholds(maze)
+export function rateRun(maze: Maze, timeMs: number, stepShare = 0): 1 | 2 | 3 {
+  const { threeSec, twoSec } = starThresholds(maze, stepShare)
   if (timeMs <= threeSec * 1000) return threeSec > 0 ? 3 : 1
   if (timeMs <= twoSec * 1000) return 2
   return 1
