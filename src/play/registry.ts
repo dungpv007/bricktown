@@ -44,7 +44,7 @@ export const GAMES: readonly GameDef[] = [
     name: { vi: 'Nhà hàng sushi', en: 'Sushi restaurant' },
     color: 'var(--bt-red)',
     templates: ['sushi_restaurant'],
-    scene: null, // G1: lazyScene(() => import('./sushi/SushiGame'))
+    scene: lazyScene(() => import('./sushi/SushiGame')),
   },
 
   {
