@@ -1,0 +1,68 @@
+/* The play screen sets no --bt-edge (the mode UIs do), so the wallet in the top-right corner would sit
+   on the left and fold away; give this game's screen the usual edge. */
+.bt-play-screen[data-game='sushi'] {
+  --bt-edge: calc(12px * var(--bt-s));
+}
+
+/* The sushi game's HUD: the progress dots and the round's coin pill, side by side at the top. */
+.bt-sushi-hud {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+}
+
+.bt-sushi-tally {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--bt-s));
+  min-height: calc(36px * var(--bt-s) + 16px * var(--bt-s));
+  padding: calc(8px * var(--bt-s)) calc(14px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(26px * var(--bt-s));
+  font-weight: 800;
+  color: var(--bt-ink);
+}
+
+.bt-sushi-tally-num {
+  display: inline-block;
+  min-width: 1.2em;
+  text-align: center;
+  animation: bt-sushi-bump 0.35s ease-out;
+}
+
+@keyframes bt-sushi-bump {
+  0% {
+    transform: scale(1.7);
+    color: #e3a400;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Flying coins (moved by the Web Animations API, see coinBurst.ts). */
+.bt-sushi-coin-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bt-sushi-coin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: -20px 0 0 -20px;
+  font-size: 40px;
+  line-height: 1;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-sushi-tally-num {
+    animation: none;
+  }
+}
