@@ -27,8 +27,8 @@ export const MIN_TRAIN_CELLS = 8
 export const ROAD_Y = 0.1
 export const SIDEWALK_Y = 0.3
 export const PAVEMENT_Y = 0.06
-/** Where train wheels sit: the top of the rails on ballast. */
-export const RAIL_Y = 0.7
+/** Where train wheels sit: the top of the rails (ballast 0.3 + sleeper 0.15 + rail 0.3, see scenes/city/Rails). */
+export const RAIL_Y = 0.75
 /** Width of the sidewalk strips the road tiles draw on their closed sides. */
 const SIDEWALK_W = 1.25
 /** Sidewalk corner waypoints sit in the middle of the strips. */

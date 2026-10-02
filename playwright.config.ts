@@ -23,6 +23,9 @@ export default defineConfig({
           localStorage: [
             { name: 'bricktown-onboarded-v2', value: '1' },
             { name: 'bricktown-install-hint-dismissed', value: '1' },
+            // Fresh saves start with an empty city instead of the sample town (src/persistence/newSave.ts):
+            // most specs build on an empty map. The sample town's own spec clears it.
+            { name: 'bricktown-e2e-empty-city', value: '1' },
             // Music and sound effects off: nothing to hear in CI, and no 1.8 MB music decode per test.
             { name: 'bricktown-prefs', value: JSON.stringify({ state: { musicOn: false, sfxOn: false }, version: 0 }) },
           ],

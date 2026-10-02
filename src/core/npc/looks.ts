@@ -7,8 +7,11 @@ import type { FigStyle } from '../types'
  * keep the draw calls low).
  */
 
-/** Car models, in order of preference; missing templates are skipped. */
-export const CAR_TEMPLATE_IDS: readonly string[] = ['car', 'taxi', 'bus', 'police_car', 'fire_truck', 'truck']
+/**
+ * Car models, in order of preference; missing templates are skipped. Only car-wide ones (4 studs):
+ * traffic is shrunk to fit a lane, and the 6-wide bus and truck would come out no bigger than a car.
+ */
+export const CAR_TEMPLATE_IDS: readonly string[] = ['car', 'taxi', 'police_car', 'fire_truck']
 /** Train engine and carriage models, first existing one wins (a truck stands in when there is no train). */
 export const TRAIN_ENGINE_IDS: readonly string[] = ['train_engine', 'truck', 'car']
 export const TRAIN_CARRIAGE_IDS: readonly string[] = ['train_carriage', 'train_engine', 'truck', 'car']

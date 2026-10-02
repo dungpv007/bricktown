@@ -4,6 +4,7 @@ import { useApp, type SlotId } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
 import { flushAutosave, markClean } from './autosave'
+import { createNewSave } from './newSave'
 import { deleteSlot, loadSlot, saveSlot } from './saves'
 import { usePersistStatus, withSlotActivity } from './status'
 
@@ -19,9 +20,10 @@ export function applySave(data: SaveData): void {
 }
 
 /**
- * Loads the current slot into the game. An absent or unreadable record (already backed up by
- * `loadSlot`) starts from an empty save. A read error starts an empty in-memory save too, but
- * blocks autosave so the unknown real contents are never overwritten.
+ * Loads the current slot into the game. An absent record (nothing saved there yet) starts as a new
+ * save, with the sample town as its City; an unreadable one (already backed up by `loadSlot`)
+ * starts from an empty save. A read error starts an empty in-memory save too, but blocks autosave
+ * so the unknown real contents are never overwritten.
  */
 export async function loadCurrentSlot(): Promise<void> {
   const result = await loadSlot(useApp.getState().slotId)
@@ -31,7 +33,7 @@ export async function loadCurrentSlot(): Promise<void> {
     return
   }
   usePersistStatus.getState().set({ error: null, writeBlocked: false })
-  applySave(result.status === 'ok' ? result.data : createEmptySave())
+  applySave(result.status === 'ok' ? result.data : result.status === 'absent' ? createNewSave() : createEmptySave())
 }
 
 // Slot operations run as slot activity, so an app update never reloads the page in the middle of one.
@@ -49,13 +51,13 @@ export function switchSlot(id: SlotId): Promise<boolean> {
   })
 }
 
-/** Deletes slot `id`; if it is the current slot the game restarts from an empty save. */
+/** Deletes slot `id`; if it is the current slot the game restarts from a new save (the sample town). */
 export function deleteSlotById(id: SlotId): Promise<boolean> {
   return withSlotActivity(async () => {
     if (!(await deleteSlot(id))) return false
     if (id === useApp.getState().slotId) {
       usePersistStatus.getState().set({ error: null, writeBlocked: false })
-      applySave(createEmptySave())
+      applySave(createNewSave())
     }
     return true
   })

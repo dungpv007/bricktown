@@ -91,6 +91,8 @@ const RESPAWN_AFTER = 9
 
 const TRAIN_CRUISE = 8
 const TRAIN_GAP = 0.8
+/** Bogie centres sit this fraction of a car's length either side of its middle (the train templates: z 4 and 12 of 16). */
+const BOGIE = 0.25
 const TRAIN_STOP_PAUSE = 1.5
 /** Cars wait at a level crossing while any train vehicle's centre is this close to it. */
 export const CROSSING_RADIUS = 3 * CELL
@@ -426,7 +428,7 @@ export class NpcSim {
   }
 
   private trainPoses(t: Train): void {
-    const bogie = this.trainLength * 0.35
+    const bogie = this.trainLength * BOGIE
     for (let i = 0; i < t.cars.length; i++) {
       const pose = t.cars[i]
       const u = t.u - i * (this.trainLength + TRAIN_GAP)

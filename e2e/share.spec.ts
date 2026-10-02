@@ -79,6 +79,8 @@ async function friend(browser: Browser, page: Page, baseURL: string | undefined)
           localStorage: [
             { name: 'bricktown-onboarded-v2', value: '1' },
             { name: 'bricktown-install-hint-dismissed', value: '1' },
+            // Fresh saves start with an empty city, not the sample town (see src/persistence/newSave.ts).
+            { name: 'bricktown-e2e-empty-city', value: '1' },
             { name: 'bricktown-prefs', value: JSON.stringify({ state: { musicOn: false, sfxOn: false }, version: 0 }) },
           ],
         },

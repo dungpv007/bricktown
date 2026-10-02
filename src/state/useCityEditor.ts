@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
+import { sampleCity } from '../content/cities/sample'
 import {
   addPlacement,
   MAX_SCALE,
@@ -18,7 +19,7 @@ import { paintRoadLine } from '../core/roads'
 import { paintTerrain, type TerrainBrush } from '../core/terrain'
 import type { CityState } from '../core/types'
 import { makeSizeOf, resolveRenderable } from '../render/sources'
-import { onCityReplaced } from './cityReplaced'
+import { notifyCityReplaced, onCityReplaced } from './cityReplaced'
 import { createHistory } from './history'
 import { useGame } from './useGame'
 
@@ -99,6 +100,11 @@ export interface CityEditorState {
   redo: () => void
   /** Forget undo history and selection, and drop a picked source that no longer exists (entering the city). */
   reset: () => void
+  /**
+   * Replaces the whole city with a fresh copy of the sample town (after the kid confirmed it). Like a
+   * city import, the undo history is dropped: undo must not bring the old city back.
+   */
+  loadSampleCity: () => void
 }
 
 const history = createHistory<CityState>()
@@ -299,6 +305,12 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
         selectedPlacementId: null,
         selectedSource: selectedSource !== null && canDraw(selectedSource) ? selectedSource : null,
       })
+    },
+
+    loadSampleCity: () => {
+      game().setCity(sampleCity())
+      sfx.pop()
+      notifyCityReplaced() // resets this editor (below) and re-frames the City camera
     },
   }
 })

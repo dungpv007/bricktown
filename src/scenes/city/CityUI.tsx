@@ -333,6 +333,29 @@ function NpcToggle() {
   )
 }
 
+/** 🏙️ Replaces the city with the sample town, after a yes. */
+function LoadSample() {
+  const t = useT()
+  const [asking, setAsking] = useState(false)
+  return (
+    <>
+      <button className="bt-btn bt-icon-btn" data-testid="city-load-sample" aria-label={t('cityLoadSample')} onClick={() => setAsking(true)}>
+        🏙️
+      </button>
+      {asking && (
+        <ConfirmDialog
+          messageKey="confirmLoadSample"
+          onYes={() => {
+            setAsking(false)
+            useCityEditor.getState().loadSampleCity()
+          }}
+          onNo={() => setAsking(false)}
+        />
+      )}
+    </>
+  )
+}
+
 /** HTML overlay on top of the city canvas. */
 export default function CityUI() {
   const t = useT()
@@ -370,6 +393,7 @@ export default function CityUI() {
     <div className="bt-city-ui">
       <TopRight>
         <NpcToggle />
+        <LoadSample />
         <ShareCity />
         <button className="bt-btn bt-city-drive" data-testid="city-drive" aria-label={t('menuDrive')} onClick={() => setMode('drive')}>
           <span aria-hidden="true">🚗</span> {t('menuDrive')}

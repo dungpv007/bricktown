@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CELL } from '../core/city'
+import { SAMPLE_CITY } from '../content/cities/sample'
 import { createEmptySave } from '../core/serialize'
 import { useCityEditor } from './useCityEditor'
 import { useGame } from './useGame'
@@ -279,5 +280,24 @@ describe('useCityEditor stale sources', () => {
     expect(ed().lastError).toBe('nothing')
     ed().deleteSelected()
     expect(city().placements).toHaveLength(0)
+  })
+})
+
+describe('useCityEditor.loadSampleCity', () => {
+  it('replaces the city with a fresh sample town and forgets undo and the selection', () => {
+    ed().paintRoad({ cx: 1, cz: 1 }, { cx: 3, cz: 1 })
+    ed().selectSource('tpl:house_small')
+    ed().tapGround(...at(2, 2))
+    expect(ed().selectedPlacementId).not.toBeNull()
+    expect(ed().canUndo).toBe(true)
+
+    ed().loadSampleCity()
+    expect(city().roads).toEqual(SAMPLE_CITY.roads)
+    expect(city().rails).toEqual(SAMPLE_CITY.rails)
+    expect(city().placements.map((p) => p.source)).toEqual(SAMPLE_CITY.placements.map((p) => p.source))
+    expect(ed().canUndo).toBe(false)
+    expect(ed().selectedPlacementId).toBeNull()
+    ed().undo() // nothing to go back to: the old city stays gone
+    expect(city().roads).toEqual(SAMPLE_CITY.roads)
   })
 })

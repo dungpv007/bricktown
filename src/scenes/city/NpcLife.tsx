@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getTemplate } from '../../content/templates'
-import { bakeBricks, bakedGeometries } from '../../core/bake'
+import { bakeBricks, bakedGeometries, bakeShadowBricks } from '../../core/bake'
 import { CAR_TEMPLATE_IDS, pedestrianStyles, TRAIN_CARRIAGE_IDS, TRAIN_ENGINE_IDS } from '../../core/npc/looks'
 import { buildNetwork, MAX_CARS, MAX_PEDS, MAX_TRAINS, RAIL_Y, ROAD_Y } from '../../core/npc/network'
 import { NpcSim } from '../../core/npc/sim'
@@ -11,6 +11,7 @@ import type { Blueprint, CityState } from '../../core/types'
 import { installLiveFigureKeys } from '../../render/liveFigures'
 import { bakedMaterials, castsShadow } from '../../render/materials'
 import { bakedModelBox } from '../../render/placementTransform'
+import { isShadowProxy, registerShadowProxy } from '../../render/shadowProxies'
 import { makeSizeOf } from '../../render/sources'
 import { npcStats } from '../../state/npcStats'
 
@@ -27,6 +28,8 @@ interface NpcPart {
   geometry: THREE.BufferGeometry
   material: THREE.Material
   shadow: boolean
+  /** A shadow stand-in: drawn into the shadow map only (see render/shadowProxies). */
+  proxy?: boolean
 }
 
 interface NpcModel {
@@ -41,7 +44,12 @@ interface NpcModel {
 
 /** Cars fit their lane (see core/npc/geometry LANE), trains the track, people the sidewalks. */
 const CAR_FIT = { width: 2.5, length: 10, scale: 0.65 }
-const TRAIN_FIT = { width: 5.2, length: 12, scale: 1 }
+/**
+ * The train templates' wheels are 5 studs apart (centre to centre, x 1 and 6); drawn at 0.6 they
+ * are 3 apart, right on the two rails (scenes/city/Rails: GAUGE_HALF 1.5), and the train is about
+ * the size the shrunk cars are.
+ */
+const TRAIN_FIT = { width: 3.6, length: 9.6, scale: 0.6 }
 /** A road vehicle standing in for a train (no train templates yet) stays car-sized. */
 const STAND_IN_FIT = { width: 3.4, length: 8, scale: 0.65 }
 const PED_SCALE = 0.75
@@ -55,8 +63,8 @@ const SEED = 2026
 const modelCache = new Map<string, NpcModel | null>()
 
 /** A template drawn small enough to fit `fit`, or null when this version has no such template. */
-function templateModel(id: string, fit: { width: number; length: number; scale: number }): NpcModel | null {
-  const key = `${id}:${fit.width}:${fit.length}:${fit.scale}`
+function templateModel(id: string, fit: { width: number; length: number; scale: number }, shadowProxy = false): NpcModel | null {
+  const key = `${id}:${fit.width}:${fit.length}:${fit.scale}:${shadowProxy}`
   if (modelCache.has(key)) return modelCache.get(key) ?? null
   let model: NpcModel | null = null
   const tpl = getTemplate(id)
@@ -68,8 +76,15 @@ function templateModel(id: string, fit: { width: number; length: number; scale: 
       const [x0, y0, z0] = box.min
       const [x1, , z1] = box.max
       const k = Math.min(fit.scale, fit.width / Math.max(1e-3, x1 - x0), fit.length / Math.max(1e-3, z1 - z0))
+      const parts: NpcPart[] = bakedGeometries(baked).map(([kind, geometry]) => ({
+        geometry,
+        material: bakedMaterials[kind],
+        shadow: !shadowProxy && castsShadow(kind),
+      }))
+      // The shadow from a stud-less stand-in: a fraction of the triangles (shared cache, never disposed).
+      if (shadowProxy) parts.push({ geometry: bakeShadowBricks(tpl.bricks), material: bakedMaterials.opaque, shadow: true, proxy: true })
       model = {
-        parts: bakedGeometries(baked).map(([kind, geometry]) => ({ geometry, material: bakedMaterials[kind], shadow: castsShadow(kind) })),
+        parts,
         local: new THREE.Matrix4().makeScale(k, k, k).multiply(new THREE.Matrix4().makeTranslation(-(x0 + x1) / 2, -y0, -(z0 + z1) / 2)),
         length: (z1 - z0) * k,
         facesPlusZ: false,
@@ -82,7 +97,7 @@ function templateModel(id: string, fit: { width: number; length: number; scale: 
 
 const firstTrainModel = (ids: readonly string[]) => {
   for (const id of ids) {
-    const m = templateModel(id, id.startsWith('train_') ? TRAIN_FIT : STAND_IN_FIT)
+    const m = templateModel(id, id.startsWith('train_') ? TRAIN_FIT : STAND_IN_FIT, true)
     if (m) return m
   }
   return null
@@ -157,23 +172,33 @@ function flush(meshes: Array<THREE.InstancedMesh | null>, count: number) {
   for (const mesh of meshes) {
     if (!mesh) continue
     mesh.count = count
-    mesh.visible = count > 0
+    if (!isShadowProxy(mesh)) mesh.visible = count > 0 // a stand-in's visibility belongs to render/shadowProxies
     if (count > 0) mesh.instanceMatrix.needsUpdate = true
   }
+}
+
+function PartMesh({ part, slot, register }: { part: NpcPart; slot: Slot; register: (mesh: THREE.InstancedMesh | null) => void }) {
+  const ref = useRef<THREE.InstancedMesh>(null)
+  useLayoutEffect(() => (part.proxy && ref.current ? registerShadowProxy(ref.current) : undefined), [part.proxy])
+  return (
+    <instancedMesh
+      ref={(mesh) => {
+        ref.current = mesh
+        register(mesh)
+      }}
+      args={[part.geometry, part.material, slot.capacity]}
+      castShadow={slot.shadow && part.shadow}
+      frustumCulled={false}
+      raycast={noRaycast}
+    />
+  )
 }
 
 function SlotMeshes({ slot, register }: { slot: Slot; register: (part: number, mesh: THREE.InstancedMesh | null) => void }) {
   return (
     <>
       {slot.model.parts.map((part, i) => (
-        <instancedMesh
-          key={i}
-          ref={(mesh) => register(i, mesh)}
-          args={[part.geometry, part.material, slot.capacity]}
-          castShadow={slot.shadow && part.shadow}
-          frustumCulled={false}
-          raycast={noRaycast}
-        />
+        <PartMesh key={i} part={part} slot={slot} register={(mesh) => register(i, mesh)} />
       ))}
     </>
   )
