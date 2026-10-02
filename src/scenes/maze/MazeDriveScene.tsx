@@ -278,6 +278,11 @@ interface TestHandle {
   teleport: (cx: number, cz: number, yaw?: number) => void
   /** The shortest way from the car's cell to the exit. */
   path: () => Cell[] | null
+  /**
+   * Block steps drive the car right now (`useStepDriver`). This follows the 📷 mode one physics step
+   * late; a teleport requested in between is dropped, so specs wait for it to match the mode first.
+   */
+  stepping: () => boolean
 }
 
 /**
@@ -300,6 +305,7 @@ function useTestHandle(maze: Maze, yaw: number) {
         const cell = useMazeRun.getState().carCell
         return cell ? solve(maze, cell) : null
       },
+      stepping: () => useMazeStep.getState().active,
     }
     return () => {
       delete w.__btMaze

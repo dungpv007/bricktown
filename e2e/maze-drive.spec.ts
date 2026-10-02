@@ -15,7 +15,7 @@ interface BtWindow {
     useGame: { getState(): { data: { mazeRecords: { [key: string]: Record } } } }
     mazeScreen: { cellToClient: ((cx: number, cz: number) => { x: number; y: number }) | null }
   }
-  __btMaze?: { teleport(cx: number, cz: number): void; path(): Cell[] | null }
+  __btMaze?: { teleport(cx: number, cz: number): void; path(): Cell[] | null; stepping(): boolean }
 }
 
 const run = (page: Page) => page.getByTestId('maze-run-status')
@@ -41,6 +41,10 @@ async function startDrive(page: Page) {
 
 /** Sets the car down in each cell of the way to the exit in turn (the run sees each cell). */
 async function teleportToExit(page: Page) {
+  // The car's driver (block steps in the top-down view, physics in the chase view) takes over one
+  // physics step after a 📷 switch; a teleport requested before that is dropped.
+  const top = (await page.getByTestId('maze-camera').getAttribute('data-mode')) === 'top'
+  await expect.poll(() => page.evaluate(() => (window as unknown as BtWindow).__btMaze!.stepping())).toBe(top)
   const path = await page.evaluate(() => (window as unknown as BtWindow).__btMaze!.path())
   expect(path).not.toBeNull()
   for (const cell of path!.slice(1)) {
