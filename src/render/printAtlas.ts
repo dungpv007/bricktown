@@ -326,6 +326,192 @@ export const PRINT_DRAWERS: Record<string, PrintDrawer> = {
     ctx.strokeStyle = '#d97a00'
     ctx.stroke()
   },
+
+  sushi(ctx, w, h) {
+    // SUSHI in white on red, a row of nigiri on a black counter.
+    shopSign(ctx, w, h, { bg: RED, rim: INK, word: 'SUSHI', ink: WHITE, outline: INK, size: 62 }, (X, Y) => {
+      roundRect(ctx, 26 * X, 84 * Y, 204 * X, 26 * Y, 8 * Y)
+      ctx.fillStyle = INK
+      ctx.fill()
+      for (const x of [62, 128, 194]) nigiri(ctx, x * X, 96 * Y, Y)
+    })
+  },
+
+  bakery(ctx, w, h) {
+    // BAKERY in brown on cream, then a loaf, a croissant and a cake.
+    shopSign(ctx, w, h, { bg: '#fff1d0', rim: '#8a5a2b', word: 'BAKERY', ink: '#8a4b1c', size: 48 }, (X, Y) => {
+      // Loaf with three cuts.
+      ctx.beginPath()
+      ctx.ellipse(70 * X, 98 * Y, 28 * X, 14 * Y, 0, 0, Math.PI * 2)
+      ctx.fillStyle = '#d9913a'
+      ctx.fill()
+      ctx.strokeStyle = '#fff1d0'
+      ctx.lineWidth = 3 * Y
+      for (const dx of [-12, 0, 12]) {
+        ctx.beginPath()
+        ctx.moveTo((70 + dx - 4) * X, 91 * Y)
+        ctx.lineTo((70 + dx + 4) * X, 105 * Y)
+        ctx.stroke()
+      }
+      // Croissant: a fat crescent.
+      ctx.beginPath()
+      ctx.arc(128 * X, 110 * Y, 22 * Y, Math.PI * 1.05, Math.PI * 1.95)
+      ctx.arc(128 * X, 114 * Y, 10 * Y, Math.PI * 1.9, Math.PI * 1.1, true)
+      ctx.closePath()
+      ctx.fillStyle = '#e8a33d'
+      ctx.fill()
+      // Cake: pink icing, white cream, a cherry.
+      ctx.fillStyle = '#f7c6d0'
+      ctx.fillRect(166 * X, 92 * Y, 46 * X, 18 * Y)
+      ctx.fillStyle = '#ff7fa5'
+      ctx.fillRect(166 * X, 86 * Y, 46 * X, 8 * Y)
+      disc(ctx, 189 * X, 82 * Y, 6 * Y, RED)
+    })
+  },
+
+  toys(ctx, w, h) {
+    // TOYS with each letter its own colour on blue, then a ball, a star and a toy block.
+    shopSign(ctx, w, h, { bg: '#1e6fd9', rim: GOLD, word: '', ink: WHITE, size: 60 }, (X, Y) => {
+      const letters: Array<[string, string]> = [['T', RED], ['O', GOLD], ['Y', '#2fb344'], ['S', '#ff8c1a']]
+      letters.forEach(([c, fill], i) => text(ctx, c, (68 + i * 40) * X, 50 * Y, 64 * Y, fill, WHITE))
+      disc(ctx, 70 * X, 98 * Y, 15 * Y, RED)
+      ctx.beginPath()
+      ctx.moveTo(70 * X, 98 * Y)
+      ctx.arc(70 * X, 98 * Y, 15 * Y, -0.3, 0.9)
+      ctx.closePath()
+      ctx.fillStyle = WHITE
+      ctx.fill()
+      starPath(ctx, 128 * X, 99 * Y, 17 * Y, 7 * Y)
+      ctx.fillStyle = GOLD
+      ctx.fill()
+      ctx.fillStyle = '#2fb344'
+      ctx.fillRect(170 * X, 86 * Y, 32 * X, 24 * Y)
+      for (const dx of [8, 24]) disc(ctx, (170 + dx) * X, 85 * Y, 5 * Y, '#2fb344')
+    })
+  },
+
+  grocery(ctx, w, h) {
+    // GROCERY in white on green, then an apple, an orange, a banana and a carrot.
+    shopSign(ctx, w, h, { bg: '#2f9e44', rim: WHITE, word: 'GROCERY', ink: WHITE, outline: '#1b5e20', size: 42 }, (X, Y) => {
+      disc(ctx, 60 * X, 100 * Y, 14 * Y, RED)
+      ctx.fillStyle = '#69db7c'
+      ctx.beginPath()
+      ctx.ellipse(66 * X, 84 * Y, 7 * Y, 4 * Y, -0.5, 0, Math.PI * 2)
+      ctx.fill()
+      disc(ctx, 106 * X, 100 * Y, 14 * Y, '#ff8c1a')
+      ctx.beginPath()
+      ctx.arc(152 * X, 80 * Y, 26 * Y, Math.PI * 0.2, Math.PI * 0.8)
+      ctx.arc(152 * X, 72 * Y, 26 * Y, Math.PI * 0.75, Math.PI * 0.25, true)
+      ctx.closePath()
+      ctx.fillStyle = '#ffd43b'
+      ctx.fill()
+      ctx.beginPath()
+      ctx.moveTo(188 * X, 92 * Y)
+      ctx.lineTo(216 * X, 100 * Y)
+      ctx.lineTo(188 * X, 108 * Y)
+      ctx.closePath()
+      ctx.fillStyle = '#ff8c1a'
+      ctx.fill()
+      ctx.fillStyle = '#69db7c'
+      ctx.fillRect(180 * X, 95 * Y, 9 * X, 10 * Y)
+    })
+  },
+
+  taxi(ctx, w, h) {
+    // TAXI in black on yellow over a black and white checker band.
+    const Y = h / 128
+    roundRect(ctx, M, M, w - 2 * M, h - 2 * M, 14 * Y)
+    ctx.fillStyle = '#ffd43b'
+    ctx.fill()
+    text(ctx, 'TAXI', w / 2, 50 * Y, 72 * Y, INK)
+    const sq = 12 * Y
+    const n = Math.floor((w - 2 * M - 16) / sq)
+    const x0 = (w - n * sq) / 2
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < 2; j++) {
+        ctx.fillStyle = (i + j) % 2 === 0 ? INK : WHITE
+        ctx.fillRect(x0 + i * sq, 92 * Y + j * sq, sq, sq)
+      }
+    }
+  },
+
+  fish(ctx, w, h) {
+    // A little plate with a fish on it (the sushi belt).
+    disc(ctx, w / 2, h / 2, w / 2 - M - 2, WHITE)
+    ctx.lineWidth = 6
+    ctx.strokeStyle = RED
+    ctx.stroke()
+    fishShape(ctx, w / 2 - 2, h / 2, 1.25, '#ff7f50')
+  },
+}
+
+/**
+ * A shop sign on a 256x128 grid (scaled to the cell): a framed panel with the shop's word across the
+ * top and a row of little pictures under it. Text colours keep a dark outline, so the word reads on
+ * any board colour from a distance.
+ */
+function shopSign(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  look: { bg: string; rim: string; word: string; ink: string; outline?: string; size: number },
+  pictures: (X: number, Y: number) => void,
+) {
+  const X = w / 256, Y = h / 128
+  roundRect(ctx, M, M, w - 2 * M, h - 2 * M, 16 * Y)
+  ctx.fillStyle = look.rim
+  ctx.fill()
+  roundRect(ctx, M + 8 * X, M + 8 * Y, w - 2 * M - 16 * X, h - 2 * M - 16 * Y, 10 * Y)
+  ctx.fillStyle = look.bg
+  ctx.fill()
+  if (look.word) text(ctx, look.word, w / 2, 48 * Y, look.size * Y, look.ink, look.outline)
+  pictures(X, Y)
+}
+
+function disc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string) {
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fillStyle = fill
+  ctx.fill()
+}
+
+/** A nigiri: white rice with a slice of salmon on top (centre x, y; `s` = scale). */
+function nigiri(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
+  roundRect(ctx, x - 16 * s, y - 4 * s, 32 * s, 12 * s, 6 * s)
+  ctx.fillStyle = WHITE
+  ctx.fill()
+  roundRect(ctx, x - 18 * s, y - 10 * s, 36 * s, 10 * s, 5 * s)
+  ctx.fillStyle = '#ff7f50'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'
+  ctx.lineWidth = 2 * s
+  for (const dx of [-8, 0, 8]) {
+    ctx.beginPath()
+    ctx.moveTo(x + dx * s - 3 * s, y - 9 * s)
+    ctx.lineTo(x + dx * s + 3 * s, y - 2 * s)
+    ctx.stroke()
+  }
+}
+
+/** A side-on fish facing left: body, tail, eye and a gill line (centre x, y; `s` = scale). */
+function fishShape(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, body: string) {
+  ctx.fillStyle = body
+  ctx.beginPath()
+  ctx.moveTo(x + 18 * s, y)
+  ctx.lineTo(x + 34 * s, y - 14 * s)
+  ctx.lineTo(x + 34 * s, y + 14 * s)
+  ctx.closePath()
+  ctx.fill()
+  ctx.beginPath()
+  ctx.ellipse(x - 4 * s, y, 26 * s, 15 * s, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'
+  ctx.lineWidth = 3 * s
+  ctx.beginPath()
+  ctx.arc(x - 12 * s, y, 11 * s, -Math.PI / 3, Math.PI / 3)
+  ctx.stroke()
+  disc(ctx, x - 20 * s, y - 4 * s, 4.5 * s, WHITE)
+  disc(ctx, x - 20 * s, y - 4 * s, 2.5 * s, INK)
 }
 
 /** Draws every print into its atlas rectangle. */

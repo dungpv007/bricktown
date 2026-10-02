@@ -47,6 +47,14 @@ export const PRINTS: PrintDef[] = [
   { id: 'fig_torso_stripes', w: 1, h: 1 },
   { id: 'fig_torso_suit', w: 1, h: 1 },
   { id: 'fig_torso_apron', w: 1, h: 1 },
+  // Shop signs (drawn on both faces of the `board_*` parts) and the sushi belt's fish. Appended, so
+  // the prints above keep their atlas cells.
+  { id: 'sushi', w: 2, h: 1 },
+  { id: 'bakery', w: 2, h: 1 },
+  { id: 'toys', w: 2, h: 1 },
+  { id: 'grocery', w: 2, h: 1 },
+  { id: 'taxi', w: 2, h: 1 },
+  { id: 'fish', w: 1, h: 1 },
 ]
 
 export const PRINT_BY_ID: Record<string, PrintDef> = Object.fromEntries(PRINTS.map((p) => [p.id, p]))

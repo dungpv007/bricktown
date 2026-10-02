@@ -3,9 +3,9 @@ import { PARTS, PART_BY_ID, PART_CATEGORIES, getPart } from './catalog'
 import { PRINT_BY_ID } from '../prints'
 
 describe('part catalog', () => {
-  it('has 63 unique part ids', () => {
-    expect(PARTS).toHaveLength(63)
-    expect(new Set(PARTS.map((p) => p.id)).size).toBe(63)
+  it('has 69 unique part ids', () => {
+    expect(PARTS).toHaveLength(69)
+    expect(new Set(PARTS.map((p) => p.id)).size).toBe(69)
   })
 
   it('every part has w, d, h >= 1 as integers', () => {
@@ -25,7 +25,7 @@ describe('part catalog', () => {
   })
 
   it('PART_BY_ID indexes every part', () => {
-    expect(Object.keys(PART_BY_ID)).toHaveLength(63)
+    expect(Object.keys(PART_BY_ID)).toHaveLength(69)
     for (const p of PARTS) expect(PART_BY_ID[p.id]).toBe(p)
   })
 
@@ -62,7 +62,7 @@ describe('part catalog', () => {
     expect(printed.map((p) => p.id)).toEqual([
       'print_police_2x2', 'print_fire_2x2', 'print_clock_2x2', 'print_stop_2x2', 'print_arrow_2x2',
       'print_menu_1x2', 'print_screen_1x2', 'print_eyes_1x2', 'print_number_1x2',
-      'print_heart_1x1', 'print_star_1x1',
+      'print_heart_1x1', 'print_star_1x1', 'print_fish_1x1',
     ])
     for (const p of printed) {
       // A print looks different after a quarter turn, so no rotational symmetry.
@@ -72,6 +72,17 @@ describe('part catalog', () => {
     }
     expect(getPart('print_menu_1x2')).toMatchObject({ w: 2, d: 1 })
     expect(getPart('print_heart_1x1')).toMatchObject({ w: 1, d: 1 })
+  })
+
+  it('has upright shop sign boards with a print on both faces', () => {
+    const boards = PARTS.filter((p) => p.id.startsWith('board_'))
+    expect(boards.map((p) => p.id)).toEqual([
+      'board_sushi_1x6', 'board_bakery_1x6', 'board_toys_1x6', 'board_grocery_1x6', 'board_taxi_1x2',
+    ])
+    for (const p of boards) {
+      expect(p, p.id).toMatchObject({ category: 'decor', shape: 'box', d: 1, studs: false, sym: 1 })
+      expect(PRINT_BY_ID[p.print!], p.id).toMatchObject({ w: 2, h: 1 })
+    }
   })
 
   it('every print a part carries exists and has the size of the area it is drawn on', () => {

@@ -21,6 +21,9 @@ const HINTS: Record<DriveProblem, { icon: string; key: TKey; testId: string }> =
   wheels_not_lowest: { icon: '🛞⬇️', key: 'driveWheelsLow', testId: 'veh-wheels-low' },
   unknown_part: { icon: '❓', key: 'driveUnknownPart', testId: 'veh-unknown-part' },
 }
+/** Trains run on the rails by themselves (City NPCs): never offered for driving. */
+const isDriveChoice = (v: { kind: string; tags: readonly string[] }) => v.kind === 'vehicle' && !v.tags.includes('train')
+
 /** A vehicle that drives, but is wider than the picker's `maxWidth` (a maze corridor). */
 const TOO_WIDE = { icon: '↔️', key: 'driveTooWide', testId: 'veh-too-wide' } as const
 
@@ -75,7 +78,8 @@ interface Props {
 }
 
 /**
- * Pick what to drive: the ready-made vehicles first, then the kid's own vehicle blueprints.
+ * Pick what to drive: the ready-made vehicles first, then the kid's own vehicle blueprints (trains
+ * excepted: they only run on rails).
  * Builds that cannot drive (or are wider than `maxWidth`) are shown greyed out with a hint badge
  * saying what to fix.
  */
@@ -85,14 +89,14 @@ export default function VehiclePicker({ onPick, maxWidth = Infinity }: Props) {
   const blueprints = useGame((s) => s.data.blueprints)
 
   const entries = useMemo<Entry[]>(() => {
-    const templates = TEMPLATES.filter((tpl) => tpl.kind === 'vehicle').map((tpl) => ({
+    const templates = TEMPLATES.filter(isDriveChoice).map((tpl) => ({
       source: templateSource(tpl.id),
       thumbKey: `tpl:${tpl.id}`,
       name: tpl.name[lang],
       bricks: tpl.bricks,
     }))
     const own = blueprints
-      .filter((bp) => bp.kind === 'vehicle')
+      .filter(isDriveChoice)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map((bp) => ({ source: bp.id, thumbKey: `bp:${bp.id}:${bp.updatedAt}`, name: bp.name, bricks: bp.bricks }))
     return [...templates, ...own]
