@@ -321,6 +321,18 @@ function ShareCity() {
   )
 }
 
+/** 🚦 Ambient life (cars, trains, people) on or off; remembered with the other preferences. */
+function NpcToggle() {
+  const t = useT()
+  const on = useApp((s) => s.npcOn)
+  const setOn = useApp((s) => s.setNpcOn)
+  return (
+    <button className="bt-btn bt-icon-btn" data-testid="city-npc-toggle" aria-label={t('cityNpc')} aria-pressed={on} onClick={() => setOn(!on)}>
+      🚦
+    </button>
+  )
+}
+
 /** HTML overlay on top of the city canvas. */
 export default function CityUI() {
   const t = useT()
@@ -357,6 +369,7 @@ export default function CityUI() {
   return (
     <div className="bt-city-ui">
       <TopRight>
+        <NpcToggle />
         <ShareCity />
         <button className="bt-btn bt-city-drive" data-testid="city-drive" aria-label={t('menuDrive')} onClick={() => setMode('drive')}>
           <span aria-hidden="true">🚗</span> {t('menuDrive')}

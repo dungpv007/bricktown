@@ -38,6 +38,18 @@ describe('sanitizePrefs', () => {
   })
 })
 
+describe('city life toggle', () => {
+  it('is on by default (no reduced motion in node) and keeps a saved boolean only', () => {
+    expect(useApp.getState().npcOn).toBe(true)
+    expect(sanitizePrefs({ npcOn: false })).toEqual({ npcOn: false })
+    expect(sanitizePrefs({ npcOn: 'off' })).toEqual({})
+    useApp.getState().setNpcOn(false)
+    expect(useApp.getState().npcOn).toBe(false)
+    expect(useApp.persist.getOptions().partialize?.(useApp.getState())).toMatchObject({ npcOn: false })
+    useApp.getState().setNpcOn(true)
+  })
+})
+
 describe('volumes', () => {
   it('default to 0.5 (an old save without them loads unchanged)', () => {
     expect(DEFAULT_VOLUME).toBe(0.5)
@@ -89,7 +101,7 @@ describe('colour picker collapse', () => {
 
 describe('useApp persistence config', () => {
   const opts = useApp.persist.getOptions()
-  it('persists slotId, lang, difficulty, the two sound toggles, their volumes and the colour picker state only', () => {
+  it('persists slotId, lang, difficulty, the two sound toggles, their volumes, the colour picker state and city life only', () => {
     const state = useApp.getState()
     expect(opts.partialize?.(state)).toEqual({
       lang: 'vi',
@@ -100,6 +112,7 @@ describe('useApp persistence config', () => {
       musicVolume: 0.5,
       sfxVolume: 0.5,
       colorsCollapsed: {},
+      npcOn: true,
     })
   })
   it('merge falls back to defaults for bad persisted values', () => {
