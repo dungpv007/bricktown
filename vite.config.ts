@@ -3,7 +3,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// No @types/node in this project: read the environment without it.
+const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}
+
 export default defineConfig({
+  // The e2e dev server (playwright.config.ts) keeps its own dependency cache beside a developer's server.
+  cacheDir: env.BT_VITE_CACHE_DIR ?? 'node_modules/.vite',
   plugins: [
     react(),
     VitePWA({

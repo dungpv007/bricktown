@@ -11,7 +11,7 @@ export default defineConfig({
   testDir: 'e2e',
   // Every worker runs a software (SwiftShader) WebGL context: more workers than this saturate the
   // CPU and make frame timing (camera glides, long presses) flaky.
-  workers: CI ? 2 : 3,
+  workers: CI ? 2 : 1,
   testMatch: ['offline.spec.ts', '*.prod.spec.ts'],
   use: {
     baseURL: ORIGIN,
