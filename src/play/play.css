@@ -41,6 +41,8 @@
 
 /* The game screen: the canvas, then the kit's HTML overlays. */
 .bt-play-screen {
+  /* Like the mode UIs: HUD corners (the wallet, the top-right controls) are placed from this edge. */
+  --bt-edge: calc(12px * var(--bt-s));
   background: #cfe8f0;
 }
 
