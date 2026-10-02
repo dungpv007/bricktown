@@ -73,11 +73,12 @@ export const STICKERS: Sticker[] = [
     { vi: 'Thu ngân giỏi', en: 'Super cashier' },
     { vi: 'Đếm tiền đúng', en: 'Perfect change' },
   ]),
-  ...gameStickers('rescue', ['🚒', '🚓', '🦸'], [
-    { vi: 'Cuộc gọi đầu tiên', en: 'First call' },
-    { vi: 'Anh hùng thành phố', en: 'City hero' },
-    { vi: 'Cứu hộ hoàn hảo', en: 'Perfect rescue' },
-  ]),
+  // Rescue: the ids are the generic slots' (stable), the milestones are its own: the first fire put
+  // out, the first robber caught (per-team counters `rescue_fire` / `rescue_police`, see
+  // play/rescue/mission.ts) and five rescues.
+  { id: 'rescue_first', icon: '🧑‍🚒', name: { vi: 'Lính cứu hỏa dũng cảm', en: 'Brave firefighter' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue_fire').rounds >= 1 },
+  { id: 'rescue_5', icon: '👮', name: { vi: 'Cảnh sát siêu đẳng', en: 'Super police' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue_police').rounds >= 1 },
+  { id: 'rescue_perfect', icon: '🦸', name: { vi: 'Anh hùng thành phố', en: 'City hero' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue').rounds >= 5 },
 ]
 
 export const STICKER_BY_ID: Record<string, Sticker> = Object.fromEntries(STICKERS.map((s) => [s.id, s]))

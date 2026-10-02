@@ -1,0 +1,246 @@
+/* ---------- 🚒 Fire and police dispatch (src/play/rescue) ---------- */
+
+.bt-rescue {
+  position: absolute;
+  inset: 0;
+}
+
+/* The phone rings: a big green 📞 with pulsing rings, bottom centre. */
+.bt-rescue-ring {
+  position: absolute;
+  left: 50%;
+  bottom: calc(28px * var(--bt-s) + var(--bt-safe-bottom));
+  transform: translateX(-50%);
+  z-index: 6;
+}
+
+.bt-btn.bt-rescue-answer {
+  width: calc(148px * var(--bt-s));
+  height: calc(148px * var(--bt-s));
+  min-width: 0;
+  padding: 0;
+  border: calc(6px * var(--bt-s)) solid var(--bt-white);
+  border-radius: 50%;
+  background: var(--bt-green);
+  font-size: calc(72px * var(--bt-s));
+  line-height: 1;
+  animation: bt-rescue-ring 1.2s ease-out infinite;
+}
+
+.bt-btn.bt-rescue-answer > span {
+  display: inline-block;
+  animation: bt-rescue-rattle 1.2s ease-in-out infinite;
+}
+
+@keyframes bt-rescue-ring {
+  0% { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(35, 120, 65, 0.7); transform: scale(1); }
+  15% { transform: scale(1.08); }
+  30% { transform: scale(1); }
+  70%, 100% { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), 0 0 0 calc(36px * var(--bt-s)) rgba(35, 120, 65, 0); }
+}
+
+@keyframes bt-rescue-rattle {
+  0%, 50%, 100% { transform: rotate(0deg); }
+  5%, 15%, 25%, 35%, 45% { transform: rotate(-14deg); }
+  10%, 20%, 30%, 40% { transform: rotate(14deg); }
+}
+
+/* The call: the picture bubble, the mini map and the big GO. */
+.bt-play-card.bt-rescue-call {
+  gap: calc(14px * var(--bt-s));
+  padding: calc(18px * var(--bt-s)) calc(22px * var(--bt-s));
+  max-height: 100%;
+}
+
+.bt-rescue-call-row {
+  display: flex;
+  align-items: center;
+  gap: calc(18px * var(--bt-s));
+}
+
+.bt-rescue-bubble {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: calc(170px * var(--bt-s));
+  height: calc(170px * var(--bt-s));
+  flex: none;
+  border: calc(5px * var(--bt-s)) solid var(--bt-ink);
+  border-radius: 50%;
+  background: var(--bt-white);
+  line-height: 1;
+  animation: bt-rescue-pop 0.45s ease-out both;
+}
+
+/* The bubble's tail. */
+.bt-rescue-bubble::after {
+  content: '';
+  position: absolute;
+  left: calc(14px * var(--bt-s));
+  bottom: calc(-6px * var(--bt-s));
+  border: calc(16px * var(--bt-s)) solid transparent;
+  border-top-color: var(--bt-ink);
+  transform: rotate(35deg);
+}
+
+.bt-rescue-bubble-big {
+  font-size: calc(84px * var(--bt-s));
+  animation: bt-rescue-flicker 0.9s ease-in-out infinite;
+}
+
+.bt-rescue-bubble-small {
+  font-size: calc(44px * var(--bt-s));
+}
+
+@keyframes bt-rescue-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  70% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+@keyframes bt-rescue-flicker {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12) rotate(-4deg); }
+}
+
+.bt-rescue-map {
+  display: block;
+  width: calc(300px * var(--bt-s));
+  height: calc(300px * var(--bt-s));
+  border: calc(4px * var(--bt-s)) solid var(--bt-white);
+  border-radius: var(--bt-radius);
+  box-shadow: var(--bt-shadow);
+  background: #8fcf72;
+}
+
+.bt-rescue-map-target {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bt-rescue-flicker 0.9s ease-in-out infinite;
+}
+
+.bt-btn.bt-rescue-go {
+  min-width: calc(220px * var(--bt-s));
+  min-height: calc(92px * var(--bt-s));
+  font-size: calc(44px * var(--bt-s));
+}
+
+.bt-btn.bt-rescue-go-fire {
+  background: var(--bt-red);
+}
+
+.bt-btn.bt-rescue-go-police {
+  background: var(--bt-blue);
+}
+
+/* Phones held upright: the bubble above the map. */
+@media (max-width: 599.98px) {
+  .bt-rescue-call-row {
+    flex-direction: column;
+  }
+
+  .bt-rescue-bubble {
+    width: calc(120px * var(--bt-s));
+    height: calc(120px * var(--bt-s));
+  }
+
+  .bt-rescue-bubble-big {
+    font-size: calc(60px * var(--bt-s));
+  }
+
+  .bt-rescue-bubble-small {
+    font-size: calc(30px * var(--bt-s));
+  }
+
+  .bt-rescue-map {
+    width: min(calc(280px * var(--bt-s)), 70vw);
+    height: min(calc(280px * var(--bt-s)), 70vw);
+  }
+}
+
+/* Driving: what the mission is, top centre (under the top bar on upright phones). */
+.bt-rescue-chip {
+  position: absolute;
+  top: calc(12px * var(--bt-s) + var(--bt-safe-top));
+  left: 50%;
+  z-index: 5;
+  padding: calc(8px * var(--bt-s)) calc(18px * var(--bt-s));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(34px * var(--bt-s));
+  line-height: 1.2;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+@media (max-width: 599.98px) {
+  .bt-rescue-chip {
+    top: calc(var(--bt-touch) + 20px * var(--bt-s) + var(--bt-safe-top));
+  }
+}
+
+.bt-rescue-chip-tap,
+.bt-rescue-chip-cheer {
+  font-size: calc(48px * var(--bt-s));
+  animation: bt-rescue-bounce 0.8s ease-in-out infinite;
+}
+
+@keyframes bt-rescue-bounce {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(calc(-8px * var(--bt-s))); }
+}
+
+/* Hold to spray: a huge round 💦, its ring filling as the fire goes out. */
+.bt-rescue-spray-wrap {
+  position: absolute;
+  right: calc(28px * var(--bt-s));
+  bottom: calc(28px * var(--bt-s) + var(--bt-safe-bottom));
+  z-index: 6;
+}
+
+.bt-btn.bt-rescue-spray {
+  --bt-rescue-p: 0%;
+  width: calc(176px * var(--bt-s));
+  height: calc(176px * var(--bt-s));
+  min-width: 0;
+  padding: 0;
+  border: calc(10px * var(--bt-s)) solid transparent;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #36aebf 0 62%, transparent 63%) padding-box,
+    conic-gradient(var(--bt-yellow) var(--bt-rescue-p), rgba(255, 255, 255, 0.9) 0) border-box;
+  font-size: calc(84px * var(--bt-s));
+  line-height: 1;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  animation: bt-rescue-ring-blue 1.4s ease-out infinite;
+}
+
+.bt-btn.bt-rescue-spray[data-holding='true'] {
+  transform: scale(0.94);
+  animation: none;
+}
+
+@keyframes bt-rescue-ring-blue {
+  0% { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(54, 174, 191, 0.7); }
+  70%, 100% { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), 0 0 0 calc(30px * var(--bt-s)) rgba(54, 174, 191, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-btn.bt-rescue-answer,
+  .bt-btn.bt-rescue-answer > span,
+  .bt-rescue-bubble,
+  .bt-rescue-bubble-big,
+  .bt-rescue-map-target,
+  .bt-rescue-chip-tap,
+  .bt-rescue-chip-cheer,
+  .bt-btn.bt-rescue-spray {
+    animation: none;
+  }
+}

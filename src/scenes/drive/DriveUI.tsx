@@ -198,7 +198,8 @@ export default function DriveUI({
   stepMode = false,
 }: {
   source: string
-  onChangeVehicle: () => void
+  /** The 🚙 button (back to the vehicle picker); absent = no button (a mission's fixed vehicle). */
+  onChangeVehicle?: () => void
   quietEngine?: boolean
   stepMode?: boolean
 }) {
@@ -212,9 +213,11 @@ export default function DriveUI({
     <div className="bt-drive-ui" data-testid="drive-ui" data-step={stepMode ? 'true' : undefined}>
       <DriveStatusProbe />
       <RotateHint />
-      <button className="bt-btn bt-icon-btn bt-drive-change" data-testid="drive-change" aria-label={t('driveChange')} onClick={onChangeVehicle}>
-        🚙
-      </button>
+      {onChangeVehicle && (
+        <button className="bt-btn bt-icon-btn bt-drive-change" data-testid="drive-change" aria-label={t('driveChange')} onClick={onChangeVehicle}>
+          🚙
+        </button>
+      )}
       {stepMode ? (
         <div className="bt-drive-step-left">
           <TapButton testId="drive-horn" labelKey="driveHorn" className="bt-drive-small" onTap={input.honk}>

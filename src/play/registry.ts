@@ -71,7 +71,7 @@ export const GAMES: readonly GameDef[] = [
     name: { vi: 'Cứu hỏa và cảnh sát', en: 'Fire and police' },
     color: 'var(--bt-blue)',
     templates: ['fire_station', 'police_station', 'police_hq'],
-    scene: null, // G4: lazyScene(() => import('./rescue/RescueGame'))
+    scene: lazyScene(() => import('./rescue/RescueGame')),
   },
 
   {
