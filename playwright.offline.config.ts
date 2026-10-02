@@ -28,7 +28,7 @@ export default defineConfig({
             // most specs build on an empty map. The sample town's own spec clears it.
             { name: 'bricktown-e2e-empty-city', value: '1' },
             // Music and sound effects off: nothing to hear in CI, and no 1.8 MB music decode per test.
-            { name: 'bricktown-prefs', value: JSON.stringify({ state: { musicOn: false, sfxOn: false }, version: 0 }) },
+            { name: 'bricktown-prefs', value: JSON.stringify({ state: { musicOn: false, sfxOn: false, graphicsPreset: 'balanced' }, version: 0 }) },
           ],
         },
       ],
