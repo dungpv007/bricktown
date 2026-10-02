@@ -5,7 +5,7 @@ import { COLORS } from './colors'
 import { figKey, figPreset } from './figures'
 import { figureCacheSize, getFigureGeometry, peekFigureGeometry } from './parts/figureGeometry'
 import { bounds } from './model'
-import { getPartGeometry } from './parts/geometry'
+import { getPartGeometry, studVertexCount } from './parts/geometry'
 import { getPrintGeometry } from './parts/printGeometry'
 import { brickCenter } from './rotation'
 import { platesToWorld } from './units'
@@ -31,9 +31,30 @@ describe('bakeBricks', () => {
     const { opaque, trans, metal } = bakeBricks(bricks)
     expect(trans).toBeNull()
     expect(metal).toBeNull()
+    // The plate sits on 4 of the brick's studs: those are buried in it and left out.
     expect(vertexCount(opaque)).toBe(
-      partVertices('brick_2x4') + partVertices('plate_2x2') + partVertices('slope_2x2'),
+      partVertices('brick_2x4') + partVertices('plate_2x2') + partVertices('slope_2x2') - 4 * studVertexCount(),
     )
+  })
+
+  it('leaves out studs buried under a solid opaque brick, and keeps those under glass or beside it', () => {
+    const studs = (bricks: Brick[]) => {
+      const { opaque, trans } = bakeBricks(bricks)
+      return vertexCount(opaque) + (trans ? vertexCount(trans) : 0)
+    }
+    const base = partVertices('brick_2x4') + partVertices('brick_1x1')
+    // A 1x1 on a 2x4: one of eight studs hidden, whatever the 2x4's rotation.
+    for (const r of [0, 1, 2, 3] as const) {
+      expect(studs([b('a', 'brick_2x4', 0, 0, 0, r), b('t', 'brick_1x1', 1, 3, 1)])).toBe(base - studVertexCount())
+    }
+    // Not touching (one plate higher), off to the side, or a glass brick on top: every stud stays.
+    expect(studs([b('a', 'brick_2x4', 0, 0, 0), b('t', 'brick_1x1', 1, 4, 1)])).toBe(base)
+    expect(studs([b('a', 'brick_2x4', 0, 0, 0), b('t', 'brick_1x1', 5, 3, 0)])).toBe(base)
+    expect(studs([b('a', 'brick_2x4', 0, 0, 0), b('t', 'brick_1x1', 1, 3, 1, 0, GLASS)])).toBe(base)
+    // A figure standing on a brick does not hide its stud.
+    const fig: Brick = { ...b('f', 'minifig', 1, 3, 1), fig: figPreset('police') }
+    const { opaque } = bakeBricks([b('a', 'brick_2x4', 0, 0, 0), fig])
+    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') + vertexCount(getFigureGeometry(figPreset('police')).body))
   })
 
   it('has position, normal and linear colour attributes', () => {
@@ -69,7 +90,7 @@ describe('bakeBricks', () => {
   it('puts metallic-colour bricks in their own geometry', () => {
     const bricks = [b('a', 'brick_2x4', 0, 0, 0), b('s', 'brick_1x1', 3, 0, 0, 0, SILVER), b('g', 'plate_2x2', 0, 3, 0, 0, GOLD)]
     const { opaque, trans, metal } = bakeBricks(bricks)
-    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4'))
+    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') - 4 * studVertexCount()) // under the gold plate
     expect(trans).toBeNull()
     expect(vertexCount(metal!)).toBe(partVertices('brick_1x1') + partVertices('plate_2x2'))
   })
@@ -95,7 +116,7 @@ describe('bakeBricks', () => {
     ]
     const { opaque, trans, metal, print } = bakeBricks(bricks)
     // Bodies stay with their colour's material kind.
-    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') + partVertices('print_clock_2x2'))
+    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') + partVertices('print_clock_2x2') - 4 * studVertexCount())
     expect(vertexCount(trans!)).toBe(partVertices('print_heart_1x1'))
     expect(vertexCount(metal!)).toBe(partVertices('computer_1x2'))
     // The prints keep their own colours: texture coordinates, no vertex colour.

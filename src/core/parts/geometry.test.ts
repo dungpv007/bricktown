@@ -83,9 +83,9 @@ describe('getPartGeometry', () => {
   })
 
   it('places one stud per top cell', () => {
-    // box = 12 triangles; each stud = 40 (10-segment closed cylinder)
-    expect(triangleCount(getPartGeometry('brick_1x1'))).toBe(12 + 40)
-    expect(triangleCount(getPartGeometry('brick_2x4'))).toBe(12 + 8 * 40)
+    // box = 12 triangles; each stud = 30 (10-segment open tube + its top disc; the bottom disc could never be seen)
+    expect(triangleCount(getPartGeometry('brick_1x1'))).toBe(12 + 30)
+    expect(triangleCount(getPartGeometry('brick_2x4'))).toBe(12 + 8 * 30)
     expect(triangleCount(getPartGeometry('tile_2x2'))).toBe(12)
   })
 

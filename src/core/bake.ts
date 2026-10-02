@@ -2,9 +2,11 @@ import * as THREE from 'three'
 import { COLORS, colorMaterialKind, type MaterialKind } from './colors'
 import { figKey, figOf, isFigure } from './figures'
 import { brickBodyGeometry, brickPrintGeometry } from './parts/brickGeometry'
+import { getPart } from './parts/catalog'
 import { buildFigureGeometry, peekFigureGeometry, type FigureGeometry } from './parts/figureGeometry'
-import { brickCenter, QUARTER_COS, QUARTER_SIN } from './rotation'
-import type { Brick, Rot } from './types'
+import { partStuds, studVertexCount } from './parts/geometry'
+import { brickCenter, footprint, QUARTER_COS, QUARTER_SIN } from './rotation'
+import type { Brick, PartShape, Rot } from './types'
 
 /**
  * Baking merges a whole brick model into one geometry per material kind (see `MaterialKind`), so
@@ -44,6 +46,76 @@ export function disposeBaked(baked: BakedModel): void {
   baked.trans?.dispose()
   baked.metal?.dispose()
   baked.print?.dispose()
+}
+
+/** Part shapes whose underside is solid over the whole footprint: a stud right under one is hidden inside it. */
+const SOLID_BOTTOM: ReadonlySet<PartShape> = new Set<PartShape>(['box', 'tile', 'tile_print', 'slope', 'window', 'door'])
+
+/**
+ * The studs of each brick that stay visible (flags in `partStuds` order), for the bricks that have
+ * some stud buried in the solid, non-transparent underside of a brick sitting right on top of it.
+ * Those studs can never be seen, so the bake leaves them out: a wall of stacked bricks loses most
+ * of its stud triangles at no visual cost. Bricks with every stud showing are not in the map.
+ */
+function visibleStuds(bricks: Brick[]): Map<Brick, boolean[]> {
+  const covered = new Set<string>() // "x,y,z": stud cell x, z under the bottom (in plates) y of a solid brick
+  for (const b of bricks) {
+    if (isFigure(b) || colorMaterialKind(b.c) === 'trans') continue
+    const part = getPart(b.p)
+    if (!SOLID_BOTTOM.has(part.shape)) continue
+    const { fx, fz } = footprint(part, b.r)
+    for (let x = 0; x < fx; x++) for (let z = 0; z < fz; z++) covered.add(`${b.x + x},${b.y},${b.z + z}`)
+  }
+  const out = new Map<Brick, boolean[]>()
+  if (covered.size === 0) return out
+  for (const b of bricks) {
+    if (isFigure(b)) continue
+    const studs = partStuds(b.p)
+    if (studs.length === 0) continue
+    const part = getPart(b.p)
+    const top = b.y + part.h
+    const [cx, , cz] = brickCenter(b)
+    const cos = QUARTER_COS[b.r]
+    const sin = QUARTER_SIN[b.r]
+    let hidden = false
+    const visible = studs.map(([sx, sz]) => {
+      const x = Math.floor(sx * cos + sz * sin + cx)
+      const z = Math.floor(-sx * sin + sz * cos + cz)
+      const show = !covered.has(`${x},${top},${z}`)
+      if (!show) hidden = true
+      return show
+    })
+    if (hidden) out.set(b, visible)
+  }
+  return out
+}
+
+/** A part geometry (studs last, see `studVertexCount`) with only the `visible` studs kept. */
+function withStuds(g: THREE.BufferGeometry, visible: boolean[]): THREE.BufferGeometry {
+  const per = studVertexCount()
+  const pos = g.getAttribute('position')
+  const nor = g.getAttribute('normal')
+  const body = pos.count - visible.length * per
+  if (g.index || body < 0) return g
+  const kept = body + visible.filter(Boolean).length * per
+  const positions = new Float32Array(kept * 3)
+  const normals = new Float32Array(kept * 3)
+  const src = pos.array as Float32Array
+  const srcN = nor.array as Float32Array
+  positions.set(src.subarray(0, body * 3))
+  normals.set(srcN.subarray(0, body * 3))
+  let at = body * 3
+  visible.forEach((show, i) => {
+    if (!show) return
+    const from = (body + i * per) * 3
+    positions.set(src.subarray(from, from + per * 3), at)
+    normals.set(srcN.subarray(from, from + per * 3), at)
+    at += per * 3
+  })
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  out.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+  return out
 }
 
 const FALLBACK_HEX = '#ffffff'
@@ -155,7 +227,12 @@ export function bakeBricksUncached(bricks: Brick[], options: BakeOptions = {}): 
     return g
   }
   const transient = options.transientFigures === true
-  const bodyOf = (b: Brick) => (transient && isFigure(b) ? figure(b).body : brickBodyGeometry(b))
+  const studs = visibleStuds(bricks)
+  const bodyOf = (b: Brick) => {
+    if (transient && isFigure(b)) return figure(b).body
+    const visible = studs.get(b)
+    return visible ? withStuds(brickBodyGeometry(b), visible) : brickBodyGeometry(b)
+  }
   const printOf = (b: Brick) => (transient && isFigure(b) ? figure(b).print : brickPrintGeometry(b))
   try {
     const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
