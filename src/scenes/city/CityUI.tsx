@@ -3,16 +3,18 @@ import { TEMPLATES } from '../../content/templates'
 import { cityDisplayName, cityIsEmpty, currentCity, currentSavedCity } from '../../core/cities'
 import { MAX_SCALE, MIN_SCALE, scaleOf } from '../../core/city'
 import { buildCityPackage } from '../../core/share'
+import { CITY_TIME_ICONS, nextTime, type CityTime } from '../../core/timeOfDay'
 import type { TerrainBrush } from '../../core/terrain'
 import type { Blueprint, Template } from '../../core/types'
 import { usePaletteDrag } from '../../input/paletteDrag'
 import { getThumbnail } from '../../render/thumbnails'
 import { isTemplateSource, resolveRenderable, templateSource } from '../../render/sources'
 import { useDeviceClass } from '../../state/deviceClass'
-import { useApp } from '../../state/useApp'
+import { prefersReducedMotion, useApp } from '../../state/useApp'
 import { useCityEditor, type PaintLayer } from '../../state/useCityEditor'
 import { useEditor, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
+import { useGraphics } from '../../state/useGraphics'
 import { KIND_ICON } from '../../ui/blueprintKinds'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import ErrorBadge from '../../ui/ErrorBadge'
@@ -333,6 +335,52 @@ function NpcToggle() {
   )
 }
 
+const TIME_LABEL: Record<CityTime, TKey> = { morning: 'cityTimeMorning', noon: 'cityTimeNoon', sunset: 'cityTimeSunset', night: 'cityTimeNight' }
+
+/**
+ * Time of day: the 🕒 button steps through ☀️ 🌞 🌅 🌙 (and stops the automatic day); the 🔄 toggle
+ * runs the automatic day, offered only when the graphics settings allow it and motion is welcome.
+ */
+function TimeControls() {
+  const t = useT()
+  const time = useApp((s) => s.cityTime)
+  const auto = useApp((s) => s.cityTimeAuto)
+  const allowed = useGraphics().autoDayNight
+  const [reduced] = useState(prefersReducedMotion)
+  const offered = allowed && !reduced
+  const pick = () => {
+    const app = useApp.getState()
+    if (app.cityTimeAuto) app.setCityTimeAuto(false)
+    app.setCityTime(nextTime(app.cityTime))
+  }
+  return (
+    <>
+      <button
+        className="bt-btn bt-icon-btn"
+        data-testid="city-time"
+        data-time={time}
+        aria-label={t(TIME_LABEL[time])}
+        title={t(TIME_LABEL[time])}
+        onClick={pick}
+      >
+        {CITY_TIME_ICONS[time]}
+      </button>
+      {offered && (
+        <button
+          className="bt-btn bt-icon-btn"
+          data-testid="city-time-auto"
+          aria-label={t('cityTimeAuto')}
+          title={t('cityTimeAuto')}
+          aria-pressed={auto}
+          onClick={() => useApp.getState().setCityTimeAuto(!auto)}
+        >
+          🔄
+        </button>
+      )}
+    </>
+  )
+}
+
 /** HTML overlay on top of the city canvas. */
 export default function CityUI() {
   const t = useT()
@@ -369,6 +417,7 @@ export default function CityUI() {
   return (
     <div className="bt-city-ui">
       <TopRight>
+        <TimeControls />
         <NpcToggle />
         <CityPickerButton />
         <ShareCity />

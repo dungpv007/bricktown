@@ -101,7 +101,7 @@ describe('colour picker collapse', () => {
 
 describe('useApp persistence config', () => {
   const opts = useApp.persist.getOptions()
-  it('persists slotId, lang, difficulty, the two sound toggles, their volumes, the colour picker state, city life and graphics only', () => {
+  it('persists slotId, lang, difficulty, the two sound toggles, their volumes, the colour picker state, city life, graphics and the city time only', () => {
     const state = useApp.getState()
     expect(opts.partialize?.(state)).toEqual({
       graphicsPreset: 'auto',
@@ -115,7 +115,14 @@ describe('useApp persistence config', () => {
       sfxVolume: 0.5,
       colorsCollapsed: {},
       npcOn: true,
+      cityTime: 'noon',
+      cityTimeAuto: false,
     })
+  })
+  it('merge keeps a valid city time and auto switch, and drops bad ones', () => {
+    const current = useApp.getState()
+    expect(opts.merge?.({ cityTime: 'night', cityTimeAuto: true }, current)).toMatchObject({ cityTime: 'night', cityTimeAuto: true })
+    expect(opts.merge?.({ cityTime: 'dusk', cityTimeAuto: 'yes' }, current)).toMatchObject({ cityTime: 'noon', cityTimeAuto: false })
   })
   it('merge falls back to defaults for bad persisted values', () => {
     const current = useApp.getState()

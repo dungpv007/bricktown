@@ -44,6 +44,7 @@ function BakedInstances({
   placements,
   shadow = castsShadow(kind),
   proxy = false,
+  material = bakedMaterials[kind],
 }: {
   geometry: THREE.BufferGeometry
   kind: BakedKind
@@ -53,6 +54,8 @@ function BakedInstances({
   shadow?: boolean
   /** A shadow stand-in: drawn into the shadow map only (see render/shadowProxies). */
   proxy?: boolean
+  /** The kind's shared material, or a scene's own copy of it (the City's night windows). */
+  material?: THREE.Material
 }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   const capacity = useInstanceCapacity(placements.length, MIN_CAPACITY)
@@ -74,14 +77,24 @@ function BakedInstances({
     <instancedMesh
       key={capacity}
       ref={ref}
-      args={[geometry, bakedMaterials[kind], capacity]}
+      args={[geometry, material, capacity]}
       castShadow={shadow}
       receiveShadow={!proxy}
     />
   )
 }
 
-function SourceGroup({ source, placements, shadowProxies }: { source: RenderableSource; placements: CityPlacement[]; shadowProxies: boolean }) {
+function SourceGroup({
+  source,
+  placements,
+  shadowProxies,
+  transMaterial,
+}: {
+  source: RenderableSource
+  placements: CityPlacement[]
+  shadowProxies: boolean
+  transMaterial?: THREE.Material
+}) {
   const { baked, baseplate, bricks } = source
   // Low models (flower beds, bushes) cast none: their shadow would be a smudge nobody misses.
   const proxy = useMemo(
@@ -98,6 +111,7 @@ function SourceGroup({ source, placements, shadowProxies }: { source: Renderable
           baseplate={baseplate}
           placements={placements}
           shadow={!shadowProxies && castsShadow(kind)}
+          material={kind === 'trans' && transMaterial ? transMaterial : bakedMaterials[kind]}
         />
       ))}
       {proxy && proxy.getAttribute('position').count > 0 && (
@@ -151,10 +165,13 @@ export default function Placements({
   placements,
   blueprints,
   shadowProxies = false,
+  transMaterial,
 }: {
   placements: CityPlacement[]
   blueprints: Blueprint[]
   shadowProxies?: boolean
+  /** Replaces the shared see-through material (the City's, which glows at night). */
+  transMaterial?: THREE.Material
 }) {
   const { drawable, missing } = useMemo(() => {
     const bySource = new Map<string, CityPlacement[]>()
@@ -177,7 +194,7 @@ export default function Placements({
   return (
     <group>
       {drawable.map(([source, r, list]) => (
-        <SourceGroup key={source} source={r} placements={list} shadowProxies={shadowProxies} />
+        <SourceGroup key={source} source={r} placements={list} shadowProxies={shadowProxies} transMaterial={transMaterial} />
       ))}
       {missing.length > 0 && <Placeholders placements={missing} sizeOf={sizeOf} />}
     </group>
