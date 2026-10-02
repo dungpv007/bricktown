@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { bakeBricks, bakeBricksUncached, bakeCacheSize, bakeKey, bakedGeometries, disposeBaked, evictBakes } from './bake'
+import { bakeBricks, bakeBricksUncached, bakeCacheSize, bakeKey, bakedGeometries, bakeShadowBricks, disposeBaked, evictBakes } from './bake'
 import { COLORS } from './colors'
 import { figKey, figPreset } from './figures'
 import { figureCacheSize, getFigureGeometry, peekFigureGeometry } from './parts/figureGeometry'
 import { bounds } from './model'
-import { getPartGeometry, studVertexCount } from './parts/geometry'
+import { bakedStudGeometry, getPartGeometry, partStuds, studVertexCount } from './parts/geometry'
 import { getPrintGeometry } from './parts/printGeometry'
 import { brickCenter } from './rotation'
 import { platesToWorld } from './units'
@@ -23,7 +23,10 @@ const b = (id: string, p: string, x: number, y: number, z: number, r: 0 | 1 | 2 
 })
 
 const vertexCount = (g: THREE.BufferGeometry) => g.getAttribute('position').count
-const partVertices = (p: string) => vertexCount(getPartGeometry(p))
+/** Vertices of one baked (low-poly) stud. */
+const bakedStud = () => vertexCount(bakedStudGeometry())
+/** A part's vertices as baked: its Workshop geometry with every stud swapped for the low-poly one. */
+const partVertices = (p: string) => vertexCount(getPartGeometry(p)) - partStuds(p).length * (studVertexCount() - bakedStud())
 
 describe('bakeBricks', () => {
   it('merges all opaque bricks into one geometry with the summed vertex count', () => {
@@ -33,7 +36,7 @@ describe('bakeBricks', () => {
     expect(metal).toBeNull()
     // The plate sits on 4 of the brick's studs: those are buried in it and left out.
     expect(vertexCount(opaque)).toBe(
-      partVertices('brick_2x4') + partVertices('plate_2x2') + partVertices('slope_2x2') - 4 * studVertexCount(),
+      partVertices('brick_2x4') + partVertices('plate_2x2') + partVertices('slope_2x2') - 4 * bakedStud(),
     )
   })
 
@@ -45,7 +48,7 @@ describe('bakeBricks', () => {
     const base = partVertices('brick_2x4') + partVertices('brick_1x1')
     // A 1x1 on a 2x4: one of eight studs hidden, whatever the 2x4's rotation.
     for (const r of [0, 1, 2, 3] as const) {
-      expect(studs([b('a', 'brick_2x4', 0, 0, 0, r), b('t', 'brick_1x1', 1, 3, 1)])).toBe(base - studVertexCount())
+      expect(studs([b('a', 'brick_2x4', 0, 0, 0, r), b('t', 'brick_1x1', 1, 3, 1)])).toBe(base - bakedStud())
     }
     // Not touching (one plate higher), off to the side, or a glass brick on top: every stud stays.
     expect(studs([b('a', 'brick_2x4', 0, 0, 0), b('t', 'brick_1x1', 1, 4, 1)])).toBe(base)
@@ -55,6 +58,14 @@ describe('bakeBricks', () => {
     const fig: Brick = { ...b('f', 'minifig', 1, 3, 1), fig: figPreset('police') }
     const { opaque } = bakeBricks([b('a', 'brick_2x4', 0, 0, 0), fig])
     expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') + vertexCount(getFigureGeometry(figPreset('police')).body))
+  })
+
+  it('casts shadows with a stud-less copy of the opaque and metallic bricks (cached like the bake)', () => {
+    const bricks = [b('a', 'brick_2x4', 0, 0, 0), b('w', 'brick_1x1', 10, 0, 0, 0, GLASS), b('m', 'brick_1x1', 12, 0, 0, 0, SILVER)]
+    const shadow = bakeShadowBricks(bricks)
+    expect(vertexCount(shadow)).toBe(partVertices('brick_2x4') - 8 * bakedStud() + partVertices('brick_1x1') - bakedStud())
+    expect(shadow.getAttribute('color')).toBeUndefined()
+    expect(bakeShadowBricks(bricks.map((x) => ({ ...x, id: `${x.id}2` })))).toBe(shadow)
   })
 
   it('has position, normal and linear colour attributes', () => {
@@ -90,7 +101,7 @@ describe('bakeBricks', () => {
   it('puts metallic-colour bricks in their own geometry', () => {
     const bricks = [b('a', 'brick_2x4', 0, 0, 0), b('s', 'brick_1x1', 3, 0, 0, 0, SILVER), b('g', 'plate_2x2', 0, 3, 0, 0, GOLD)]
     const { opaque, trans, metal } = bakeBricks(bricks)
-    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') - 4 * studVertexCount()) // under the gold plate
+    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') - 4 * bakedStud()) // under the gold plate
     expect(trans).toBeNull()
     expect(vertexCount(metal!)).toBe(partVertices('brick_1x1') + partVertices('plate_2x2'))
   })
@@ -116,7 +127,7 @@ describe('bakeBricks', () => {
     ]
     const { opaque, trans, metal, print } = bakeBricks(bricks)
     // Bodies stay with their colour's material kind.
-    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') + partVertices('print_clock_2x2') - 4 * studVertexCount())
+    expect(vertexCount(opaque)).toBe(partVertices('brick_2x4') + partVertices('print_clock_2x2') - 4 * bakedStud())
     expect(vertexCount(trans!)).toBe(partVertices('print_heart_1x1'))
     expect(vertexCount(metal!)).toBe(partVertices('computer_1x2'))
     // The prints keep their own colours: texture coordinates, no vertex colour.
@@ -174,11 +185,13 @@ describe('bakeBricks', () => {
     )
     const expected = getPartGeometry('slope_2x4').clone().applyMatrix4(matrix)
     const { opaque } = bakeBricks([brick])
+    expect(vertexCount(opaque)).toBe(partVertices('slope_2x4'))
+    // The body (everything but the studs, which close the part geometry) lands exactly where the Workshop draws it.
+    const body = (vertexCount(expected) - partStuds('slope_2x4').length * studVertexCount()) * 3
     for (const name of ['position', 'normal']) {
       const got = opaque.getAttribute(name).array
       const want = expected.getAttribute(name).array
-      expect(got.length).toBe(want.length)
-      for (let i = 0; i < got.length; i++) expect(got[i]).toBeCloseTo(want[i], 4)
+      for (let i = 0; i < body; i++) expect(got[i]).toBeCloseTo(want[i], 4)
     }
   })
 

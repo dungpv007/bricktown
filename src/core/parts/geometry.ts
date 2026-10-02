@@ -17,6 +17,8 @@ const SEGMENTS = 12 // cylinders / cones / spheres
 const STUD_RADIUS = 0.3
 const STUD_HEIGHT = 0.17
 const STUD_SEGMENTS = 10
+/** Baked models (seen from afar) use a six-sided stud: round enough at a distance, 40% fewer triangles. */
+const BAKED_STUD_SEGMENTS = 6
 
 type Piece = THREE.BufferGeometry
 
@@ -57,10 +59,10 @@ export const COMPUTER_SCREEN = { w: 1.6, h: 0.8, y: 0.3, z: -0.225 } as const
  * One stud: an open tube plus its top disc. No bottom disc: it would lie on the brick's top face,
  * facing into the brick, where it can never be seen.
  */
-function stud(x: number, topY: number, z: number): Piece {
-  const tube = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT, STUD_SEGMENTS, 1, true)
+function stud(x: number, topY: number, z: number, segments = STUD_SEGMENTS): Piece {
+  const tube = new THREE.CylinderGeometry(STUD_RADIUS, STUD_RADIUS, STUD_HEIGHT, segments, 1, true)
     .translate(x, topY + STUD_HEIGHT / 2, z)
-  const cap = new THREE.CircleGeometry(STUD_RADIUS, STUD_SEGMENTS).rotateX(-Math.PI / 2).translate(x, topY + STUD_HEIGHT, z)
+  const cap = new THREE.CircleGeometry(STUD_RADIUS, segments).rotateX(-Math.PI / 2).translate(x, topY + STUD_HEIGHT, z)
   const merged = mergeGeometries([normalize(tube), normalize(cap)])
   tube.dispose()
   cap.dispose()
@@ -455,6 +457,16 @@ export function getPartGeometry(partId: string): THREE.BufferGeometry {
 }
 
 let studVertices = 0
+let bakedStud: THREE.BufferGeometry | null = null
+
+/**
+ * The low-poly stud baked models draw (see `BAKED_STUD_SEGMENTS`), standing on y = 0 at x = z = 0,
+ * flat-shaded position + normal. Shared: never dispose or mutate it.
+ */
+export function bakedStudGeometry(): THREE.BufferGeometry {
+  if (!bakedStud) bakedStud = normalize(stud(0, 0, 0, BAKED_STUD_SEGMENTS))
+  return bakedStud
+}
 
 /** Vertices of one stud. A part geometry ends with its studs: one block of this many per stud, in `partStuds` order. */
 export function studVertexCount(): number {

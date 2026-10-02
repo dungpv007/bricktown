@@ -4,9 +4,10 @@ import { figKey, figOf, isFigure } from './figures'
 import { brickBodyGeometry, brickPrintGeometry } from './parts/brickGeometry'
 import { getPart } from './parts/catalog'
 import { buildFigureGeometry, peekFigureGeometry, type FigureGeometry } from './parts/figureGeometry'
-import { partStuds, studVertexCount } from './parts/geometry'
+import { bakedStudGeometry, partStuds, studVertexCount } from './parts/geometry'
 import { brickCenter, footprint, QUARTER_COS, QUARTER_SIN } from './rotation'
 import type { Brick, PartShape, Rot } from './types'
+import { platesToWorld } from './units'
 
 /**
  * Baking merges a whole brick model into one geometry per material kind (see `MaterialKind`), so
@@ -90,32 +91,57 @@ function visibleStuds(bricks: Brick[]): Map<Brick, boolean[]> {
   return out
 }
 
-/** A part geometry (studs last, see `studVertexCount`) with only the `visible` studs kept. */
-function withStuds(g: THREE.BufferGeometry, visible: boolean[]): THREE.BufferGeometry {
-  const per = studVertexCount()
+const bakedParts = new Map<string, THREE.BufferGeometry>()
+
+/**
+ * A part's geometry as baked models draw it: its body (the part geometry minus its studs, which
+ * close it, see `studVertexCount`) plus the low-poly baked stud (see `bakedStudGeometry`) on the
+ * `visible` stud cells only. Baked models are seen from afar (the City, Drive, thumbnails), where
+ * a six-sided stud looks round and costs 40% less than the Workshop's. Cached per part and mask.
+ */
+function bakedPartGeometry(partId: string, g: THREE.BufferGeometry, visible: readonly boolean[]): THREE.BufferGeometry {
+  const key = `${partId}|${visible.map((v) => (v ? 1 : 0)).join('')}`
+  const cached = bakedParts.get(key)
+  if (cached) return cached
   const pos = g.getAttribute('position')
   const nor = g.getAttribute('normal')
-  const body = pos.count - visible.length * per
+  const body = pos.count - visible.length * studVertexCount()
   if (g.index || body < 0) return g
-  const kept = body + visible.filter(Boolean).length * per
-  const positions = new Float32Array(kept * 3)
-  const normals = new Float32Array(kept * 3)
-  const src = pos.array as Float32Array
-  const srcN = nor.array as Float32Array
-  positions.set(src.subarray(0, body * 3))
-  normals.set(srcN.subarray(0, body * 3))
+  const stud = bakedStudGeometry()
+  const studPos = stud.getAttribute('position').array as Float32Array
+  const studNor = stud.getAttribute('normal').array as Float32Array
+  const per = studPos.length / 3
+  const shown = visible.filter(Boolean).length
+  const positions = new Float32Array((body + shown * per) * 3)
+  const normals = new Float32Array(positions.length)
+  positions.set((pos.array as Float32Array).subarray(0, body * 3))
+  normals.set((nor.array as Float32Array).subarray(0, body * 3))
+  const top = platesToWorld(getPart(partId).h) / 2
+  const studs = partStuds(partId)
   let at = body * 3
   visible.forEach((show, i) => {
     if (!show) return
-    const from = (body + i * per) * 3
-    positions.set(src.subarray(from, from + per * 3), at)
-    normals.set(srcN.subarray(from, from + per * 3), at)
-    at += per * 3
+    const [sx, sz] = studs[i]
+    for (let v = 0; v < studPos.length; v += 3, at += 3) {
+      positions[at] = studPos[v] + sx
+      positions[at + 1] = studPos[v + 1] + top
+      positions[at + 2] = studPos[v + 2] + sz
+    }
+    normals.set(studNor, at - studPos.length)
   })
   const out = new THREE.BufferGeometry()
   out.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   out.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+  bakedParts.set(key, out)
   return out
+}
+
+/** A brick's body as baked models draw it: `visible` stud flags (default: all studs) on its part, or a figure's own body. */
+function bakedBody(b: Brick, visible?: readonly boolean[]): THREE.BufferGeometry {
+  const g = brickBodyGeometry(b)
+  if (isFigure(b)) return g
+  const count = partStuds(b.p).length
+  return count === 0 ? g : bakedPartGeometry(b.p, g, visible ?? new Array<boolean>(count).fill(true))
 }
 
 const FALLBACK_HEX = '#ffffff'
@@ -228,11 +254,7 @@ export function bakeBricksUncached(bricks: Brick[], options: BakeOptions = {}): 
   }
   const transient = options.transientFigures === true
   const studs = visibleStuds(bricks)
-  const bodyOf = (b: Brick) => {
-    if (transient && isFigure(b)) return figure(b).body
-    const visible = studs.get(b)
-    return visible ? withStuds(brickBodyGeometry(b), visible) : brickBodyGeometry(b)
-  }
+  const bodyOf = (b: Brick) => (transient && isFigure(b) ? figure(b).body : bakedBody(b, studs.get(b)))
   const printOf = (b: Brick) => (transient && isFigure(b) ? figure(b).print : brickPrintGeometry(b))
   try {
     const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
@@ -270,6 +292,29 @@ export function bakeBricks(bricks: Brick[]): BakedModel {
   return baked
 }
 
+const shadowCache = new Map<string, THREE.BufferGeometry>()
+
+/**
+ * A cheap stand-in that casts a model's shadow: the bodies of its shadow-casting (opaque and
+ * metallic) bricks without a single stud, position and normal only. A stud's shadow is a speck no
+ * shadow map resolves, and studs are most of a model's triangles. Cached like `bakeBricks` (same
+ * key, dropped by `evictBakes` with it); shared, never dispose or mutate it.
+ */
+export function bakeShadowBricks(bricks: Brick[]): THREE.BufferGeometry {
+  const key = bakeKey(bricks)
+  let geometry = shadowCache.get(key)
+  if (!geometry) {
+    const casters = bricks.filter((b) => brickMaterialKind(b) !== 'trans')
+    geometry = mergeBricks(
+      casters,
+      (b) => (isFigure(b) ? brickBodyGeometry(b) : bakedBody(b, new Array<boolean>(partStuds(b.p).length).fill(false))),
+      false,
+    )
+    shadowCache.set(key, geometry)
+  }
+  return geometry
+}
+
 /** Number of models in the bake cache. */
 export function bakeCacheSize(): number {
   return cache.size
@@ -288,6 +333,11 @@ export function evictBakes(keep: ReadonlySet<string>): number {
     cache.delete(key)
     disposeBaked(baked)
     dropped++
+  }
+  for (const [key, geometry] of shadowCache) {
+    if (keep.has(key)) continue
+    shadowCache.delete(key)
+    geometry.dispose()
   }
   return dropped
 }
