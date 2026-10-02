@@ -25,6 +25,15 @@ const printed = (name: string, print: string, w: number, d: number): PartDef => 
   ...part(`print_${name}_${d}x${w}`, 'decor', 'tile_print', w, d, 1, false, 1),
   print,
 })
+/**
+ * A sign board: an upright 1-stud-thin box, `w` studs wide and `h` plates tall, with its print on
+ * both big faces (front and back, see printGeometry), so a shop sign reads from the street and
+ * from behind.
+ */
+const board = (name: string, print: string, w: number, h: number): PartDef => ({
+  ...part(`board_${name}_1x${w}`, 'decor', 'box', w, 1, h, false, 1),
+  print,
+})
 
 export const PARTS: PartDef[] = [
   brick(1, 1, 4), brick(1, 2, 2), brick(1, 3, 2), brick(1, 4, 2), brick(1, 6, 2),
@@ -84,6 +93,12 @@ export const PARTS: PartDef[] = [
   printed('number', 'number_112', 2, 1),
   printed('heart', 'heart', 1, 1),
   printed('star', 'star', 1, 1),
+  printed('fish', 'fish', 1, 1),
+  board('sushi', 'sushi', 6, 9),
+  board('bakery', 'bakery', 6, 9),
+  board('toys', 'toys', 6, 9),
+  board('grocery', 'grocery', 6, 9),
+  board('taxi', 'taxi', 2, 3),
 
   // A minifigure: its look comes from `Brick.fig` (see core/figures), not the brick colour.
   part('minifig', 'figure', 'minifig', 2, 1, 12, false, 1),

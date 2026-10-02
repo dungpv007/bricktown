@@ -1,9 +1,9 @@
 import * as THREE from 'three'
-import { printUv } from '../prints'
+import { PRINT_BY_ID, printUv } from '../prints'
 import { platesToWorld } from '../units'
 import type { PartDef } from '../types'
 import { getPart } from './catalog'
-import { COMPUTER_SCREEN } from './geometry'
+import { COMPUTER_SCREEN, INSET } from './geometry'
 
 /**
  * Print overlays: flat textured quads laid just above a part's surface, using the shared print
@@ -36,12 +36,42 @@ export function printPlane(printId: string, sx: number, sy: number): THREE.Buffe
   return g
 }
 
+/**
+ * A printed box (a sign board): the print on its front (-Z) and back (+Z) faces, each upright and
+ * reading left to right from its own side, as large as fits the face at the print's aspect ratio
+ * (the board colour frames it).
+ */
+function boardFaces(p: PartDef, printId: string, H: number): THREE.BufferGeometry {
+  const { w: cw, h: ch } = PRINT_BY_ID[printId]!
+  const maxW = p.w - 2 * TILE_PRINT_INSET
+  const maxH = H - 2 * TILE_PRINT_INSET
+  const sx = Math.min(maxW, (maxH * cw) / ch)
+  const sy = (sx * ch) / cw
+  const half = p.d / 2 - INSET + PRINT_LIFT
+  const back = printPlane(printId, sx, sy).translate(0, 0, half)
+  const front = printPlane(printId, sx, sy).rotateY(Math.PI).translate(0, 0, -half)
+  const merged = new THREE.BufferGeometry()
+  for (const name of ['position', 'normal', 'uv']) {
+    const a = back.getAttribute(name)
+    const b = front.getAttribute(name)
+    const data = new Float32Array(a.array.length + b.array.length)
+    data.set(a.array as Float32Array, 0)
+    data.set(b.array as Float32Array, a.array.length)
+    merged.setAttribute(name, new THREE.BufferAttribute(data, a.itemSize))
+  }
+  back.dispose()
+  front.dispose()
+  return merged
+}
+
 function build(p: PartDef, printId: string): THREE.BufferGeometry {
   const H = platesToWorld(p.h)
   let g: THREE.BufferGeometry
   if (p.shape === 'computer') {
     const s = COMPUTER_SCREEN
     g = printPlane(printId, s.w, s.h).translate(0, s.y, s.z + PRINT_LIFT)
+  } else if (p.shape === 'box') {
+    g = boardFaces(p, printId, H)
   } else {
     // Flat on the top face; the picture's top points to -Z (away from the default camera), so
     // it reads upright from the front-right view and along +X for wide prints.

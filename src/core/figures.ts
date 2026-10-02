@@ -104,6 +104,11 @@ export const FIG_PRESETS: FigPreset[] = [
     name: { vi: 'Em bé', en: 'Kid' },
     style: { torso: 11, legs: 3, face: 'grin', hat: 'hair_ponytail', hatColor: 6, print: 'plain' },
   },
+  {
+    id: 'sushi_chef',
+    name: { vi: 'Đầu bếp sushi', en: 'Sushi chef' },
+    style: { torso: 0, legs: 1, arms: 0, face: 'smile', hat: 'chef', print: 'apron' },
+  },
 ]
 
 const PRESET_BY_ID: Record<string, FigPreset> = Object.fromEntries(FIG_PRESETS.map((p) => [p.id, p]))
