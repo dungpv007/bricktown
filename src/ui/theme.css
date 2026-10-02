@@ -1588,6 +1588,8 @@ form.bt-dialog,
 .bt-city-ui > .bt-city-left {
   position: absolute;
   left: var(--bt-edge);
+  /* Spans the screen (it passes taps through) so the phone action-bar row can be as wide as it needs. */
+  right: var(--bt-edge);
   top: var(--bt-top);
   bottom: var(--bt-edge);
   display: flex;
@@ -2439,6 +2441,15 @@ form.bt-dialog,
 
 /* Portrait phones. */
 @media (orientation: portrait) and (max-width: 599.98px) {
+  /* Main menu: language, slots, import and the two sound toggles stay on one line. */
+  .bt-menu > .bt-row {
+    gap: calc(8px * var(--bt-s));
+  }
+
+  .bt-menu > .bt-row > .bt-btn {
+    padding: 0 calc(12px * var(--bt-s));
+  }
+
   /* Workshop: undo / redo in a row under the back button, so the plate gets the full width. */
   .bt-workshop-ui .bt-toolbar {
     flex-direction: row;

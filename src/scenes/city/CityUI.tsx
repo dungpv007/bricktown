@@ -5,6 +5,7 @@ import type { Blueprint, Template } from '../../core/types'
 import { usePaletteDrag } from '../../input/paletteDrag'
 import { getThumbnail } from '../../render/thumbnails'
 import { isTemplateSource, resolveRenderable, templateSource } from '../../render/sources'
+import { useDeviceClass } from '../../state/deviceClass'
 import { useApp } from '../../state/useApp'
 import { useCityEditor } from '../../state/useCityEditor'
 import { useEditor, workshopHasBricks } from '../../state/useEditor'
@@ -79,6 +80,7 @@ const ACTIONS: Array<{ action: CityAction; icon: string; labelKey: TKey }> = [
 function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; onEdit: (bp: Blueprint) => void }) {
   const { editable, drawable, onEdit } = props
   const t = useT()
+  const phone = useDeviceClass() !== 'tablet' // a row under the tools on phones (theme.css)
   const run = (action: CityAction) => {
     const ed = useCityEditor.getState()
     switch (action) {
@@ -90,7 +92,7 @@ function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; o
     }
   }
   return (
-    <div className="bt-actionbar bt-hud-panel" role="toolbar" aria-orientation="vertical" data-testid="city-action-bar">
+    <div className="bt-actionbar bt-hud-panel" role="toolbar" aria-orientation={phone ? 'horizontal' : 'vertical'} data-testid="city-action-bar">
       {ACTIONS.filter(({ action }) => (action !== 'edit' || editable) && (action !== 'duplicate' || drawable)).map(({ action, icon, labelKey }) => (
         <button
           key={action}

@@ -45,6 +45,7 @@ const tmpFwd = new THREE.Vector3()
  */
 function MazeDriveCamera({ target, length, mode }: { target: RefObject<THREE.Group | null>; length: number; mode: MazeCamera }) {
   const camera = useThree((s) => s.camera)
+  const aspect = useThree((s) => s.size.width / Math.max(1, s.size.height))
   const heading = useRef(new THREE.Vector3(0, 0, -1))
   const look = useRef(new THREE.Vector3())
   const placed = useRef(false)
@@ -62,8 +63,12 @@ function MazeDriveCamera({ target, length, mode }: { target: RefObject<THREE.Gro
 
     const h = heading.current
     if (mode === 'top') {
-      desiredLook.set(tmpPos.x + h.x * TOP_LOOK_AHEAD, tmpPos.y, tmpPos.z + h.z * TOP_LOOK_AHEAD)
-      desired.set(desiredLook.x, desiredLook.y + TOP_DISTANCE * Math.cos(MAZE_TILT), desiredLook.z + TOP_DISTANCE * Math.sin(MAZE_TILT))
+      // A portrait phone sees little sideways: look less far ahead east / west (so the car stays on
+      // screen) and back off a little (so a corridor's width still shows).
+      const sideways = Math.min(1, aspect)
+      const distance = TOP_DISTANCE * (aspect < 1 ? Math.sqrt(1 / aspect) : 1)
+      desiredLook.set(tmpPos.x + h.x * TOP_LOOK_AHEAD * sideways, tmpPos.y, tmpPos.z + h.z * TOP_LOOK_AHEAD)
+      desired.set(desiredLook.x, desiredLook.y + distance * Math.cos(MAZE_TILT), desiredLook.z + distance * Math.sin(MAZE_TILT))
     } else {
       desired.set(tmpPos.x - h.x * chaseDistance, tmpPos.y + chaseDistance * 0.6, tmpPos.z - h.z * chaseDistance)
       desiredLook.set(tmpPos.x + h.x * chaseDistance * 0.5, tmpPos.y, tmpPos.z + h.z * chaseDistance * 0.5)
