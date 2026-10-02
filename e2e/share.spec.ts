@@ -73,7 +73,16 @@ async function friend(browser: Browser, page: Page, baseURL: string | undefined)
     hasTouch: true,
     storageState: {
       cookies: [],
-      origins: [{ origin: baseURL!, localStorage: [{ name: 'bricktown-onboarded', value: '1' }, { name: 'bricktown-install-hint-dismissed', value: '1' }] }],
+      origins: [
+        {
+          origin: baseURL!,
+          localStorage: [
+            { name: 'bricktown-onboarded-v2', value: '1' },
+            { name: 'bricktown-install-hint-dismissed', value: '1' },
+            { name: 'bricktown-prefs', value: JSON.stringify({ state: { musicOn: false, sfxOn: false }, version: 0 }) },
+          ],
+        },
+      ],
     },
   })
   return context.newPage()
