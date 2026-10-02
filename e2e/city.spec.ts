@@ -47,7 +47,7 @@ test('city: roads and a template placement persist across a reload', async ({ pa
   expect(errors).toEqual([])
 })
 
-test('city: one-finger drag paints roads with the road tool; two fingers do not', async ({ page }) => {
+test('city: in road mode one finger paints roads (two fingers do not) and the eraser erases them', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
@@ -55,7 +55,7 @@ test('city: one-finger drag paints roads with the road tool; two fingers do not'
   const box = (await canvas.boundingBox())!
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
-  await page.getByTestId('city-tool-road').click()
+  await page.getByTestId('city-road-mode').click()
 
   const cdp = await page.context().newCDPSession(page)
   const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<[number, number]>) =>
@@ -70,6 +70,15 @@ test('city: one-finger drag paints roads with the road tool; two fingers do not'
   const painted = (await cityData(page)).roads.length
   expect(painted).toBeGreaterThan(3)
 
+  // The eraser takes the same stroke back off in one undo step.
+  await page.getByTestId('city-road-eraser').click()
+  await touch('touchStart', [[x - 100, y]])
+  for (let i = 1; i <= 10; i++) await touch('touchMove', [[x - 100 + i * 20, y]])
+  await touch('touchEnd', [])
+  expect((await cityData(page)).roads).toEqual([])
+  await page.getByTestId('city-undo').click()
+  expect((await cityData(page)).roads.length).toBe(painted)
+
   // A two-finger pinch moves the camera instead.
   await touch('touchStart', [[x - 50, y + 100]])
   await touch('touchStart', [[x - 50, y + 100], [x + 50, y + 100]])
@@ -78,9 +87,70 @@ test('city: one-finger drag paints roads with the road tool; two fingers do not'
   expect((await cityData(page)).roads.length).toBe(painted)
 })
 
-test('city: tools paint a road, place a picked template, undo', async ({ page }) => {
+test('city: tap selects (rotate, delete), a placement drags to a new cell, a Kho card drags onto the map', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByTestId('main-menu').waitFor()
+  // The camera starts centred on what is built: one house in the middle of the view.
+  await page.evaluate(() => {
+    const game = (window as unknown as BtWindow).__bt.useGame.getState()
+    game.setCity({ size: 48, roads: [], placements: [{ id: 'house', source: 'tpl:house_small', cx: 20, cz: 20, rot: 0 }] })
+  })
+  await page.getByTestId('menu-city').click()
+  const canvas = page.getByTestId('mode-city').locator('canvas')
+  await expect(canvas).toBeVisible()
+  const box = (await canvas.boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+  const house = async () => (await cityData(page)).placements.find((p) => p.id === 'house')
+
+  // Tap: the action bar appears; rotate turns the house.
+  await expect(page.getByTestId('city-action-bar')).toHaveCount(0)
+  await expect.poll(async () => {
+    await page.mouse.click(cx, cy) // the canvas may still be sizing itself right after it appears
+    return page.getByTestId('city-action-bar').count()
+  }).toBe(1)
+  await expect(page.getByTestId('city-act-edit')).toHaveCount(0) // a template: not editable
+  await page.getByTestId('city-act-rotate').click()
+  expect((await house())?.rot).toBe(1)
+
+  // Drag the house to the right: it moves (one undo step), the camera does not.
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(cx + 80, cy, { steps: 6 })
+  await page.mouse.move(cx + 160, cy, { steps: 6 })
+  await page.mouse.up()
+  const moved = await house()
+  expect(moved?.cx).toBeGreaterThan(21)
+  expect(moved?.cz).toBe(20)
+  await page.getByTestId('city-undo').click()
+  expect((await house())?.cx).toBe(20)
+  await page.getByTestId('city-redo').click()
+  expect((await house())?.cx).toBe(moved?.cx)
+
+  // Tap it where it is now and delete it.
+  await page.mouse.click(cx + 160, cy)
+  await page.getByTestId('city-act-delete').click()
+  expect((await cityData(page)).placements).toEqual([])
+  await expect(page.getByTestId('city-action-bar')).toHaveCount(0)
+
+  // Drag a tree out of the Kho onto the middle of the map: it is placed there and selected.
+  const card = (await page.getByTestId('src-tpl-tree').boundingBox())!
+  await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(card.x + card.width / 2, card.y - 60, { steps: 6 })
+  await page.mouse.move(cx, cy, { steps: 10 })
+  await page.mouse.up()
+  const city = await cityData(page)
+  expect(city.placements.map((p) => p.source)).toEqual(['tpl:tree'])
+  await expect(page.getByTestId('city-action-bar')).toBeVisible()
+  // The drag did not also pick the card for quick-placing.
+  await expect(page.getByTestId('src-tpl-tree')).toHaveAttribute('aria-pressed', 'false')
+  expect(errors).toEqual([])
+})
+
+test('city: a picked Kho card quick-places where the ground is tapped; undo / redo', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
@@ -89,27 +159,18 @@ test('city: tools paint a road, place a picked template, undo', async ({ page })
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
 
-  // Road tool: drag across the middle of the view.
-  await page.getByTestId('city-tool-road').click()
-  await page.mouse.move(cx - 120, cy)
-  await page.mouse.down()
-  await page.mouse.move(cx, cy, { steps: 8 })
-  await page.mouse.move(cx + 120, cy, { steps: 8 })
-  await page.mouse.up()
-  const afterRoad = await cityData(page)
-  expect(afterRoad.roads.length).toBeGreaterThan(3)
-
-  // Pick a tree from the drawer (switches to the place tool) and tap below the road.
   await page.getByTestId('src-tpl-tree').click()
-  await expect(page.getByTestId('city-tool-place')).toHaveAttribute('aria-pressed', 'true')
-  await page.mouse.click(cx, cy + 90)
-  const afterPlace = await cityData(page)
-  expect(afterPlace.placements).toHaveLength(1)
-  expect(afterPlace.placements[0].source).toBe('tpl:tree')
+  await expect(page.getByTestId('src-tpl-tree')).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(async () => {
+    if ((await cityData(page)).placements.length === 0) await page.mouse.click(cx, cy + 90)
+    return (await cityData(page)).placements.map((p) => p.source)
+  }).toEqual(['tpl:tree'])
+  await expect(page.getByTestId('city-action-bar')).toBeVisible()
 
   await page.getByTestId('city-undo').click()
   expect((await cityData(page)).placements).toHaveLength(0)
-  expect(errors).toEqual([])
+  await page.getByTestId('city-redo').click()
+  expect((await cityData(page)).placements).toHaveLength(1)
 })
 
 interface EditBt {
@@ -147,13 +208,13 @@ test('city: a placed blueprint opens in the workshop, asking before replacing wo
   })
   await page.getByTestId('menu-city').click()
   await expect(page.getByTestId('src-bp-e2e')).toBeVisible()
-  await expect(page.getByTestId('city-edit')).toHaveCount(0)
+  await expect(page.getByTestId('city-act-edit')).toHaveCount(0)
   await page.evaluate(() => (window as unknown as EditBt).__bt.useCityEditor.getState().selectPlacement('pl-e2e'))
 
-  await page.getByTestId('city-edit').click()
+  await page.getByTestId('city-act-edit').click()
   await page.getByTestId('confirm-no').click()
   await expect(page.getByTestId('mode-city')).toBeVisible()
-  await page.getByTestId('city-edit').click()
+  await page.getByTestId('city-act-edit').click()
   await page.getByTestId('confirm-yes').click()
   await expect(page.getByTestId('mode-workshop')).toBeVisible()
   const ws = await page.evaluate(() => (window as unknown as EditBt).__bt.useGame.getState().data.workshop)
@@ -161,7 +222,7 @@ test('city: a placed blueprint opens in the workshop, asking before replacing wo
   expect(ws.bricks).toHaveLength(1)
 })
 
-test('city: placements whose blueprint is gone or broken show as blocks the erase tool removes', async ({ page }) => {
+test('city: placements whose blueprint is gone or broken show as blocks that can be selected and deleted', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await page.goto('/')
@@ -176,8 +237,11 @@ test('city: placements whose blueprint is gone or broken show as blocks the eras
   await expect(canvas).toBeVisible()
   const box = (await canvas.boundingBox())!
   const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  await page.getByTestId('city-tool-erase').click()
-  await page.mouse.click(centre.x, centre.y)
+  await expect.poll(async () => {
+    await page.mouse.click(centre.x, centre.y) // the canvas may still be sizing itself right after it appears
+    return page.getByTestId('city-action-bar').count()
+  }).toBe(1)
+  await page.getByTestId('city-act-delete').click()
   expect((await cityData(page)).placements).toHaveLength(0)
 
   // A blueprint using a part id this version does not know: still no crash, still erasable.
@@ -197,6 +261,7 @@ test('city: placements whose blueprint is gone or broken show as blocks the eras
   })
   await expect(page.getByTestId('src-bp-broken')).toBeVisible()
   await page.mouse.click(centre.x, centre.y)
+  await page.getByTestId('city-act-delete').click()
   expect((await cityData(page)).placements).toHaveLength(0)
   expect(errors).toEqual([])
 })

@@ -1434,6 +1434,32 @@ form.bt-dialog,
   pointer-events: auto;
 }
 
+/* Left column: the toolbar, then the selected placement's action bar right under it (beside the drawer). */
+.bt-city-ui > .bt-city-left {
+  position: absolute;
+  left: var(--bt-edge);
+  top: var(--bt-top);
+  bottom: var(--bt-edge);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.bt-city-left > .bt-toolbar,
+.bt-city-left > .bt-actionbar {
+  position: static;
+  flex: none;
+  max-height: none;
+  pointer-events: auto;
+}
+
+.bt-city-left > .bt-actionbar {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
 .bt-city-drive {
   display: flex;
   align-items: center;

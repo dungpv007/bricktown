@@ -6,10 +6,13 @@ import {
   frontRoadCount,
   placementCenter,
   planPlacement,
+  cellsOnLine,
+  planMove,
   pointToCell,
-  removeRoad,
+  removeRoads,
+  duplicateCell,
 } from './cityPlan'
-import type { Baseplate, CityState } from './types'
+import type { Baseplate, CityPlacement, CityState } from './types'
 
 const SIZES: Record<string, Baseplate> = {
   house: { w: 16, d: 16 },
@@ -106,10 +109,74 @@ describe('placementCenter', () => {
   })
 })
 
-describe('removeRoad', () => {
-  it('removes one road cell and returns null when there is none', () => {
-    const c = city(['1,1', '2,1'])
-    expect(removeRoad(c, 1, 1)?.roads).toEqual(['2,1'])
-    expect(removeRoad(c, 5, 5)).toBeNull()
+describe('cellsOnLine', () => {
+  const keys = (cells: Array<{ cx: number; cz: number }>) => cells.map((c) => `${c.cx},${c.cz}`)
+  it('follows a straight line between two cells, ends included', () => {
+    expect(keys(cellsOnLine({ cx: 2, cz: 2 }, { cx: 2, cz: 2 }))).toEqual(['2,2'])
+    expect(keys(cellsOnLine({ cx: 0, cz: 0 }, { cx: 3, cz: 0 }))).toEqual(['0,0', '1,0', '2,0', '3,0'])
+    expect(keys(cellsOnLine({ cx: 0, cz: 0 }, { cx: 3, cz: 3 }))).toEqual(['0,0', '1,1', '2,2', '3,3'])
+    expect(keys(cellsOnLine({ cx: 4, cz: 1 }, { cx: 0, cz: 3 }))).toEqual(['4,1', '3,2', '2,2', '1,3', '0,3'])
+  })
+})
+
+describe('removeRoads', () => {
+  it('removes the listed road cells and returns null when none of them is a road', () => {
+    const c = city(['1,1', '2,1', '3,1'])
+    expect(removeRoads(c, ['1,1', '3,1', '9,9'])?.roads).toEqual(['2,1'])
+    expect(removeRoads(c, ['5,5'])).toBeNull()
+    expect(removeRoads(c, [])).toBeNull()
+  })
+})
+
+const pl = (id: string, source: string, cx: number, cz: number, rot: 0 | 1 | 2 | 3 = 0): CityPlacement => ({ id, source, cx, cz, rot })
+
+describe('duplicateCell', () => {
+  it('puts the copy right next to the original, trying +X first', () => {
+    const a = pl('a', 'house', 4, 4)
+    expect(duplicateCell({ size: 10, roads: [], placements: [a] }, a, sizeOf)).toEqual({ cx: 6, cz: 4 })
+  })
+
+  it('then tries -X, +Z and -Z', () => {
+    const a = pl('a', 'house', 4, 4)
+    const blockers = [pl('b', 'house', 6, 4)]
+    const at = (placements: CityPlacement[], roads: string[] = []) =>
+      duplicateCell({ size: 10, roads, placements: [a, ...placements] }, a, sizeOf)
+    expect(at(blockers)).toEqual({ cx: 2, cz: 4 })
+    expect(at([...blockers, pl('c', 'house', 2, 4)])).toEqual({ cx: 4, cz: 6 })
+    expect(at([...blockers, pl('c', 'house', 2, 4)], ['4,6'])).toEqual({ cx: 4, cz: 2 })
+  })
+
+  it('uses the rotated footprint and stays inside the grid', () => {
+    const car = pl('a', 'car', 9, 0, 1) // 8x16 turned: 2 cells along X, 1 along Z -> does not fit at +X
+    expect(duplicateCell({ size: 11, roads: [], placements: [car] }, car, sizeOf)).toEqual({ cx: 7, cz: 0 })
+  })
+
+  it('then the corners (+X+Z, -X+Z, +X-Z, -X-Z), then one footprint further out', () => {
+    const a = pl('a', 'house', 4, 4)
+    const sides = [pl('b', 'house', 6, 4), pl('c', 'house', 2, 4), pl('d', 'house', 4, 6), pl('e', 'house', 4, 2)]
+    const at = (placements: CityPlacement[]) => duplicateCell({ size: 10, roads: [], placements: [a, ...sides, ...placements] }, a, sizeOf)
+    expect(at([])).toEqual({ cx: 6, cz: 6 })
+    expect(at([pl('f', 'house', 6, 6)])).toEqual({ cx: 2, cz: 6 })
+    const corners = [pl('f', 'house', 6, 6), pl('g', 'house', 2, 6), pl('h', 'house', 6, 2), pl('i', 'house', 2, 2)]
+    expect(at(corners)).toEqual({ cx: 8, cz: 4 })
+  })
+
+  it('returns null when nothing nearby is free', () => {
+    const a = pl('a', 'house', 0, 0)
+    expect(duplicateCell({ size: 2, roads: [], placements: [a] }, a, sizeOf)).toBeNull()
+  })
+})
+
+describe('planMove', () => {
+  const a = pl('a', 'house', 1, 1, 1)
+  it('centres the footprint on the point, keeping the rotation, ignoring the moved placement itself', () => {
+    const c: CityState = { size: 10, roads: [], placements: [a] }
+    expect(planMove(c, a, 2 * CELL, 2 * CELL, sizeOf)).toEqual({ cx: 1, cz: 1, rot: 1, error: null })
+    expect(planMove(c, a, 6 * CELL, 5 * CELL, sizeOf)).toEqual({ cx: 5, cz: 4, rot: 1, error: null })
+  })
+  it('slides inside the grid and reports overlaps and roads', () => {
+    const c: CityState = { size: 10, roads: ['8,1'], placements: [a, pl('b', 'house', 5, 5)] }
+    expect(planMove(c, a, 100, -50, sizeOf)).toMatchObject({ cx: 8, cz: 0, error: 'road' })
+    expect(planMove(c, a, 6 * CELL, 6 * CELL, sizeOf)).toMatchObject({ cx: 5, cz: 5, error: 'overlap' })
   })
 })

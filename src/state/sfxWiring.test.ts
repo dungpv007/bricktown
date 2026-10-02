@@ -15,8 +15,10 @@ vi.mock('../audio/sfx', () => ({
 
 import * as sfx from '../audio/sfx'
 import { getTemplate } from '../content/templates'
+import { CELL } from '../core/city'
 import { createEmptySave } from '../core/serialize'
 import { nextPending } from '../core/template'
+import { useCityEditor } from './useCityEditor'
 import { useEditor } from './useEditor'
 import { useGame } from './useGame'
 import { useGuided } from './useGuided'
@@ -116,5 +118,29 @@ describe('guided sounds', () => {
     expect(sfx.error).toHaveBeenCalledTimes(1)
     expect(sfx.snap).not.toHaveBeenCalled()
     expect(sfx.success).not.toHaveBeenCalled()
+  })
+})
+
+describe('city sounds', () => {
+  const city = () => useCityEditor.getState()
+  const placements = () => useGame.getState().data.city.placements
+  beforeEach(() => {
+    useCityEditor.setState({ selectedSource: null, errorSeq: 0 })
+    city().reset()
+  })
+
+  it('thunk whenever a building is set down (place, drop, move, copy); snap for a turn', () => {
+    city().selectSource('tpl:house_small')
+    city().tapGround(10 * CELL, 10 * CELL)
+    expect(sfx.thunk).toHaveBeenCalledTimes(1)
+    city().dropSource('tpl:house_small', 20 * CELL, 20 * CELL)
+    expect(sfx.thunk).toHaveBeenCalledTimes(2)
+    city().movePlacement(placements()[0].id, 30, 30)
+    expect(sfx.thunk).toHaveBeenCalledTimes(3)
+    city().duplicateSelected()
+    expect(sfx.thunk).toHaveBeenCalledTimes(4)
+    city().rotateSelected()
+    expect(sfx.snap).toHaveBeenCalledTimes(1)
+    expect(sfx.thunk).toHaveBeenCalledTimes(4)
   })
 })

@@ -95,7 +95,7 @@ export const vi = {
   confirmReplaceBuild: 'Bỏ mô hình đang lắp để lắp mẫu này?',
   deleteFailed: 'Không xóa được',
   cityToolRoad: 'Vẽ đường',
-  cityToolPlace: 'Đặt nhà',
+  cityRoadEraser: 'Xóa đường',
   cityDrawer: 'Kho',
   cityEdit: 'Sửa trong xưởng',
   drivePick: 'Chọn xe để lái',
