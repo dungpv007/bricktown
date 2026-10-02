@@ -64,7 +64,7 @@ export function shareImportOptions(lang: Lang = useApp.getState().lang): ShareIm
   return {
     templateSize: (id) => {
       const tpl = getTemplate(id)
-      return tpl && sourceSize(tpl.baseplate, tpl.tags)
+      return tpl && sourceSize(tpl.baseplate, tpl.tags, tpl.kind, tpl.bricks)
     },
     names: { model: t('shareKindModel', lang), maze: t('mazeDefaultName', lang), city: t('menuCity', lang) },
   }

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { scaleOf } from '../../core/city'
+import { drawScale } from '../../core/city'
 import type { Baseplate, CityPlacement } from '../../core/types'
 import { nightMaterials } from '../../render/nightGlow'
 import { placementMatrix } from '../../render/placementTransform'
@@ -53,7 +53,7 @@ export default function LampGlows({ placements, sizeOf }: { placements: CityPlac
     lamps.forEach((p, i) => {
       tmpPoint.copy(LAMP_FOOT).applyMatrix4(placementMatrix(tmpMatrix, p, base))
       tmpPoint.y = POOL_Y
-      const k = POOL_SIZE * scaleOf(p)
+      const k = POOL_SIZE * drawScale(p)
       mesh.setMatrixAt(i, tmpMatrix.compose(tmpPoint, NO_ROTATION, tmpScale.set(k, 1, k)))
     })
     mesh.count = lamps.length

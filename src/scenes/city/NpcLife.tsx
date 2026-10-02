@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getTemplate } from '../../content/templates'
-import { bakeBricks, bakedGeometries, bakeShadowBricks } from '../../core/bake'
+import { bakeBricks, bakedGeometries, bakeShadowBricks, type BakedModel } from '../../core/bake'
+import { drawScale } from '../../core/city'
 import { CAR_TEMPLATE_IDS, pedestrianStyles, TRAIN_CARRIAGE_IDS, TRAIN_ENGINE_IDS } from '../../core/npc/looks'
-import { buildNetwork, MAX_CARS, MAX_PEDS, MAX_TRAINS, RAIL_Y, ROAD_Y, type NpcNetwork } from '../../core/npc/network'
+import { buildNetwork, MAX_CARS, MAX_PEDS, MAX_TRAINS, RAIL_Y, ROAD_Y, type NpcNetwork, type PlacedCar } from '../../core/npc/network'
 import { NpcSim } from '../../core/npc/sim'
 import { getFigureGeometry } from '../../core/parts/figureGeometry'
 import type { Blueprint, CityState } from '../../core/types'
@@ -14,8 +15,9 @@ import { bakedMaterials, castsShadow } from '../../render/materials'
 import { nightMaterials, nightState } from '../../render/nightGlow'
 import { bakedModelBox } from '../../render/placementTransform'
 import { isShadowProxy, registerShadowProxy } from '../../render/shadowProxies'
-import { makeSizeOf } from '../../render/sources'
+import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { npcStats } from '../../state/npcStats'
+import { placedCarPoses, useDrivingCars } from '../../state/placedCars'
 
 /**
  * Ambient City life: cars, trains and pedestrians from the pure simulation (core/npc), drawn with
@@ -130,6 +132,58 @@ interface Slot {
   shadow: boolean
 }
 
+/** A kid's car as it drives: its own baked model at its placement's size (road fit included). */
+interface PlacedSlot extends Slot {
+  /** Width across and height (studs) as drawn, for taps. */
+  width: number
+  height: number
+}
+
+/** The model of placement `source` drawn `k` times bigger, centred on the origin, standing on y = 0. */
+function placedModel(baked: BakedModel, k: number): (NpcModel & { width: number; height: number }) | null {
+  const box = bakedModelBox(baked)
+  if (!box) return null
+  const [x0, y0, z0] = box.min
+  const [x1, y1, z1] = box.max
+  return {
+    parts: bakedGeometries(baked).map(([kind, geometry]) => ({ geometry, material: bakedMaterials[kind], shadow: false })),
+    local: new THREE.Matrix4().makeScale(k, k, k).multiply(new THREE.Matrix4().makeTranslation(-(x0 + x1) / 2, -y0, -(z0 + z1) / 2)),
+    length: (z1 - z0) * k,
+    facesPlusZ: false,
+    width: (x1 - x0) * k,
+    height: (y1 - y0) * k,
+  }
+}
+
+/**
+ * One slot per model and size among the placed cars, and which slot each placement uses. Only for
+ * placements of `placed` (on a road); a model that cannot be drawn gets no slot (it stays parked).
+ */
+function placedLooks(placed: readonly PlacedCar[], city: CityState, blueprints: Blueprint[]): { slots: PlacedSlot[]; slotOf: Map<string, number> } {
+  const byId = new Map(city.placements.map((p) => [p.id, p]))
+  const slots: PlacedSlot[] = []
+  const index = new Map<string, number>()
+  const slotOf = new Map<string, number>()
+  for (const car of placed) {
+    const p = byId.get(car.id)
+    if (!p) continue
+    const k = drawScale(p)
+    const key = `${p.source}|${k}`
+    let i = index.get(key)
+    if (i === undefined) {
+      const r = resolveRenderable(p.source, { blueprints })
+      const model = r && placedModel(r.baked, k)
+      if (!model) continue
+      i = slots.length
+      slots.push({ model, capacity: 0, shadow: false, width: model.width, height: model.height })
+      index.set(key, i)
+    }
+    slots[i].capacity++
+    slotOf.set(car.id, i)
+  }
+  return { slots, slotOf }
+}
+
 interface Looks {
   cars: Slot[]
   engine: Slot | null
@@ -215,7 +269,21 @@ export function thinNetwork(net: NpcNetwork, density: number): NpcNetwork {
   return { ...net, carTarget: thin(net.carTarget), pedTarget: thin(net.pedTarget) }
 }
 
-export default function NpcLife({ city, blueprints, density = 1 }: { city: CityState; blueprints: Blueprint[]; density?: number }) {
+/**
+ * `held`: a placement whose car does not drive (the selected one: it stands at its placement spot,
+ * so the action bar, the highlight and dragging work on it as on any model).
+ */
+export default function NpcLife({
+  city,
+  blueprints,
+  density = 1,
+  held = null,
+}: {
+  city: CityState
+  blueprints: Blueprint[]
+  density?: number
+  held?: string | null
+}) {
   const looks = useMemo(() => npcLooks(), [])
   // Slots in a fixed order: the cars, the engine, the carriage, the pedestrians.
   const slots = useMemo(
@@ -224,6 +292,18 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
   )
   const meshes = useRef<Array<Array<THREE.InstancedMesh | null>>>([])
   const sim = useRef<NpcSim | null>(null)
+  // The kid's cars on the roads: their own models, rebuilt with the network.
+  const [placedSpecs, setPlacedSpecs] = useState<readonly PlacedCar[]>([])
+  const placed = useMemo(() => placedLooks(placedSpecs, city, blueprints), [placedSpecs, city, blueprints])
+  const placedMeshes = useRef<Array<Array<THREE.InstancedMesh | null>>>([])
+  const placedCounts = useRef(new Int32Array(0))
+  const heldRef = useRef(held)
+  /** Tells the City which placements drive now (it hides their static model). */
+  const publishDriving = (s: NpcSim) => {
+    const ids = new Set<string>()
+    for (const car of s.cars) if (car.placed !== null) ids.add(car.placed)
+    useDrivingCars.getState().setIds(ids)
+  }
   const hidden = useRef(false)
   const counts = useRef(new Int32Array(0))
   // Render on demand: keep frames coming (at the graphics frame cap) while anyone lives in this city.
@@ -249,8 +329,11 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
       }))
     const build = () => {
       const net = thinNetwork(buildNetwork(city, makeSizeOf({ blueprints })), density)
+      s.setHeld(new Set(heldRef.current === null ? [] : [heldRef.current]))
       s.setNetwork(net)
-      setAlive(net.carTarget + net.pedTarget + net.trains.length > 0)
+      setPlacedSpecs(net.placed)
+      publishDriving(s)
+      setAlive(net.carTarget + net.pedTarget + net.trains.length + net.placed.length > 0)
     }
     if (!s.net) {
       build()
@@ -270,10 +353,21 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
     return () => document.removeEventListener('visibilitychange', update)
   }, [])
 
+  // The selected placement's car parks at its spot; released, it drives off from there.
+  useEffect(() => {
+    heldRef.current = held
+    const s = sim.current
+    if (!s) return
+    s.setHeld(new Set(held === null ? [] : [held]))
+    publishDriving(s)
+  }, [held])
+
   useEffect(
     () => () => {
       npcStats.count = 0
+      npcStats.placed = 0
       npcStats.frameMs = 0
+      useDrivingCars.getState().setIds(new Set())
     },
     [],
   )
@@ -288,12 +382,32 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
     n.fill(0)
     const all = meshes.current
     const carSlots = looks.cars.length
+    if (placedCounts.current.length !== placed.slots.length) placedCounts.current = new Int32Array(placed.slots.length)
+    const pn = placedCounts.current
+    pn.fill(0)
     for (const car of s.cars) {
+      if (car.placed !== null) {
+        const m = placed.slotOf.get(car.placed)
+        const slot = m === undefined ? undefined : placed.slots[m]
+        if (m === undefined || !slot || pn[m] >= slot.capacity) continue
+        place(placedMeshes.current[m] ?? [], slot.model, pn[m]++, car.x, ROAD_Y, car.z, car.hx, car.hz)
+        const live = placedCarPoses.get(car.placed)
+        if (live) {
+          live.x = car.x
+          live.z = car.z
+          live.hx = car.hx
+          live.hz = car.hz
+        } else {
+          placedCarPoses.set(car.placed, { x: car.x, z: car.z, hx: car.hx, hz: car.hz, length: slot.model.length, width: slot.width, height: slot.height })
+        }
+        continue
+      }
       const m = car.variant
       const slot = slots[m]
       if (!slot) continue
       place(all[m] ?? [], slot.model, n[m]++, car.x, ROAD_Y, car.z, car.hx, car.hz)
     }
+    for (let m = 0; m < placed.slots.length; m++) flush(placedMeshes.current[m] ?? [], pn[m])
     const engine = looks.engine ? carSlots : -1
     const carriage = looks.carriage ? carSlots + (looks.engine ? 1 : 0) : -1
     for (const train of s.trains) {
@@ -318,7 +432,7 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
       const pos = attr.array as Float32Array
       for (const car of s.cars) {
         if (lit >= MAX_CARS * 2) break
-        const half = (looks.cars[car.variant]?.model.length ?? 6) / 2
+        const half = car.length / 2
         const fx = car.x + car.hx * half
         const fz = car.z + car.hz * half
         const sx = car.hz * HEADLIGHT_SPREAD
@@ -336,6 +450,7 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
     }
     headlights.setDrawRange(0, lit)
     npcStats.count = s.count()
+    npcStats.placed = s.placedCount()
     npcStats.calls = gl.info.render.calls
     npcStats.triangles = gl.info.render.triangles
     npcStats.frameMs = npcStats.frameMs * 0.95 + (performance.now() - t0) * 0.05
@@ -350,6 +465,16 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
           slot={slot}
           register={(part, mesh) => {
             const list = (meshes.current[m] ??= [])
+            list[part] = mesh
+          }}
+        />
+      ))}
+      {placed.slots.map((slot, m) => (
+        <SlotMeshes
+          key={`placed:${m}:${slot.capacity}:${slot.model.parts.length}`}
+          slot={slot}
+          register={(part, mesh) => {
+            const list = (placedMeshes.current[m] ??= [])
             list[part] = mesh
           }}
         />

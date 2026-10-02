@@ -1,4 +1,4 @@
-import { CELL, placementCells, scaleOf } from './city'
+import { CELL, drawScale, placementCells } from './city'
 import { placementCenter } from './cityPlan'
 import { roadKey } from './roads'
 import { QUARTER_COS, QUARTER_SIN } from './rotation'
@@ -80,19 +80,19 @@ const cellCenter = (cx: number, cz: number) => ({ x: (cx + 0.5) * CELL, z: (cz +
  * road cell, else the free dry cell nearest the city centre.
  */
 export function spawnPoint(city: CityState, sizeOf: SizeOf): { x: number; z: number } {
-  const cells = city.roads.map((key) => key.split(',').map(Number) as [number, number])
-  if (cells.length > 0) {
-    const roads = new Set(city.roads)
-    const ahead = cells.find(([cx, cz]) => roads.has(roadKey(cx, cz - 1)))
-    const [cx, cz] = ahead ?? cells[0]
-    return cellCenter(cx, cz)
-  }
-
-  // Not under a model, not in the water.
+  // Not under a model (vehicles may stand on roads), not in the water.
   const covered = new Set<string>(city.terrain?.water ?? [])
   for (const p of city.placements) {
     const { cw, cd } = placementCells(p, sizeOf(p.source))
     for (let x = p.cx; x < p.cx + cw; x++) for (let z = p.cz; z < p.cz + cd; z++) covered.add(roadKey(x, z))
+  }
+  const free = city.roads.filter((key) => !covered.has(key))
+  const cells = (free.length > 0 ? free : city.roads).map((key) => key.split(',').map(Number) as [number, number])
+  if (cells.length > 0) {
+    const roads = new Set(free)
+    const ahead = cells.find(([cx, cz]) => roads.has(roadKey(cx, cz - 1)))
+    const [cx, cz] = ahead ?? cells[0]
+    return cellCenter(cx, cz)
   }
   const mid = Math.floor(city.size / 2)
   let best: [number, number] = [mid, mid]
@@ -133,12 +133,12 @@ export const isSolidBox = (box: Box): boolean => box.max[1] >= MIN_SOLID_HEIGHT
  * times bigger around that centre (height from the ground) and centred on its footprint cells.
  */
 export function placementWorldBox(
-  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's'>,
+  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's' | 'fit'>,
   baseplate: Baseplate,
   model: Box,
 ): Box {
   const { x: wx, z: wz } = placementCenter(p, baseplate)
-  const k = scaleOf(p)
+  const k = drawScale(p)
   const cos = QUARTER_COS[p.rot]
   const sin = QUARTER_SIN[p.rot]
   let minX = Infinity

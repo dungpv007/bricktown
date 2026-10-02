@@ -107,6 +107,12 @@ export interface CityPlacement {
    * The model is drawn `s` times bigger and its footprint is the plate's studs x `s`, in cells.
    */
   s?: number
+  /**
+   * Road fit: a vehicle standing on a road that is wider than the road is drawn `fit` (0.01..<1)
+   * times smaller on top of `s`, so it fits the road (see `settleVehicle` in core/city). Derived by
+   * the City rules whenever a vehicle is placed, moved, turned or resized; absent = 1 (full size).
+   */
+  fit?: number
 }
 
 /**

@@ -4,7 +4,7 @@ import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { currentCity } from '../../core/cities'
-import { addRoads, CELL, placementCells, scaleOf } from '../../core/city'
+import { addRoads, CELL, drawScale, placementCells } from '../../core/city'
 import { cellsOnLine, clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
 import { brushLine, eraseKeys, type RoadBrush } from '../../core/avenues'
 import { addRails, eraseRails, eraseRoads } from '../../core/rails'
@@ -32,6 +32,7 @@ import { fitCityFrame } from './cityFraming'
 import { horizonLayout } from './horizonGeometry'
 import { cityScreen } from './cityScreen'
 import NpcLife from './NpcLife'
+import { drivingCarBox, useDrivingCars } from '../../state/placedCars'
 import PlacementHighlight from './PlacementHighlight'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
 import LampGlows from './LampGlows'
@@ -123,7 +124,7 @@ function framePoints(city: CityState, blueprints: Blueprint[]): Array<[number, n
   const points: Array<[number, number, number]> = []
   for (const p of city.placements) {
     const { x0, z0, x1, z1 } = footprintBox(p, sizeOf(p.source))
-    const y = heightOf(p.source) * scaleOf(p)
+    const y = heightOf(p.source) * drawScale(p)
     points.push([x0, y, z0], [x1, y, z0], [x0, y, z1], [x1, y, z1], [x0, 0, z1], [x1, 0, z1])
   }
   if (minX !== Infinity) {
@@ -139,7 +140,7 @@ function framePoints(city: CityState, blueprints: Blueprint[]): Array<[number, n
 function startDistance(city: CityState, blueprints: Blueprint[]): number {
   const heightOf = heightLookup(blueprints)
   let tallest = 0
-  for (const p of city.placements) tallest = Math.max(tallest, heightOf(p.source) * scaleOf(p))
+  for (const p of city.placements) tallest = Math.max(tallest, heightOf(p.source) * drawScale(p))
   return Math.min(MAX_DISTANCE, Math.max(START_DISTANCE, tallest * DISTANCE_PER_HEIGHT))
 }
 
@@ -333,6 +334,9 @@ interface HitBox {
 }
 
 const rayHit = new THREE.Vector3()
+const liveBox = new THREE.Box3()
+const liveMin = new THREE.Vector3()
+const liveMax = new THREE.Vector3()
 const projected = new THREE.Vector3()
 
 function CityWorld() {
@@ -343,6 +347,8 @@ function CityWorld() {
   const selectedPlacementId = useCityEditor((s) => s.selectedPlacementId)
   const errorSeq = useCityEditor((s) => s.errorSeq)
   const npcOn = useApp((s) => s.npcOn)
+  // The kid's cars driving on the roads: drawn by NpcLife, not as parked models.
+  const driving = useDrivingCars((s) => s.ids)
   const npcFactor = useGraphics().npcFactor
   const el = useThree((s) => s.gl.domElement)
   const getThree = useThree((s) => s.get)
@@ -430,7 +436,7 @@ function CityWorld() {
     }
     return city.placements.map((p) => {
       const b = footprintBox(p, sizeOf(p.source))
-      const top = heightOf(p.source) * scaleOf(p)
+      const top = heightOf(p.source) * drawScale(p)
       return { id: p.id, box: new THREE.Box3(new THREE.Vector3(b.x0, 0, b.z0), new THREE.Vector3(b.x1, top, b.z1)) }
     })
   }, [city.placements, blueprints, sizeOf])
@@ -448,7 +454,9 @@ function CityWorld() {
       let placementId: string | null = null
       let bestDist = Infinity
       for (const { id, box } of hitBoxesRef.current) {
-        const p = raycaster.ray.intersectBox(box, rayHit)
+        // A driving car is hit where it is now, not at its placement spot.
+        const live = drivingCarBox(id)
+        const p = raycaster.ray.intersectBox(live ? liveBox.set(liveMin.fromArray(live.min), liveMax.fromArray(live.max)) : box, rayHit)
         if (!p) continue
         const d = p.distanceToSquared(raycaster.ray.origin)
         if (d < bestDist) {
@@ -513,7 +521,7 @@ function CityWorld() {
       setMovingId(null)
       setPreview(null)
       // A rejected drop leaves it where it was; the store's error shakes the highlight.
-      if (drop && m?.plan) useCityEditor.getState().movePlacement(m.placement.id, m.plan.cx, m.plan.cz)
+      if (drop && m?.plan) useCityEditor.getState().movePlacement(m.placement.id, m.plan.cx, m.plan.cz, m.plan)
     },
     roadStart: (point) => {
       const cell = pointToCell(point.x, point.z)
@@ -598,8 +606,9 @@ function CityWorld() {
   }, [el, pick, setPreview, showQuickPlace])
 
   const shown = useMemo(
-    () => (movingId === null ? city.placements : city.placements.filter((p) => p.id !== movingId)),
-    [city.placements, movingId],
+    () =>
+      movingId === null && driving.size === 0 ? city.placements : city.placements.filter((p) => p.id !== movingId && !driving.has(p.id)),
+    [city.placements, movingId, driving],
   )
   const selected = useMemo(
     () => (selectedPlacementId === movingId ? null : (city.placements.find((p) => p.id === selectedPlacementId) ?? null)),
@@ -619,7 +628,7 @@ function CityWorld() {
       <Placements placements={shown} blueprints={blueprints} shadowProxies transMaterial={nightMaterials().windows} />
       <LampGlows placements={shown} sizeOf={sizeOf} />
       {/* Ambient life follows the saved city (not a stroke in progress); picking ignores it (see `pick`). */}
-      {npcOn && npcFactor > 0 && <NpcLife city={city} blueprints={blueprints} density={npcFactor} />}
+      {npcOn && npcFactor > 0 && <NpcLife city={city} blueprints={blueprints} density={npcFactor} held={selectedPlacementId} />}
       {selected && selectedCells && (
         <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selectedCells.cw} cd={selectedCells.cd} color={SELECTED} opacity={0.55} />
       )}

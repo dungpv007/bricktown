@@ -66,11 +66,11 @@ const UNKNOWN_SIZE: Baseplate = { w: 8, d: 8 }
  * `sourceSize`); unknown sources count as one dry-land cell.
  */
 export function makeSizeOf(data: Pick<SaveData, 'blueprints'>): (source: string) => SourceSize {
-  const byId = new Map(data.blueprints.map((b) => [b.id, sourceSize(b.baseplate, b.tags)]))
+  const byId = new Map(data.blueprints.map((b) => [b.id, sourceSize(b.baseplate, b.tags, b.kind, b.bricks)]))
   return (source) => {
     if (!isTemplateSource(source)) return byId.get(source) ?? UNKNOWN_SIZE
     const tpl = templateOf(source)
-    return tpl ? sourceSize(tpl.baseplate, tpl.tags) : UNKNOWN_SIZE
+    return tpl ? sourceSize(tpl.baseplate, tpl.tags, tpl.kind, tpl.bricks) : UNKNOWN_SIZE
   }
 }
 

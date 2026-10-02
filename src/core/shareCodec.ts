@@ -62,7 +62,8 @@ export interface CompactPackage {
   z?: { m: CompactMaze; b?: number[] }
   /**
    * City: size, roads as flat `[cx, cz, ...]`, placements `[blueprintIdx | 'tpl:<id>', cx, cz, rot]`,
-   * plus a fifth item, the size multiplier, only for a scaled (x2..x10) placement. Optional, sent
+   * plus a fifth item, the size multiplier, only for a scaled (x2..x10) placement, and a sixth, the road
+   * fit of a vehicle shrunk to its lane (the fifth is then sent even at x1). Optional, sent
    * only when there are any (older links have neither): terrain `T` as three flat cell lists
    * `[water, pavement, sand]`, and rails `R` as a flat cell list.
    */
@@ -247,6 +248,8 @@ export function packShare(pkg: SharePackage): CompactPackage {
       r: flat(city.roads),
       p: city.placements.map((p) => {
         const tuple = [indexOf.get(p.source) ?? p.source, p.cx, p.cz, p.rot]
+        // Optional tail: the size multiplier, then the road fit (which needs the size before it).
+        if (p.fit !== undefined && p.fit !== 1) return [...tuple, p.s ?? 1, p.fit]
         return p.s === undefined || p.s === 1 ? tuple : [...tuple, p.s]
       }),
       b: blueprints.map((b) => packBlueprint(b, parts, figs)),
@@ -362,14 +365,15 @@ function unpackMaze(raw: unknown, time: unknown): unknown {
 }
 
 function unpackPlacement(raw: unknown, i: number): unknown {
-  if (!Array.isArray(raw) || (raw.length !== 4 && raw.length !== 5)) return null
-  const [src, cx, cz, rot, s] = raw
-  // `s` is checked with everything else by the import (absent = x1).
+  if (!Array.isArray(raw) || raw.length < 4 || raw.length > 6) return null
+  const [src, cx, cz, rot, s, fit] = raw
+  // `s` and `fit` are checked with everything else by the import (absent = x1, full size).
   return {
     id: `pl${i}`,
     source: typeof src === 'number' ? `bp${src}` : src,
     cx, cz, rot,
-    s: raw.length === 5 ? s : undefined,
+    s: raw.length >= 5 ? s : undefined,
+    fit: raw.length === 6 ? fit : undefined,
   } satisfies Record<keyof CityPlacement, unknown>
 }
 
