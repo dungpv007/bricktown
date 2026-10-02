@@ -35,15 +35,27 @@ export interface MazeTemplate {
   maze: Omit<Maze, 'id' | 'createdAt' | 'updatedAt'>
 }
 
+/**
+ * A maze cell is this many studs (world units) square: wider than a city cell (`CELL`, 8), so the
+ * ready-made cars can turn in a one-cell corridor (tuned with a scripted driver: 12 still made the
+ * trucks back up at most corners). Stored mazes count cells, never studs.
+ */
+export const MAZE_CELL = 13
+/** Vehicles wider than this (wheels included, see `vehicleWidth`) do not fit a corridor: a stud of room each side. */
+export const MAZE_MAX_VEHICLE_WIDTH = MAZE_CELL - 2
+
 export const MAZE_MIN_SIZE = 7
 export const MAZE_MAX_SIZE = 21
 export const DEFAULT_MAZE_WALL_COLOR = 6 // orange
 export const DEFAULT_MAZE_FLOOR_COLOR = 24 // light bluish gray
 
-/** Three stars when the run takes at most this many seconds per cell of the shortest path... */
-export const STAR3_SEC_PER_CELL = 1.6
-/** ...two stars up to this many; slower runs still earn one star. */
-export const STAR2_SEC_PER_CELL = 2.6
+/**
+ * Three stars when the run takes at most this many seconds per cell of the shortest path: an
+ * average of 5 studs / s (2.6 s per 13-stud cell)...
+ */
+export const STAR3_SEC_PER_CELL = MAZE_CELL / 5
+/** ...two stars up to 3 studs / s; slower runs still earn one star. */
+export const STAR2_SEC_PER_CELL = MAZE_CELL / 3
 
 type Dims = Pick<Maze, 'w' | 'h'>
 

@@ -1,4 +1,4 @@
-import { CELL } from '../../core/city'
+import { MAZE_CELL } from '../../core/maze'
 import { platesToWorld } from '../../core/units'
 
 export type Vec3 = [number, number, number]
@@ -12,7 +12,7 @@ export interface NdcRect {
 }
 
 /** Wall blocks are two bricks (6 plates) tall. */
-export const WALL_PLATES = 6
+const WALL_PLATES = 6
 export const WALL_HEIGHT = platesToWorld(WALL_PLATES)
 /** Void walls (no floor around them, see `voidWalls`) are drawn as one-plate hedges. */
 export const HEDGE_HEIGHT = platesToWorld(1)
@@ -51,10 +51,10 @@ function bounds(points: Vec3[], position: Vec3, tilt: number, tanHalf: number, a
   return out
 }
 
-/** The floor corners and the wall tops of a `w` x `h` cell maze (x in [0, w*CELL], z in [0, h*CELL]). */
+/** The floor corners and the wall tops of a `w` x `h` cell maze (x in [0, w*MAZE_CELL], z in [0, h*MAZE_CELL]). */
 export function mazeCorners(w: number, h: number): Vec3[] {
   const out: Vec3[] = []
-  for (const x of [0, w * CELL]) for (const z of [0, h * CELL]) for (const y of [0, WALL_HEIGHT]) out.push([x, y, z])
+  for (const x of [0, w * MAZE_CELL]) for (const z of [0, h * MAZE_CELL]) for (const y of [0, WALL_HEIGHT]) out.push([x, y, z])
   return out
 }
 
@@ -89,7 +89,7 @@ export function frameMaze(
     return hi
   }
 
-  let target: Vec3 = [(w * CELL) / 2, 0, (h * CELL) / 2]
+  let target: Vec3 = [(w * MAZE_CELL) / 2, 0, (h * MAZE_CELL) / 2]
   let distance = fitDistance(target)
   // Perspective couples centring and sizing: alternate until both settle.
   for (let i = 0; i < 12; i++) {

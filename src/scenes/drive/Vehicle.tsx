@@ -18,6 +18,7 @@ import {
   steerAngle,
   uprightYaw,
   type DriveAnalysis,
+  type SteerTuning,
 } from '../../core/drive'
 import { brickCenter } from '../../core/rotation'
 import type { Brick } from '../../core/types'
@@ -185,6 +186,8 @@ interface Props {
   spawn: [number, number, number]
   /** Start heading (radians around +Y, 0 = facing -Z); also used when the car falls out of the world. */
   spawnYaw?: number
+  /** How far the front wheels turn (default: the city's `DRIVE` limits; the maze turns tighter). */
+  steering?: SteerTuning
   /** Follows the (interpolated) chassis; read by the chase camera. */
   chassisRef: RefObject<THREE.Group | null>
 }
@@ -194,7 +197,7 @@ interface Props {
  * ray-cast vehicle controller for the wheels. Forward is -Z; every wheel drives, the front
  * ones steer. Mass sits at axle height and the inertia is padded so kids rarely flip it.
  */
-export default function Vehicle({ setup, spawn, spawnYaw = 0, chassisRef }: Props) {
+export default function Vehicle({ setup, spawn, spawnYaw = 0, steering: steerTuning = DRIVE, chassisRef }: Props) {
   const { config, wheelBricks, bodyBricks } = setup
   const { world } = useRapier()
   const body = useRef<RapierRigidBody>(null)
@@ -269,7 +272,7 @@ export default function Vehicle({ setup, spawn, spawnYaw = 0, chassisRef }: Prop
     const speed = v.x * fwd.x + v.y * fwd.y + v.z * fwd.z
     const force = input.brake ? 0 : engineForce(input.throttle, speed, config.mass) / config.wheels.length
     const brake = (input.brake ? BRAKE_PER_MASS : input.throttle === 0 ? COAST_BRAKE_PER_MASS : 0) * config.mass
-    steering.current = approach(steering.current, steerAngle(input.steer, speed), STEER_RATE, dt)
+    steering.current = approach(steering.current, steerAngle(input.steer, speed, steerTuning), STEER_RATE, dt)
 
     config.wheels.forEach((wheel, i) => {
       c.setWheelEngineForce(i, force)

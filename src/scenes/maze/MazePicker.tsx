@@ -9,6 +9,7 @@ import { useMazeEditor } from '../../state/useMazeEditor'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import { useT } from '../../ui/i18n'
 import ShareDialog from '../../ui/share/ShareDialog'
+import { formatSeconds } from './formatTime'
 import { mazeThumbnail } from './mazeThumbnail'
 import { DIFFICULTIES, DIFFICULTY_KEY, NEW_MAZE_SIZES, SizeIcon } from './mazeChoices'
 
@@ -19,10 +20,10 @@ const CARD_COLORS = ['var(--bt-green)', 'var(--bt-orange)', 'var(--bt-blue)', 'v
 function Best({ record }: { record: MazeRecord | undefined }) {
   const t = useT()
   if (!record) return null
-  const seconds = (record.timeMs / 1000).toFixed(1)
+  const time = formatSeconds(record.timeMs, t)
   return (
-    <span className="bt-maze-best" aria-label={`${t('mazeBest')}: ${seconds}s, ${record.stars}/3`}>
-      🏆 {seconds}s <span className="bt-maze-best-stars">{'★'.repeat(record.stars)}{'☆'.repeat(3 - record.stars)}</span>
+    <span className="bt-maze-best" aria-label={`${t('mazeBest')}: ${time}, ${record.stars}/3`}>
+      🏆 {time} <span className="bt-maze-best-stars">{'★'.repeat(record.stars)}{'☆'.repeat(3 - record.stars)}</span>
     </span>
   )
 }
@@ -31,11 +32,11 @@ function Best({ record }: { record: MazeRecord | undefined }) {
 function Challenge({ challenge, record }: { challenge: MazeChallenge | undefined; record: MazeRecord | undefined }) {
   const t = useT()
   if (!challenge) return null
-  const seconds = Math.ceil(challenge.timeMs / 1000)
+  const seconds = t('mazeSeconds').replace('{n}', String(Math.ceil(challenge.timeMs / 1000)))
   const beaten = record !== undefined && record.timeMs < challenge.timeMs
   return (
     <span className={`bt-maze-challenge${beaten ? ' bt-maze-challenge-done' : ''}`} data-testid="maze-challenge">
-      {beaten ? `✓ ${t('mazeChallengeDone')} ${seconds}s` : `🏁 ${t('mazeChallengeBeat')} ${seconds}s?`}
+      {beaten ? `✓ ${t('mazeChallengeDone')} ${seconds}` : `🏁 ${t('mazeChallengeBeat')} ${seconds}?`}
     </span>
   )
 }

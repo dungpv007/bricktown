@@ -8,7 +8,7 @@ import { voidWalls } from '../../core/mazeRun'
  * whenever the maze does (e.g. id + updatedAt). Checked visually, not unit-tested (needs a DOM).
  */
 
-export const MAZE_THUMB_SIZE = 160
+const MAZE_THUMB_SIZE = 160
 const MAX_CACHED = 64
 const cache = new Map<string, string>()
 

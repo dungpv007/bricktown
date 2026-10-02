@@ -3,7 +3,9 @@ import { getTemplate } from '../content/templates'
 import { bounds } from './model'
 import type { Brick } from './types'
 import { addBrick } from './model'
-import { analyzeVehicle } from './vehicle'
+import { TEMPLATES } from '../content/templates'
+import { MAZE_MAX_VEHICLE_WIDTH } from './maze'
+import { analyzeVehicle, vehicleWidth, type VehicleConfig } from './vehicle'
 
 const b = (id: string, p: string, x: number, y: number, z: number, r: 0 | 1 | 2 | 3 = 0): Brick => ({
   id, p, x, y, z, r, c: 0,
@@ -157,5 +159,29 @@ describe('analyzeVehicle', () => {
       ]
       expect(analyzeVehicle(deep)).toEqual({ ok: false, reason: 'wheels_not_lowest' })
     })
+  })
+})
+
+describe('vehicleWidth', () => {
+  const config = (halfX: number, centerX: number, wheelX: number, wheelWidth: number): VehicleConfig => ({
+    chassis: { halfExtents: [halfX, 1, 4], center: [centerX, 1, 0] },
+    wheels: [
+      { position: [-wheelX, 0.7, -3], radius: 0.7, steer: true, width: wheelWidth },
+      { position: [wheelX, 0.7, 3], radius: 0.7, steer: false, width: wheelWidth },
+    ],
+    mass: 2,
+    origin: [0, 0, 0],
+  })
+  it('is the chassis width, or wider where wheels or an off-centre body stick out', () => {
+    expect(vehicleWidth(config(2, 0, 1, 2))).toBe(4)
+    expect(vehicleWidth(config(2, 0, 2, 2))).toBe(6) // wheels outside the body
+    expect(vehicleWidth(config(2, 1.5, 1, 2))).toBe(7) // body reaches 3.5 to one side
+  })
+  it('lets every ready-made vehicle into a maze corridor', () => {
+    for (const tpl of TEMPLATES.filter((t) => t.kind === 'vehicle')) {
+      const res = analyzeVehicle(tpl.bricks)
+      if (!res.ok) throw new Error(`${tpl.id} cannot drive`)
+      expect(vehicleWidth(res.config), tpl.id).toBeLessThanOrEqual(MAZE_MAX_VEHICLE_WIDTH)
+    }
   })
 })

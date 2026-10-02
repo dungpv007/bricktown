@@ -1,12 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { CELL } from '../../core/city'
 import { COLORS, colorMaterialKind } from '../../core/colors'
-import { DEFAULT_MAZE_FLOOR_COLOR, parseCellKey, type Cell, type Maze } from '../../core/maze'
+import { DEFAULT_MAZE_FLOOR_COLOR, MAZE_CELL, parseCellKey, type Cell, type Maze } from '../../core/maze'
 import { voidWalls } from '../../core/mazeRun'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { brickMaterials } from '../../render/materials'
-import { checkerTexture4, coinGeometry, floorStudTexture, hedgeGeometry, wallBlockGeometry, wallStudsGeometry } from './mazeGeometry'
+import { checkerTexture4, coinGeometry, floorStudTexture, hedgeGeometry, wallBlockGeometry, wallTopGeometry, wallTopMaterial } from './mazeGeometry'
 import { HEDGE_HEIGHT, WALL_HEIGHT } from './mazeView'
 
 const GRASS = '#7cc46a'
@@ -26,49 +25,39 @@ const tmp = new THREE.Matrix4()
 const tmpColor = new THREE.Color()
 
 /** World centre of a cell on the floor. */
-export const cellCenter = (cell: Cell): [number, number] => [(cell.cx + 0.5) * CELL, (cell.cz + 0.5) * CELL]
+export const cellCenter = (cell: Cell): [number, number] => [(cell.cx + 0.5) * MAZE_CELL, (cell.cz + 0.5) * MAZE_CELL]
 
 /** Studded baseplate under the maze (top at y = 0), faint cell lines, grass around it. */
 function Floor({ w, h, color }: { w: number; h: number; color: number }) {
-  const sx = w * CELL
-  const sz = h * CELL
-  const material = useMemo(() => {
-    const map = floorStudTexture().clone() // own repeat per maze size; shares the canvas image
-    map.repeat.set(sx, sz)
-    map.needsUpdate = true
-    return new THREE.MeshStandardMaterial({ map, roughness: 0.6 })
-  }, [sx, sz])
-  useEffect(
-    () => () => {
-      material.map?.dispose()
-      material.dispose()
-    },
-    [material],
-  )
-  useLayoutEffect(() => {
-    material.color.set(COLORS[color]?.hex ?? COLORS[DEFAULT_MAZE_FLOOR_COLOR].hex)
-  }, [material, color])
-
+  const sx = w * MAZE_CELL
+  const sz = h * MAZE_CELL
+  // Declared in JSX (R3F creates and disposes them); the stud texture is a shared cached one.
   const grid = useMemo(() => {
     const points: number[] = []
-    for (let i = 0; i <= w; i++) points.push(i * CELL, 0, 0, i * CELL, 0, sz)
-    for (let j = 0; j <= h; j++) points.push(0, 0, j * CELL, sx, 0, j * CELL)
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(points, 3))
-    return g
+    for (let i = 0; i <= w; i++) points.push(i * MAZE_CELL, 0, 0, i * MAZE_CELL, 0, sz)
+    for (let j = 0; j <= h; j++) points.push(0, 0, j * MAZE_CELL, sx, 0, j * MAZE_CELL)
+    return new Float32Array(points)
   }, [w, h, sx, sz])
-  useEffect(() => () => grid.dispose(), [grid])
 
   return (
     <group>
-      <mesh position={[sx / 2, -FLOOR_THICKNESS / 2, sz / 2]} receiveShadow material={material}>
+      <mesh position={[sx / 2, -FLOOR_THICKNESS / 2, sz / 2]} receiveShadow>
         <boxGeometry args={[sx, FLOOR_THICKNESS, sz]} />
+        <meshStandardMaterial
+          map={floorStudTexture(sx, sz)}
+          color={COLORS[color]?.hex ?? COLORS[DEFAULT_MAZE_FLOOR_COLOR].hex}
+          roughness={0.6}
+        />
       </mesh>
       <mesh position={[sx / 2, -FLOOR_THICKNESS, sz / 2]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[sx + GRASS_BORDER * 2, sz + GRASS_BORDER * 2]} />
         <meshStandardMaterial color={GRASS} roughness={1} />
       </mesh>
-      <lineSegments geometry={grid} position={[0, 0.02, 0]}>
+      <lineSegments position={[0, 0.02, 0]}>
+        {/* Keyed: a new size is a new geometry (a buffer attribute cannot grow). */}
+        <bufferGeometry key={`${w}x${h}`}>
+          <bufferAttribute attach="attributes-position" args={[grid, 3]} />
+        </bufferGeometry>
         <lineBasicMaterial color="#000000" transparent opacity={GRID_OPACITY} depthWrite={false} />
       </lineSegments>
     </group>
@@ -116,7 +105,7 @@ function CellInstances({ cells, geometry, material, color, castShadow, y = 0 }: 
 }
 
 /**
- * Wall cells as brick-stack blocks with studs on top, in the wall colour. Walls with no floor
+ * Wall cells as brick-stack blocks with a studded top (a textured cap, not stud meshes), in the wall colour. Walls with no floor
  * around them (the filler outside a maze's shape) are low green hedges instead, so the shape reads.
  */
 function Walls({ maze }: { maze: Pick<Maze, 'w' | 'h' | 'walls' | 'wallColor'> }) {
@@ -131,12 +120,12 @@ function Walls({ maze }: { maze: Pick<Maze, 'w' | 'h' | 'walls' | 'wallColor'> }
   return (
     <>
       <CellInstances cells={solid} geometry={wallBlockGeometry()} material={material} color={hex} castShadow={kind !== 'trans'} />
-      <CellInstances cells={solid} geometry={wallStudsGeometry()} material={material} color={hex} castShadow={false} />
+      <CellInstances cells={solid} geometry={wallTopGeometry()} material={wallTopMaterial(kind)} color={hex} castShadow={false} />
       <CellInstances cells={hedges} geometry={hedgeGeometry()} material={brickMaterials.opaque} color={HEDGE} castShadow={false} />
       <CellInstances
         cells={hedges}
-        geometry={wallStudsGeometry()}
-        material={brickMaterials.opaque}
+        geometry={wallTopGeometry()}
+        material={wallTopMaterial('opaque')}
         color={HEDGE}
         castShadow={false}
         y={HEDGE_HEIGHT - WALL_HEIGHT}
@@ -157,7 +146,7 @@ function poleSide(maze: Pick<Maze, 'w' | 'h'>, cell: Cell): [number, number] {
 function Door({ maze, cell, kind }: { maze: Pick<Maze, 'w' | 'h'>; cell: Cell; kind: 'entry' | 'exit' }) {
   const [x, z] = cellCenter(cell)
   const side = poleSide(maze, cell)
-  const inset = CELL / 2 - 0.7
+  const inset = MAZE_CELL / 2 - 0.7
   const px = x + side[0] * inset
   const pz = z + side[1] * inset
   const checker = kind === 'exit' ? checkerTexture4() : null
@@ -167,7 +156,7 @@ function Door({ maze, cell, kind }: { maze: Pick<Maze, 'w' | 'h'>; cell: Cell; k
   return (
     <group>
       <mesh position={[x, 0.06, z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[CELL - 0.6, CELL - 0.6]} />
+        <planeGeometry args={[MAZE_CELL - 0.6, MAZE_CELL - 0.6]} />
         {checker ? (
           <meshStandardMaterial map={checker} roughness={0.7} polygonOffset polygonOffsetFactor={-1} />
         ) : (

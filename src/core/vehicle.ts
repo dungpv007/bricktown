@@ -39,6 +39,13 @@ const MIN_CHASSIS_HEIGHT = platesToWorld(1)
 export const MAX_BODY_BELOW_WHEELS = platesToWorld(1)
 const EPS = 1e-6
 
+/** Width across X (studs) of the chassis and the wheels together, measured from the body's centre line. */
+export function vehicleWidth(config: VehicleConfig): number {
+  const body = Math.abs(config.chassis.center[0]) + config.chassis.halfExtents[0]
+  const wheels = Math.max(0, ...config.wheels.map((w) => Math.abs(w.position[0]) + w.width / 2))
+  return 2 * Math.max(body, wheels)
+}
+
 export const isWheel = (brick: Brick): boolean => getPart(brick.p).tags?.includes('wheel') ?? false
 
 const wheelRadius = (brick: Brick): number => platesToWorld(getPart(brick.p).h) / 2

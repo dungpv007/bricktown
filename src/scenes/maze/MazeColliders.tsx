@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
-import { CELL } from '../../core/city'
-import type { Maze } from '../../core/maze'
+import { MAZE_CELL, type Maze } from '../../core/maze'
 import { mergeWallRects } from '../../core/mazeRun'
 
 /**
@@ -21,8 +20,8 @@ const WALL_FRICTION = 0.2
  */
 export default function MazeColliders({ maze }: { maze: Pick<Maze, 'w' | 'h' | 'walls'> }) {
   const rects = useMemo(() => mergeWallRects(maze), [maze])
-  const sx = maze.w * CELL
-  const sz = maze.h * CELL
+  const sx = maze.w * MAZE_CELL
+  const sz = maze.h * MAZE_CELL
   const hy = WALL_COLLIDER_HEIGHT / 2
   const t = BOUND_THICKNESS / 2
   return (
@@ -39,8 +38,8 @@ export default function MazeColliders({ maze }: { maze: Pick<Maze, 'w' | 'h' | '
       {rects.map((r) => (
         <CuboidCollider
           key={`${r.cx},${r.cz}`}
-          args={[(r.w * CELL) / 2, hy, (r.d * CELL) / 2]}
-          position={[(r.cx + r.w / 2) * CELL, hy, (r.cz + r.d / 2) * CELL]}
+          args={[(r.w * MAZE_CELL) / 2, hy, (r.d * MAZE_CELL) / 2]}
+          position={[(r.cx + r.w / 2) * MAZE_CELL, hy, (r.cz + r.d / 2) * MAZE_CELL]}
           friction={WALL_FRICTION}
         />
       ))}

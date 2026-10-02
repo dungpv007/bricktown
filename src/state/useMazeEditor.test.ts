@@ -338,6 +338,47 @@ describe('useMazeEditor: whole-maze changes', () => {
     }
   })
 
+  it('undoing a structural edit brings back the best run and the friend’s challenge it forgot', () => {
+    ed().newMaze(7)
+    const id = maze().id
+    const record = { timeMs: 1000, stars: 3 as const, coins: 0 }
+    const challenge = { timeMs: 2000, from: 'An' }
+    useGame.getState().setMazeRecord(id, record)
+    useGame.getState().update((d) => ({ ...d, mazeChallenges: { [id]: challenge } }))
+    ed().rename('Lâu đài') // not structural: its undo step keeps the runs as they are
+    ed().setTool('wall')
+    ed().tapCell(c(3, 3)) // a stray tap
+    expect(useGame.getState().data.mazeRecords[id]).toBeUndefined()
+    expect(useGame.getState().data.mazeChallenges[id]).toBeUndefined()
+    ed().undo()
+    expect(walls().has('3,3')).toBe(false)
+    expect(useGame.getState().data.mazeRecords[id]).toEqual(record)
+    expect(useGame.getState().data.mazeChallenges[id]).toEqual(challenge)
+    // A newer record set after the rename survives undoing the rename (same layout).
+    const better = { timeMs: 900, stars: 3 as const, coins: 0 }
+    useGame.getState().setMazeRecord(id, better)
+    ed().undo()
+    expect(maze().name).not.toBe('Lâu đài')
+    expect(useGame.getState().data.mazeRecords[id]).toEqual(better)
+  })
+
+  it('ready-made mazes and a friend’s maze open with the move tool; the kid’s own and new ones with the wall tool', () => {
+    ed().openTemplate('easy')
+    expect(ed().tool).toBe('move')
+    ed().tapCell(c(2, 1)) // a tap while looking around changes nothing
+    expect(mazes()).toEqual([])
+    ed().newMaze(7)
+    expect(ed().tool).toBe('wall')
+    const own = maze().id
+    ed().newGenerated(1, 1)
+    const friend = maze().id
+    useGame.getState().update((d) => ({ ...d, mazeChallenges: { [friend]: { timeMs: 5000 } } }))
+    ed().openMaze(friend)
+    expect(ed().tool).toBe('move')
+    ed().openMaze(own)
+    expect(ed().tool).toBe('wall')
+  })
+
   it('typing a name saves each keystroke but undoes as one step', () => {
     ed().newMaze(7)
     const original = maze().name

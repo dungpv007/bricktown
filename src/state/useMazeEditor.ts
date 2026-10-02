@@ -8,6 +8,7 @@ import {
   inBounds,
   isBorder,
   paintWalls,
+  sameLayout,
   setEntry,
   setExit,
   toggleCoin,
@@ -21,7 +22,7 @@ import { generateMaze, type MazeDifficulty } from '../core/mazeGen'
 import { t } from '../ui/i18n'
 import { createHistory } from './history'
 import { useApp } from './useApp'
-import { useGame } from './useGame'
+import { mazeRunsOf, useGame, type MazeRuns } from './useGame'
 
 /** `move` pans the view with one finger; `wall` / `erase` paint along a drag; the others act on a tap. */
 export type MazeTool = 'move' | 'wall' | 'erase' | 'entry' | 'exit' | 'coin'
@@ -72,7 +73,16 @@ export interface MazeEditorState {
   undo: () => void
 }
 
-const history = createHistory<Maze>()
+/**
+ * An undo step: the maze before a change, and the best run and challenge it had then (a change of
+ * the layout forgets them, see `useGame.upsertMaze`; undoing it brings them back).
+ */
+interface Snapshot {
+  maze: Maze
+  runs: MazeRuns
+}
+
+const history = createHistory<Snapshot>()
 
 const game = () => useGame.getState()
 
@@ -144,11 +154,12 @@ export const useMazeEditor = create<MazeEditorState>()((set, get) => {
     set((s) => ({ lastError: error, errorSeq: s.errorSeq + 1 }))
   }
 
-  const open = (mazeId: string, templateMaze: Maze | null) => {
+  /** `tool`: the wall tool to build at once, or ✋ for a maze to look at first (no stray edit on a tap). */
+  const open = (mazeId: string, templateMaze: Maze | null, tool: MazeTool) => {
     history.clear()
     stroke = null
     renaming = false
-    set({ mazeId, templateMaze, preview: null, tool: 'wall', lastError: null, canUndo: false })
+    set({ mazeId, templateMaze, preview: null, tool, lastError: null, canUndo: false })
   }
 
   /**
@@ -164,7 +175,10 @@ export const useMazeEditor = create<MazeEditorState>()((set, get) => {
     const { templateMaze } = get()
     const identity = templateMaze ? { id: newId('maze'), createdAt: now } : { id: before.id, createdAt: before.createdAt }
     const copiedName = templateMaze ? copyName(templateMaze.templateId, templateMaze.name) : null
-    if (!(isRename && renaming)) history.push({ ...before, ...identity, ...(copiedName ? { name: copiedName } : {}) })
+    if (!(isRename && renaming)) {
+      const runs = templateMaze ? {} : mazeRunsOf(game().data, before.id)
+      history.push({ maze: { ...before, ...identity, ...(copiedName ? { name: copiedName } : {}) }, runs })
+    }
     renaming = isRename
     // A copy takes the numbered name, unless this very change names it.
     const name = copiedName && after.name === before.name ? copiedName : after.name
@@ -205,24 +219,25 @@ export const useMazeEditor = create<MazeEditorState>()((set, get) => {
         createdAt: 0,
         updatedAt: 0,
       }
-      open(maze.id, maze)
+      open(maze.id, maze, 'move')
     },
 
     openMaze: (id) => {
       if (!game().data.mazes.some((m) => m.id === id)) return
-      open(id, null)
+      // A friend's maze (it came with a time to beat) opens for looking, like a ready-made one.
+      open(id, null, id in game().data.mazeChallenges ? 'move' : 'wall')
     },
 
     newMaze: (size) => {
       const maze = createEmptyMaze(size, size, { name: nextDefaultName() })
       game().upsertMaze(maze)
-      open(maze.id, null)
+      open(maze.id, null, 'wall')
     },
 
     newGenerated: (difficulty, seed = randomSeed()) => {
       const maze = generateMaze(difficulty, seed, { name: nextDefaultName() })
       game().upsertMaze(maze)
-      open(maze.id, null)
+      open(maze.id, null, 'wall')
     },
 
     close: () => {
@@ -323,8 +338,12 @@ export const useMazeEditor = create<MazeEditorState>()((set, get) => {
       renaming = false
       const maze = currentMaze()
       if (!maze) return
-      const prev = history.undo(maze)
-      if (prev) game().upsertMaze({ ...prev, updatedAt: Date.now() })
+      const prev = history.undo({ maze, runs: mazeRunsOf(game().data, maze.id) })
+      if (prev) {
+        game().upsertMaze({ ...prev.maze, updatedAt: Date.now() })
+        // Back to an older layout: its runs come back. A rename or colour undone keeps today's runs.
+        if (!sameLayout(maze, prev.maze)) game().restoreRuns(prev.maze.id, prev.runs)
+      }
       set({ lastError: null, canUndo: history.canUndo() })
     },
   }

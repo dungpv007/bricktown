@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { getMazeTemplate } from '../content/mazes'
-import { CELL } from './city'
 import { uprightYaw } from './drive'
-import { cellKey, createEmptyMaze, rateRun, setEntry, setExit, solve, starThresholds, type Cell, type Maze } from './maze'
+import { MAZE_CELL, cellKey, createEmptyMaze, rateRun, setEntry, setExit, solve, starThresholds, type Cell, type Maze } from './maze'
 import {
   HINT_COOLDOWN_MS,
   HINT_SHOW_MS,
+  MAZE_STEER,
   NEW_CLOCK,
+  cellAtPoint,
+  cellCenterXZ,
   clockElapsed,
   hintArrows,
   hintReady,
@@ -34,6 +36,22 @@ function withDoors(maze: Maze, entry: Cell, exit: Cell): Maze {
 /** Forward (x, z) of a yaw (0 = facing -Z, counter-clockwise from above), as the vehicle uses it. */
 const forwardOf = (yaw: number): [number, number] => [-Math.sin(yaw), -Math.cos(yaw)]
 
+describe('maze cells in the world', () => {
+  it('are 13 studs: wider than a city cell, so a car can turn in a corridor', () => {
+    expect(MAZE_CELL).toBe(13)
+    expect(cellCenterXZ(c(2, 3))).toEqual({ x: 32.5, z: 45.5 })
+  })
+  it('cellAtPoint finds the cell under a point (the inverse of cellCenterXZ)', () => {
+    expect(cellAtPoint(32.5, 45.5)).toEqual(c(2, 3))
+    expect(cellAtPoint(25.9, 40)).toEqual(c(1, 3))
+    expect(cellAtPoint(0, 0)).toEqual(c(0, 0))
+  })
+  it('steers tighter than the city at low speed, gentler at speed', () => {
+    expect(MAZE_STEER.MAX_STEER).toBeCloseTo(0.8)
+    expect(MAZE_STEER.MAX_STEER * MAZE_STEER.STEER_AT_SPEED).toBeLessThan(0.4)
+  })
+})
+
 describe('spawnPose', () => {
   const empty = createEmptyMaze(7, 7, { id: 'm', now: 0 })
   it.each([
@@ -44,8 +62,8 @@ describe('spawnPose', () => {
   ] as const)('an entry on the %s border faces into the maze', (_side, entry, inward) => {
     const exit = entry.cx === 3 ? c(0, 3) : c(3, 0)
     const pose = spawnPose(withDoors(empty, entry, exit))!
-    expect(pose.x).toBe((entry.cx + 0.5) * CELL)
-    expect(pose.z).toBe((entry.cz + 0.5) * CELL)
+    expect(pose.x).toBe((entry.cx + 0.5) * MAZE_CELL)
+    expect(pose.z).toBe((entry.cz + 0.5) * MAZE_CELL)
     const [fx, fz] = forwardOf(pose.yaw)
     expect(fx).toBeCloseTo(inward[0])
     expect(fz).toBeCloseTo(inward[1])

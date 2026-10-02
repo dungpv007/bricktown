@@ -62,6 +62,16 @@ describe('useGame mazes', () => {
     }
   })
 
+  it('restoreRuns puts back exactly the given best run and challenge of one maze', () => {
+    game().setMazeRecord('b', { timeMs: 2, stars: 2, coins: 1 })
+    game().restoreRuns('a', { record: { timeMs: 1, stars: 3, coins: 0 }, challenge: { timeMs: 5 } })
+    expect(game().data.mazeRecords).toEqual({ a: { timeMs: 1, stars: 3, coins: 0 }, b: { timeMs: 2, stars: 2, coins: 1 } })
+    expect(game().data.mazeChallenges).toEqual({ a: { timeMs: 5 } })
+    game().restoreRuns('a', {})
+    expect(game().data.mazeRecords).toEqual({ b: { timeMs: 2, stars: 2, coins: 1 } })
+    expect(game().data.mazeChallenges).toEqual({})
+  })
+
   it('setMazeRecord stores the run under its key, replacing an older one', () => {
     game().setMazeRecord('tpl:easy', { timeMs: 5000, stars: 2, coins: 1 })
     game().setMazeRecord('tpl:easy', { timeMs: 4000, stars: 3, coins: 3 })

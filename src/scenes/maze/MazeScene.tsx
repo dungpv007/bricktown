@@ -3,10 +3,8 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
-import { CELL } from '../../core/city'
-import { pointToCell } from '../../core/cityPlan'
-import { cellKey, inBounds, type Cell, type Maze } from '../../core/maze'
-import { voidWalls } from '../../core/mazeRun'
+import { MAZE_CELL, cellKey, inBounds, type Cell, type Maze } from '../../core/maze'
+import { cellAtPoint, voidWalls } from '../../core/mazeRun'
 import { createGestureTracker, sampleOf } from '../../input/tapGesture'
 import { currentMaze, useMazeEditor, useShownMaze, type MazeTool } from '../../state/useMazeEditor'
 import DevStats from '../../ui/DevStats'
@@ -41,8 +39,8 @@ const GHOST_COLOR: Record<Exclude<MazeTool, 'move'>, string> = {
 
 function Lights({ w, h }: { w: number; h: number }) {
   const light = useRef<THREE.DirectionalLight>(null)
-  const sx = w * CELL
-  const sz = h * CELL
+  const sx = w * MAZE_CELL
+  const sz = h * MAZE_CELL
   const span = Math.max(sx, sz)
   const target = useMemo(() => new THREE.Object3D(), [])
   useLayoutEffect(() => {
@@ -118,8 +116,8 @@ function CameraRig({ w, h, tool }: { w: number; h: number; tool: MazeTool }) {
     const c = controls.current
     if (!c) return
     const t = c.target
-    const x = Math.max(0, Math.min(w * CELL, t.x))
-    const z = Math.max(0, Math.min(h * CELL, t.z))
+    const x = Math.max(0, Math.min(w * MAZE_CELL, t.x))
+    const z = Math.max(0, Math.min(h * MAZE_CELL, t.z))
     if (x === t.x && z === t.z) return
     c.object.position.x += x - t.x
     c.object.position.z += z - t.z
@@ -152,7 +150,7 @@ function Ghost({ cell, tool }: { cell: Cell; tool: Exclude<MazeTool, 'move'> }) 
   const height = tall ? WALL_HEIGHT + 0.3 : 0.5
   return (
     <mesh position={[x, height / 2, z]} renderOrder={2}>
-      <boxGeometry args={[CELL + 0.2, height, CELL + 0.2]} />
+      <boxGeometry args={[MAZE_CELL + 0.2, height, MAZE_CELL + 0.2]} />
       <meshBasicMaterial color={GHOST_COLOR[tool]} transparent opacity={0.4} depthWrite={false} />
     </mesh>
   )
@@ -200,13 +198,13 @@ function MazeWorld({ maze }: { maze: Maze }) {
       if (!shown) return null
       const top = raycaster.ray.intersectPlane(TOP_PLANE, hit)
       if (top) {
-        const cell = pointToCell(top.x, top.z)
+        const cell = cellAtPoint(top.x, top.z)
         const key = cellKey(cell)
         // Void walls are low hedges: picked on the floor like the open cells.
         if (shown.walls.includes(key) && !hedgesOf(shown).has(key)) return cell
       }
       const floor = raycaster.ray.intersectPlane(GROUND_PLANE, hit)
-      return floor ? pointToCell(floor.x, floor.z) : null
+      return floor ? cellAtPoint(floor.x, floor.z) : null
     }
     const inMaze = (cell: Cell | null): Cell | null => {
       const m = currentMaze()

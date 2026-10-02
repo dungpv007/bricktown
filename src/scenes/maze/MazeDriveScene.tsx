@@ -2,10 +2,9 @@ import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import * as THREE from 'three'
-import { pointToCell } from '../../core/cityPlan'
 import { analyzeDrive } from '../../core/drive'
-import { solve, type Cell, type Maze } from '../../core/maze'
-import { cellCenterXZ, spawnPose } from '../../core/mazeRun'
+import { MAZE_CELL, solve, type Cell, type Maze } from '../../core/maze'
+import { MAZE_STEER, cellAtPoint, cellCenterXZ, spawnPose } from '../../core/mazeRun'
 import { resolveSource } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
 import { useDriveInput } from '../../state/useDriveInput'
@@ -26,10 +25,10 @@ const SKY = '#87ceeb'
 const FOV = 50
 /** The car is dropped from this height above the floor at the start. */
 const SPAWN_DROP = 0.4
-/** Top-down view: this far from the car, tilted like the editor's view (north up). */
-const TOP_DISTANCE = 62
+/** Top-down view: this far from the car, tilted like the editor's view (north up)... */
+const TOP_DISTANCE = 6.5 * MAZE_CELL
 /** ...looking this far ahead of the car, so the screen shows more of where it is going. */
-const TOP_LOOK_AHEAD = 12
+const TOP_LOOK_AHEAD = 1.5 * MAZE_CELL
 /** Camera follow rate (1 / s): position and look-at point both glide, so switching views is smooth. */
 const FOLLOW_RATE = 4
 /** Heading smoothing for the chase view (1 / s). */
@@ -95,7 +94,7 @@ function RunTracker() {
     // still holds where the last drive ended.
     return useDriveStatus.subscribe((s, prev) => {
       if (s.x === prev.x && s.z === prev.z) return
-      const cell = pointToCell(s.x, s.z)
+      const cell = cellAtPoint(s.x, s.z)
       if (last && last.cx === cell.cx && last.cz === cell.cz) return
       last = cell
       useMazeRun.getState().carAt(cell, performance.now())
@@ -169,7 +168,7 @@ function MazeDriveWorld({ maze, setup }: { maze: Maze; setup: DrivableSetup }) {
       {/* Physics steps before the camera reads the car (lower priority runs first); it stops at the finish. */}
       <Physics timeStep={1 / 60} gravity={[0, -GRAVITY, 0]} updatePriority={-50} paused={won}>
         <MazeColliders maze={maze} />
-        <Vehicle setup={setup} spawn={spawn} spawnYaw={pose.yaw} chassisRef={chassis} />
+        <Vehicle setup={setup} spawn={spawn} spawnYaw={pose.yaw} steering={MAZE_STEER} chassisRef={chassis} />
       </Physics>
     </>
   )

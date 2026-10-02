@@ -3,7 +3,7 @@ import { cellKey, createEmptyMaze, neighbors4, parseCellKey, type Cell, type Cre
 export type MazeDifficulty = 1 | 2 | 3
 
 /** Default grid size (cells per side) per difficulty. */
-export const MAZE_GEN_SIZE: Record<MazeDifficulty, number> = { 1: 7, 2: 11, 3: 15 }
+const MAZE_GEN_SIZE: Record<MazeDifficulty, number> = { 1: 7, 2: 11, 3: 15 }
 /** Extra walls knocked out of the perfect maze to create loops (shortcuts and alternative routes). */
 export const MAZE_GEN_LOOPS: Record<MazeDifficulty, number> = { 1: 0, 2: 3, 3: 6 }
 /** Coins placed per difficulty. */

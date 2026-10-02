@@ -182,6 +182,11 @@ describe('steerAngle', () => {
     expect(Math.abs(steerAngle(1, DRIVE.MAX_SPEED))).toBeLessThan(DRIVE.MAX_STEER)
     expect(Math.abs(steerAngle(1, DRIVE.MAX_SPEED))).toBeGreaterThan(0.2)
   })
+  it('takes its own limits when given some (the maze turns tighter at low speed)', () => {
+    const tight = { MAX_STEER: 0.8, STEER_AT_SPEED: 0.4 }
+    expect(steerAngle(1, 0, tight)).toBeCloseTo(-0.8)
+    expect(steerAngle(-1, DRIVE.MAX_SPEED, tight)).toBeCloseTo(0.32)
+  })
 })
 
 describe('approach', () => {
