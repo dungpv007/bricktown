@@ -101,7 +101,7 @@ describe('colour picker collapse', () => {
 
 describe('useApp persistence config', () => {
   const opts = useApp.persist.getOptions()
-  it('persists slotId, lang, difficulty, the two sound toggles, their volumes, the colour picker state, city life, graphics and the city time only', () => {
+  it('persists slotId, lang, difficulty, the two sound toggles, their volumes, the colour picker state, city life, graphics, the city time and the ▶️ badges only', () => {
     const state = useApp.getState()
     expect(opts.partialize?.(state)).toEqual({
       graphicsPreset: 'auto',
@@ -117,7 +117,14 @@ describe('useApp persistence config', () => {
       npcOn: true,
       cityTime: 'noon',
       cityTimeAuto: false,
+      playBadges: true,
     })
+  })
+  it('merge keeps a valid ▶️ badges switch, drops a bad one; the play session is never kept', () => {
+    const current = useApp.getState()
+    expect(opts.merge?.({ playBadges: false }, current)).toMatchObject({ playBadges: false })
+    expect(opts.merge?.({ playBadges: 'no' }, current)).toMatchObject({ playBadges: true })
+    expect(opts.partialize?.({ ...current, play: { gameId: 'sushi', from: 'menu' } })).not.toHaveProperty('play')
   })
   it('merge keeps a valid city time and auto switch, and drops bad ones', () => {
     const current = useApp.getState()

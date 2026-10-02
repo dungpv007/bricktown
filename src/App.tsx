@@ -10,6 +10,10 @@ import MainMenu from './ui/MainMenu'
 import SceneBoundary from './ui/SceneBoundary'
 import { lazyScene } from './ui/lazyScene'
 import TopBar from './ui/TopBar'
+import GameScreen from './play/ui/GameScreen'
+import ShopHost from './play/ui/ShopHost'
+import { gameById } from './play/registry'
+import { exitGame } from './play/usePlay'
 import type { TKey } from './ui/i18n'
 
 // Each mode's 3D scene (and its UI) is its own chunk, so the menu loads fast and the heavy
@@ -39,6 +43,7 @@ const TITLE_KEYS: Record<PlayMode, TKey> = {
   drive: 'menuDrive',
   maze: 'menuMaze',
   mazeDrive: 'menuMaze',
+  play: 'menuRolePlay',
 }
 
 function Workshop() {
@@ -182,6 +187,7 @@ function Play({ mode }: { mode: PlayMode }) {
   if (mode === 'city') return <City />
   if (mode === 'maze') return <Maze />
   if (mode === 'mazeDrive') return <MazeDrive />
+  if (mode === 'play') return <GameScreen />
   return <Drive />
 }
 
@@ -191,16 +197,26 @@ function useBack(mode: PlayMode): (() => void) | undefined {
   const setMode = useApp((s) => s.setMode)
   if (mode === 'maze' && editingMaze) return () => useMazeEditor.getState().close()
   if (mode === 'mazeDrive') return () => setMode('maze')
+  if (mode === 'play') return exitGame
   return undefined
+}
+
+/** A role-play game's own name in the top bar (instead of "Nhập vai"). */
+function useGameTitle(mode: PlayMode): string | undefined {
+  const lang = useApp((s) => s.lang)
+  const gameId = useApp((s) => s.play?.gameId)
+  return mode === 'play' && gameId ? gameById(gameId)?.name[lang] : undefined
 }
 
 function PlayScreen({ mode }: { mode: PlayMode }) {
   const onBack = useBack(mode)
+  const title = useGameTitle(mode)
   return (
     <>
       <Play mode={mode} />
-      <TopBar titleKey={TITLE_KEYS[mode]} onBack={onBack} />
+      <TopBar titleKey={TITLE_KEYS[mode]} title={title} onBack={onBack} />
       <GraphicsToast />
+      <ShopHost />
     </>
   )
 }

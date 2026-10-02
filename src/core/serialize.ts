@@ -5,6 +5,7 @@ import { COLORS } from './colors'
 import { newId } from './ids'
 import { MINIFIG_PART, parseFig } from './figures'
 import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, isBorder, isCorner, type Cell, type Maze } from './maze'
+import { normalizePlay } from '../play/rewards'
 import { validateTemplate } from './template'
 import { normalizeCellKeys, normalizeTerrain } from './terrain'
 import type { Baseplate, Blueprint, Brick, CityPlacement, CityState, MazeChallenge, MazeRecord, SavedCity, SaveData, Template } from './types'
@@ -68,6 +69,9 @@ export const MIGRATIONS: Record<number, Migration> = {
 // `CityState.terrain` and `CityState.rails` were added during v3 without a bump: both optional (absent
 // = all grass / no railway); `normalize` keeps only valid keys and drops water under roads or rails.
 // An older client ignores them (and drops them on its next save).
+// `SaveData.play` (role-play coins, stickers and shop items) was added during v4 without a bump: it is
+// optional (absent = nothing earned), and `normalizePlay` clamps coins and drops anything unreadable.
+// An older client ignores it (and drops it on its next save).
 // `CityPlacement.s` (a model drawn x2..x10) was added during v3 without a bump: it is optional, an
 // absent one means x1, and `normalize` rounds / clamps it into 1..10 (garbage becomes x1). An older
 // client simply ignores it and draws the model at its normal size.
@@ -117,8 +121,9 @@ function normalize(data: Record<string, unknown>, rawCities: unknown[], workshop
   const baseplate = workshop.baseplate
   const guided = data.guided
   // A stray v3 `city` (hand-edited file) must not ride along beside `cities`.
-  const { city: _legacyCity, ...known } = data
+  const { city: _legacyCity, play: rawPlay, ...known } = data
   void _legacyCity
+  const play = normalizePlay(rawPlay)
   return {
     ...(known as unknown as SaveData),
     schemaVersion: SCHEMA_VERSION,
@@ -148,6 +153,7 @@ function normalize(data: Record<string, unknown>, rawCities: unknown[], workshop
     mazes: normalizeMazes(arrayOr(data.mazes, [])),
     mazeRecords: normalizeMazeRecords(data.mazeRecords),
     mazeChallenges: normalizeChallenges(data.mazeChallenges),
+    ...(play ? { play } : {}),
   }
 }
 

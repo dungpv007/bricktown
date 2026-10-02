@@ -33,6 +33,8 @@ import { horizonLayout } from './horizonGeometry'
 import { cityScreen } from './cityScreen'
 import NpcLife from './NpcLife'
 import PlacementHighlight from './PlacementHighlight'
+import { PlayBadgeAnchors } from './PlayBadges'
+import { RestoreCityView } from './playEntry'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
 import LampGlows from './LampGlows'
 import Rails from './Rails'
@@ -625,6 +627,8 @@ function CityWorld() {
       )}
       <PlacementHighlight placement={selected} blueprints={blueprints} sizeOf={sizeOf} shakeKey={errorSeq} />
       {preview && <PlacementGhost source={preview.source} plan={preview.plan} blueprints={blueprints} sizeOf={sizeOf} />}
+      <PlayBadgeAnchors placements={shown} blueprints={blueprints} sizeOf={sizeOf} dragging={movingId !== null} />
+      <RestoreCityView />
     </>
   )
 }
