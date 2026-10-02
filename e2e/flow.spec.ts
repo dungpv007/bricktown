@@ -1,11 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
-import { cityCanvasBox, flushAutosave, savedSlotData } from './support'
+import { flushAutosave, savedCity, savedSlotData, sizedBox, type SavedCities } from './support'
 
-interface Saved {
+interface Saved extends SavedCities<{ roads: string[]; placements: Array<{ source: string }> }> {
   guided: unknown
   completedTemplates: string[]
   blueprints: Array<{ id: string; templateId?: string }>
-  city: { roads: string[]; placements: Array<{ source: string }> }
 }
 interface BtWindow {
   __bt: {
@@ -48,20 +47,29 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
+  const box = await sizedBox(canvas)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
   await page.getByTestId('city-road-mode').click()
-  await page.mouse.move(cx - 120, cy)
-  await page.mouse.down()
-  await page.mouse.move(cx, cy, { steps: 8 })
-  await page.mouse.move(cx + 120, cy, { steps: 8 })
-  await page.mouse.up()
-  expect((await liveData(page)).city.roads.length).toBeGreaterThan(3)
+  // The canvas may still be sizing itself right after it appears: repeat the (idempotent) drag until it paints.
+  await expect
+    .poll(async () => {
+      await page.mouse.move(cx - 120, cy)
+      await page.mouse.down()
+      await page.mouse.move(cx, cy, { steps: 8 })
+      await page.mouse.move(cx + 120, cy, { steps: 8 })
+      await page.mouse.up()
+      return savedCity(await liveData(page))!.roads.length
+    })
+    .toBeGreaterThan(3)
   await page.getByTestId('city-road-mode').click() // back to selecting and placing
   await page.getByTestId(`src-${treeId}`).click()
-  await page.mouse.click(cx, cy + 90)
-  expect((await liveData(page)).city.placements.map((p) => p.source)).toEqual([treeId])
+  await expect
+    .poll(async () => {
+      if (savedCity(await liveData(page))!.placements.length === 0) await page.mouse.click(cx, cy + 90)
+      return savedCity(await liveData(page))!.placements.map((p) => p.source)
+    })
+    .toEqual([treeId])
 
   // Drive: the tree is not a vehicle; take the car and hold gas until it has moved.
   await page.getByTestId('back').click()
@@ -92,8 +100,8 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
         guided: d.guided,
         completed: d.completedTemplates.includes('tree'),
         blueprint: d.blueprints.some((b) => b.id === treeId),
-        road: d.city.roads.length > 3,
-        placed: d.city.placements.map((p) => p.source),
+        road: savedCity(d)!.roads.length > 3,
+        placed: savedCity(d)!.placements.map((p) => p.source),
       }
     })
     .toEqual({ guided: null, completed: true, blueprint: true, road: true, placed: [treeId] })
@@ -105,7 +113,7 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
   expect(after.guided).toBeNull()
   expect(after.completedTemplates).toContain('tree')
   expect(after.blueprints.some((b) => b.id === treeId && b.templateId === 'tree')).toBe(true)
-  expect(after.city.roads.length).toBeGreaterThan(3)
-  expect(after.city.placements.map((p) => p.source)).toEqual([treeId])
+  expect(savedCity(after)!.roads.length).toBeGreaterThan(3)
+  expect(savedCity(after)!.placements.map((p) => p.source)).toEqual([treeId])
   expect(errors).toEqual([])
 })

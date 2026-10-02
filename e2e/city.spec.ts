@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { cityCanvasBox, flushAutosave, savedSlotData } from './support'
+import { cityCanvasBox, flushAutosave, savedCity, savedSlotData, sizedBox, type SavedCities } from './support'
 
 interface CityData {
   size: number
@@ -10,12 +10,14 @@ interface CityData {
 }
 interface BtWindow {
   __bt: {
-    useGame: { getState(): { data: { city: CityData }; setCity(city: CityData): void } }
+    useGame: { getState(): { setCity(city: CityData): void } }
+    currentCity(): CityData
   }
 }
 
-const cityData = (page: Page) =>
-  page.evaluate(() => (window as unknown as BtWindow).__bt.useGame.getState().data.city)
+const cityData = (page: Page) => page.evaluate(() => (window as unknown as BtWindow).__bt.currentCity())
+/** The current city as saved in IndexedDB right now. */
+const savedCityData = async (page: Page) => savedCity(await savedSlotData<SavedCities<CityData>>(page))
 
 test('city: roads and a template placement persist across a reload', async ({ page }) => {
   const errors: string[] = []
@@ -28,7 +30,7 @@ test('city: roads and a template placement persist across a reload', async ({ pa
   await page.evaluate(() => {
     const game = (window as unknown as BtWindow).__bt.useGame.getState()
     game.setCity({
-      ...game.data.city,
+      ...(window as unknown as BtWindow).__bt.currentCity(),
       roads: ['10,10', '11,10', '12,10', '13,10'],
       placements: [{ id: 'e2e-house', source: 'tpl:house_small', cx: 11, cz: 11, rot: 0 }],
     })
@@ -36,7 +38,7 @@ test('city: roads and a template placement persist across a reload', async ({ pa
 
   await flushAutosave(page)
   await expect
-    .poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.placements.map((p) => p.id))
+    .poll(async () => (await savedCityData(page))?.placements.map((p) => p.id))
     .toEqual(['e2e-house'])
   await page.reload()
   await expect(page.getByTestId('main-menu')).toBeVisible()
@@ -54,7 +56,7 @@ test('city: in road mode one finger paints roads (two fingers do not) and the er
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
+  const box = await sizedBox(canvas)
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
   await page.getByTestId('city-road-mode').click()
@@ -126,7 +128,7 @@ test('city: the avenue brush (the default) paints a road 2 cells wide that persi
   expect(rows[0][1].length).toBeGreaterThan(3)
 
   await flushAutosave(page)
-  await expect.poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.roads.length).toBe(roads.length)
+  await expect.poll(async () => (await savedCityData(page))?.roads.length).toBe(roads.length)
   await page.reload()
   await expect(page.getByTestId('main-menu')).toBeVisible()
   await page.getByTestId('menu-city').click()
@@ -148,15 +150,17 @@ test('city: tap selects (rotate, delete), a placement drags to a new cell, a Kho
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
+  const box = await sizedBox(canvas)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
   const house = async () => (await cityData(page)).placements.find((p) => p.id === 'house')
 
   // Tap: the action bar appears; rotate turns the house.
   await expect(page.getByTestId('city-action-bar')).toHaveCount(0)
-  await page.mouse.click(cx, cy)
-  await expect(page.getByTestId('city-action-bar')).toHaveCount(1)
+  await expect.poll(async () => {
+    await page.mouse.click(cx, cy) // the canvas may still be sizing itself right after it appears
+    return page.getByTestId('city-action-bar').count()
+  }).toBe(1)
   await expect(page.getByTestId('city-act-edit')).toHaveCount(0) // a template: not editable
   await page.getByTestId('city-act-rotate').click()
   expect((await house())?.rot).toBe(1)
@@ -201,14 +205,16 @@ test('city: a picked Kho card quick-places where the ground is tapped; undo / re
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
+  const box = await sizedBox(canvas)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
 
   await page.getByTestId('src-tpl-tree').click()
   await expect(page.getByTestId('src-tpl-tree')).toHaveAttribute('aria-pressed', 'true')
-  await page.mouse.click(cx, cy + 90)
-  expect((await cityData(page)).placements.map((p) => p.source)).toEqual(['tpl:tree'])
+  await expect.poll(async () => {
+    if ((await cityData(page)).placements.length === 0) await page.mouse.click(cx, cy + 90)
+    return (await cityData(page)).placements.map((p) => p.source)
+  }).toEqual(['tpl:tree'])
   await expect(page.getByTestId('city-action-bar')).toBeVisible()
 
   await page.getByTestId('city-undo').click()
@@ -279,10 +285,12 @@ test('city: placements whose blueprint is gone or broken show as blocks that can
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
+  const box = await sizedBox(canvas)
   const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  await page.mouse.click(centre.x, centre.y)
-  await expect(page.getByTestId('city-action-bar')).toHaveCount(1)
+  await expect.poll(async () => {
+    await page.mouse.click(centre.x, centre.y) // the canvas may still be sizing itself right after it appears
+    return page.getByTestId('city-action-bar').count()
+  }).toBe(1)
   await page.getByTestId('city-act-delete').click()
   expect((await cityData(page)).placements).toHaveLength(0)
 
@@ -313,7 +321,7 @@ test('city: a finger whose release got lost does not block later taps', async ({
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
+  const box = await sizedBox(canvas)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
 
@@ -343,9 +351,11 @@ test('city: the size control scales the selected model (one undo step each) and 
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
-  await expect(page.getByTestId('city-action-bar')).toHaveCount(1)
+  const box = await sizedBox(canvas)
+  await expect.poll(async () => {
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2) // the canvas may still be sizing itself
+    return page.getByTestId('city-action-bar').count()
+  }).toBe(1)
   const label = page.getByTestId('city-scale-label')
   const rocketSize = async () => (await cityData(page)).placements.find((p) => p.id === 'rocket')?.s
   await expect(label).toHaveText('×1')
@@ -366,7 +376,7 @@ test('city: the size control scales the selected model (one undo step each) and 
   // The size is saved: after a reload the rocket is still x3 (undo history is per visit, so the
   // undo after the reload takes back a step made after it).
   await flushAutosave(page)
-  await expect.poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.placements[0]?.s).toBe(3)
+  await expect.poll(async () => (await savedCityData(page))?.placements[0]?.s).toBe(3)
   await page.reload()
   await page.getByTestId('menu-city').click()
   await expect(canvas).toBeVisible()
@@ -387,7 +397,7 @@ test('city: a painted lake and a rail loop persist across a reload', async ({ pa
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = await cityCanvasBox(page)
+  const box = await sizedBox(canvas)
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
   const cdp = await page.context().newCDPSession(page)
@@ -425,7 +435,7 @@ test('city: a painted lake and a rail loop persist across a reload', async ({ pa
   expect(rails.every((k) => links(k) === 2), 'every rail cell has two rail neighbours: a closed loop').toBe(true)
 
   await flushAutosave(page)
-  await expect.poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.rails?.length).toBe(rails.length)
+  await expect.poll(async () => (await savedCityData(page))?.rails?.length).toBe(rails.length)
   await page.reload()
   await expect(page.getByTestId('main-menu')).toBeVisible()
   await page.getByTestId('menu-city').click()
@@ -451,7 +461,7 @@ test('city: cars, a train and people move when 🚦 is on, none when off, and th
     const col = (x: number, z0: number, z1: number) => range(z0, z1).map((z) => `${x},${z}`)
     const game = (window as unknown as BtWindow).__bt.useGame.getState()
     game.setCity({
-      ...game.data.city,
+      ...(window as unknown as BtWindow).__bt.currentCity(),
       roads: [...new Set([...row(10, 6, 18), ...row(16, 6, 18), ...col(6, 10, 16), ...col(12, 4, 16), ...col(18, 10, 16)])],
       rails: [...row(5, 9, 15), ...row(8, 9, 15), ...col(9, 6, 7), ...col(15, 6, 7)],
       terrain: { water: [], pavement: range(11, 15).flatMap((z) => row(z, 7, 11)), sand: [] },
@@ -467,7 +477,7 @@ test('city: cars, a train and people move when 🚦 is on, none when off, and th
   await expect.poll(npcCount).toBe(0)
 
   await flushAutosave(page)
-  await expect.poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.rails?.length).toBe(18)
+  await expect.poll(async () => (await savedCityData(page))?.rails?.length).toBe(18)
   await page.reload()
   await expect(page.getByTestId('main-menu')).toBeVisible()
   await page.getByTestId('menu-city').click()

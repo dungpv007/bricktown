@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
-import { sampleCity } from '../content/cities/sample'
 import {
   addPlacement,
   MAX_SCALE,
@@ -13,6 +12,7 @@ import {
   type PlaceError,
 } from '../core/city'
 import { brushLine, type RoadBrush } from '../core/avenues'
+import { currentCity } from '../core/cities'
 import { clampCell, duplicateCell, planPlacement, type Cell } from '../core/cityPlan'
 import { newId } from '../core/ids'
 import { eraseRails, eraseRoads, paintRails, paintRoads } from '../core/rails'
@@ -20,7 +20,7 @@ import { paintRoadLine } from '../core/roads'
 import { paintTerrain, type TerrainBrush } from '../core/terrain'
 import type { CityState } from '../core/types'
 import { makeSizeOf, resolveRenderable } from '../render/sources'
-import { notifyCityReplaced, onCityReplaced } from './cityReplaced'
+import { onCityReplaced } from './cityReplaced'
 import { createHistory } from './history'
 import { useGame } from './useGame'
 
@@ -102,19 +102,18 @@ export interface CityEditorState {
   deleteSelected: () => void
   undo: () => void
   redo: () => void
-  /** Forget undo history and selection, and drop a picked source that no longer exists (entering the city). */
-  reset: () => void
   /**
-   * Replaces the whole city with a fresh copy of the sample town (after the kid confirmed it). Like a
-   * city import, the undo history is dropped: undo must not bring the old city back.
+   * Forget undo history and selection, and drop a picked source that no longer exists (entering the
+   * city, or another city became current).
    */
-  loadSampleCity: () => void
+  reset: () => void
 }
 
 const history = createHistory<CityState>()
 
 const game = () => useGame.getState()
-const city = () => game().data.city
+/** The city being edited: always the current one (core/cities). */
+const city = () => currentCity(game().data)
 const sizeOf = () => makeSizeOf(game().data)
 /** False once a blueprint was deleted (or another slot loaded) or it cannot be drawn. */
 const canDraw = (source: string) => resolveRenderable(source, game().data) !== null
@@ -310,14 +309,8 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
         selectedSource: selectedSource !== null && canDraw(selectedSource) ? selectedSource : null,
       })
     },
-
-    loadSampleCity: () => {
-      game().setCity(sampleCity())
-      sfx.pop()
-      notifyCityReplaced() // resets this editor (below) and re-frames the City camera
-    },
   }
 })
 
-// A city import replaces the whole city: its undo history and selection are void.
+// Another city became current (a switch, a new city, an import): the undo history and selection are void.
 onCityReplaced(() => useCityEditor.getState().reset())

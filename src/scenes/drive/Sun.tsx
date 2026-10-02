@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
+import { useSunShadow } from '../../render/useSunShadow'
 
-const SHADOW_MAP_SIZE = 2048
+/** Redrawn every frame (it follows the car): 1024, or 2048 with "high" shadows. */
+const SHADOW_MAP_SIZE = 1024
 /** Half-size of the shadow box that travels with the car. */
-const SHADOW_EXTENT = 45
+const SHADOW_EXTENT = 70 // covers the wider chase view
 const SUN_OFFSET = new THREE.Vector3(30, 60, 20)
 
 const tmpPos = new THREE.Vector3()
@@ -13,6 +15,7 @@ const tmpPos = new THREE.Vector3()
 export default function Sun({ target }: { target: RefObject<THREE.Group | null> }) {
   const light = useRef<THREE.DirectionalLight>(null)
   const lightTarget = useMemo(() => new THREE.Object3D(), [])
+  const { castShadow, mapSize } = useSunShadow(SHADOW_MAP_SIZE)
 
   useEffect(() => {
     const cam = light.current?.shadow.camera
@@ -45,8 +48,8 @@ export default function Sun({ target }: { target: RefObject<THREE.Group | null> 
         ref={light}
         target={lightTarget}
         intensity={2.2}
-        castShadow
-        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+        castShadow={castShadow}
+        shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.05}
       />

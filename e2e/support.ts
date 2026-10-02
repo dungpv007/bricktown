@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 
 /** The saved slot's data as it is in IndexedDB right now (what a reload would load), or null. */
 export const savedSlotData = <T>(page: Page) =>
@@ -18,25 +18,54 @@ export const savedSlotData = <T>(page: Page) =>
       }),
   )
 
+/** A save slot's cities as stored (schema v4): many cities, one of them current. */
+export interface SavedCities<C> {
+  cities: Array<{ id: string; name: string; city: C }>
+  currentCityId: string
+}
+
+/** The current city of saved slot data (from `savedSlotData`), or undefined when nothing is saved. */
+export const savedCity = <C>(data: SavedCities<C> | null | undefined): C | undefined =>
+  data?.cities.find((c) => c.id === data.currentCityId)?.city
+
+/**
+ * A 3D canvas's box once it has its real size. A canvas shows at the browser's default 300×150
+ * for a moment before the renderer sizes it to its screen; a box read then puts every "centre"
+ * tap in the wrong place (it happens with a warm dev-server cache, when the scene mounts fast).
+ */
+export async function sizedBox(canvas: Locator) {
+  await expect
+    .poll(() => canvas.evaluate((c) => {
+      const r = c.getBoundingClientRect()
+      const p = c.parentElement!.getBoundingClientRect()
+      return r.width > 0 && Math.abs(r.width - p.width) < 2 && Math.abs(r.height - p.height) < 2
+    }), { message: 'the canvas is sized to its screen' })
+    .toBe(true)
+  return (await canvas.boundingBox())!
+}
+
 /** Writes pending changes now (dev handle); poll `savedSlotData` afterwards to see them land. */
 export const flushAutosave = (page: Page) =>
   page.evaluate(() => (window as unknown as { __bt: { flushAutosave(): Promise<boolean> } }).__bt.flushAutosave())
 
 interface PoseWindow {
-  __bt: { plateScreen: { pose: { frame: number; camera: number[] } | null } }
+  __bt: { plateScreen: { pose: { frame: number; camera: number[] } | null }; invalidate(): void }
 }
 
 /**
  * Waits until the Workshop camera is at rest: its pose (dev handle, rounded) is the same over two
  * rendered frames. Replaces fixed sleeps after a fit, glide, orbit or drag, which are too short
- * when the software GL is busy and needlessly long when it is not.
+ * when the software GL is busy and needlessly long when it is not. Scenes render on demand, so it
+ * asks for those frames.
  */
 export const waitForCameraStill = (page: Page) =>
   expect
     .poll(
       () =>
         page.evaluate(() => {
-          const screen = (window as unknown as PoseWindow).__bt.plateScreen
+          const bt = (window as unknown as PoseWindow).__bt
+          const screen = bt.plateScreen
+          bt.invalidate()
           const start = screen.pose
           if (!start) return false
           const key = JSON.stringify(start.camera)
@@ -45,7 +74,10 @@ export const waitForCameraStill = (page: Page) =>
               const now = screen.pose
               if (!now || JSON.stringify(now.camera) !== key) resolve(false)
               else if (now.frame >= start.frame + 2) resolve(true)
-              else requestAnimationFrame(check)
+              else {
+                bt.invalidate()
+                requestAnimationFrame(check)
+              }
             }
             requestAnimationFrame(check)
           })

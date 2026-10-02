@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { MAZE_CELL, cellKey, inBounds, type Cell, type Maze } from '../../core/maze'
 import { cellAtPoint, voidWalls } from '../../core/mazeRun'
 import { createGestureTracker, sampleOf } from '../../input/tapGesture'
+import BtCanvas from '../../render/BtCanvas'
+import { useSunShadow } from '../../render/useSunShadow'
+import { useGame } from '../../state/useGame'
 import { currentMaze, useMazeEditor, useShownMaze, type MazeTool } from '../../state/useMazeEditor'
-import DevStats from '../../ui/DevStats'
 import MazeModel, { cellCenter } from './MazeModel'
 import { mazeScreen } from './mazeScreen'
 import { hudFreeRect, toNdc, type HudEdges } from '../workshop/safeArea'
@@ -47,6 +49,7 @@ function Lights({ w, h }: { w: number; h: number }) {
   const sz = h * MAZE_CELL
   const span = Math.max(sx, sz)
   const target = useMemo(() => new THREE.Object3D(), [])
+  const { castShadow, mapSize } = useSunShadow(SHADOW_MAP_SIZE)
   useLayoutEffect(() => {
     const cam = light.current?.shadow.camera
     if (!cam) return
@@ -68,8 +71,8 @@ function Lights({ w, h }: { w: number; h: number }) {
         target={target}
         position={[sx / 2 + span * 0.35, span * 0.9, sz / 2 + span * 0.25]}
         intensity={2.2}
-        castShadow
-        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+        castShadow={castShadow}
+        shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.05}
       />
@@ -95,14 +98,19 @@ function CameraRig({ w, h, tool }: { w: number; h: number; tool: MazeTool }) {
   // Framed from the render loop: the controls and the canvas size only exist after the first frames,
   // and the HUD (its own lazy chunk) may appear a little later, so the free rect is measured again
   // for a short while after each size change, then only when a size changes.
-  useFrame(({ camera, size, gl, clock }) => {
+  // Render on demand: frames keep coming until the controls exist and through each settle window.
+  useFrame(({ camera, size, gl, clock, invalidate }) => {
     const c = controls.current
-    if (!c || size.width === 0 || size.height === 0) return
+    if (!c || size.width === 0 || size.height === 0) {
+      invalidate()
+      return
+    }
     const sk = `${w}x${h}@${size.width}x${size.height}`
     if (sk !== sizeKey.current) {
       sizeKey.current = sk
       settleUntil.current = clock.elapsedTime + HUD_SETTLE_S
     }
+    if (clock.elapsedTime <= settleUntil.current) invalidate()
     if (clock.elapsedTime > settleUntil.current && framedFor.current.startsWith(sk)) return
     const free = hudFreeRect(gl.domElement, MAZE_HUD)
     const key = `${sk}:${free.left},${free.top},${free.right},${free.bottom}`
@@ -319,15 +327,17 @@ function MazeWorld({ maze }: { maze: Maze }) {
   )
 }
 
+/** Read imperatively (strokes, the framing): a change asks for a frame. */
+const WATCH = [useMazeEditor, useGame]
+
 export default function MazeScene() {
   const maze = useShownMaze()
   if (!maze) return null
   return (
-    <Canvas shadows="percentage" dpr={[1, 1.5]} data-testid="maze-canvas">
+    <BtCanvas testId="maze-canvas" watch={WATCH}>
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 500, 1100]} />
       <MazeWorld maze={maze} />
-      <DevStats />
-    </Canvas>
+    </BtCanvas>
   )
 }

@@ -101,9 +101,11 @@ describe('colour picker collapse', () => {
 
 describe('useApp persistence config', () => {
   const opts = useApp.persist.getOptions()
-  it('persists slotId, lang, difficulty, the two sound toggles, their volumes, the colour picker state and city life only', () => {
+  it('persists slotId, lang, difficulty, the two sound toggles, their volumes, the colour picker state, city life and graphics only', () => {
     const state = useApp.getState()
     expect(opts.partialize?.(state)).toEqual({
+      graphicsPreset: 'auto',
+      graphicsCustom: state.graphicsCustom,
       lang: 'vi',
       difficulty: 'easy',
       slotId: 1,
@@ -126,5 +128,18 @@ describe('useApp persistence config', () => {
     expect(opts.merge?.({ sfxOn: 'false' }, current)).toMatchObject({ musicOn: true, sfxOn: true })
     expect(opts.merge?.({ muted: true }, current)).toMatchObject({ musicOn: false, sfxOn: false })
     expect(opts.merge?.({ muted: true }, current)).not.toHaveProperty('muted')
+  })
+  it('merge keeps a valid graphics preset and cleans the custom toggles', () => {
+    const current = useApp.getState()
+    expect(opts.merge?.({ graphicsPreset: 'battery' }, current)).toMatchObject({ graphicsPreset: 'battery' })
+    expect(opts.merge?.({ graphicsPreset: 'ultra' }, current)).toMatchObject({ graphicsPreset: 'auto' })
+    const merged = opts.merge?.({ graphicsPreset: 'custom', graphicsCustom: { fps: 30, shadows: 'nope' } }, current)
+    expect(merged).toMatchObject({ graphicsPreset: 'custom', graphicsCustom: { ...current.graphicsCustom, fps: 30 } })
+  })
+  it('changing one graphics switch makes the preset custom', () => {
+    const before = useApp.getState()
+    useApp.getState().setGraphicsCustom({ ...before.graphicsCustom, water: false })
+    expect(useApp.getState()).toMatchObject({ graphicsPreset: 'custom', graphicsCustom: { water: false } })
+    useApp.setState({ graphicsPreset: before.graphicsPreset, graphicsCustom: before.graphicsCustom })
   })
 })

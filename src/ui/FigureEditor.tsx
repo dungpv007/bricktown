@@ -5,6 +5,7 @@ import {
 } from '../core/figures'
 import type { FigAccessory, FigFace, FigHat, FigPrint, FigStyle } from '../core/types'
 import { getFigureThumbnail } from '../render/thumbnails'
+import { useCoverScene } from '../state/sceneCover'
 import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
@@ -108,6 +109,7 @@ export default function FigureEditor() {
   const placed = useGame((s) => (brickId === null ? undefined : s.data.workshop.bricks.find((b) => b.id === brickId)))
   const [tab, setTab] = useState<Tab>('presets')
   const gone = brickId !== null && (!placed || !isFigure(placed))
+  useCoverScene(target !== null && !gone)
 
   // The figure went away under the editor (e.g. undo of its placement): nothing left to edit.
   useEffect(() => {

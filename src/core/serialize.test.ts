@@ -1,16 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { figPreset } from './figures'
 import { DEFAULT_MAZE_WALL_COLOR, createEmptyMaze, setEntry, setExit, toggleCoin, toggleWall, type Maze } from './maze'
+import { FIRST_CITY_ID } from './cities'
 import { SCHEMA_VERSION, createEmptySave, exportSave, importSave, migrate } from './serialize'
+import type { SaveData } from './types'
 import { buildMazePackage, decodeShare, encodeShare, isShareError } from './share'
 import { applyImport, planImport } from './shareImport'
+
+/** The last version with one `city` per save: the city-only fixtures below are written in it and go through the v4 migration. */
+const V3 = 3
+
+/** An empty save as v3 stored it (one `city`). */
+function emptyV3(): Record<string, unknown> {
+  const { cities: _c, currentCityId: _id, ...rest } = createEmptySave()
+  void _c
+  void _id
+  return { ...rest, schemaVersion: V3, city: { size: 48, roads: [], placements: [] } }
+}
+
+/** The first (and, in these fixtures, only) city of a save. */
+const firstCity = (save: SaveData) => save.cities[0].city
 
 describe('serialize', () => {
   it('createEmptySave has the spec defaults', () => {
     expect(createEmptySave()).toEqual({
       schemaVersion: SCHEMA_VERSION,
       blueprints: [],
-      city: { size: 48, roads: [], placements: [] },
+      cities: [{ id: FIRST_CITY_ID, name: '', city: { size: 48, roads: [], placements: [] }, createdAt: 0, updatedAt: 0 }],
+      currentCityId: FIRST_CITY_ID,
       workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
       guided: null,
       completedTemplates: [],
@@ -42,8 +59,8 @@ describe('serialize', () => {
     expect(() => migrate(null)).toThrow('unsupported save')
     expect(() => migrate([])).toThrow('unsupported save')
   })
-  it('rejects saves missing blueprints, city or workshop', () => {
-    for (const key of ['blueprints', 'city', 'workshop'] as const) {
+  it('rejects saves missing blueprints, cities or workshop', () => {
+    for (const key of ['blueprints', 'cities', 'workshop'] as const) {
       const partial: Record<string, unknown> = { ...createEmptySave() }
       delete partial[key]
       expect(() => migrate(partial)).toThrow('unsupported save')
@@ -51,20 +68,21 @@ describe('serialize', () => {
     }
   })
   it('fills in missing optional parts of a save with the defaults', () => {
-    const out = migrate({ schemaVersion: SCHEMA_VERSION, blueprints: [], city: {}, workshop: {} })
+    const out = migrate({ schemaVersion: V3, blueprints: [], city: {}, workshop: {} })
     expect(out).toEqual(createEmptySave())
+    expect(migrate({ schemaVersion: SCHEMA_VERSION, blueprints: [], cities: [{ id: FIRST_CITY_ID, city: {} }], workshop: {} })).toEqual(createEmptySave())
   })
   it('replaces malformed fields with defaults and keeps the valid ones', () => {
     const brick = { id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0, c: 1 }
     const out = migrate({
-      schemaVersion: SCHEMA_VERSION,
+      schemaVersion: V3,
       blueprints: [],
       city: { size: 'big', roads: 'nope', placements: [{ id: 'p', source: 'tpl:tree', cx: 1, cz: 2, rot: 0 }] },
       workshop: { kind: 'spaceship', baseplate: { w: 8 }, bricks: [brick], editingBlueprintId: 7 },
       guided: { templateId: 'house_small' }, // incomplete
       completedTemplates: ['tree', 3],
     })
-    expect(out.city).toEqual({ size: 48, roads: [], placements: [{ id: 'p', source: 'tpl:tree', cx: 1, cz: 2, rot: 0 }] })
+    expect(firstCity(out)).toEqual({ size: 48, roads: [], placements: [{ id: 'p', source: 'tpl:tree', cx: 1, cz: 2, rot: 0 }] })
     expect(out.workshop).toEqual({ kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [brick] })
     expect(out.guided).toBeNull()
     expect(out.completedTemplates).toEqual(['tree'])
@@ -79,8 +97,8 @@ describe('serialize', () => {
     const save = createEmptySave()
     expect(migrate(save)).toEqual(save)
   })
-  it('is schema version 3', () => {
-    expect(SCHEMA_VERSION).toBe(3)
+  it('is schema version 4', () => {
+    expect(SCHEMA_VERSION).toBe(4)
   })
   it('loads a v1 save unchanged apart from the version', () => {
     const brick = { id: 'a', p: 'brick_2x4', x: 1, y: 0, z: 2, r: 1 as const, c: 15 }
@@ -98,9 +116,19 @@ describe('serialize', () => {
       completedTemplates: ['tree'],
     }
     const json = JSON.stringify({ app: 'bricktown', ...v1 })
-    const v3 = { ...v1, schemaVersion: 3, sharedTemplates: [], mazes: [], mazeRecords: {}, mazeChallenges: {} }
-    expect(importSave(json)).toEqual(v3)
-    expect(migrate(structuredClone(v1))).toEqual(v3)
+    const { city, ...rest } = v1
+    const v4 = {
+      ...rest,
+      schemaVersion: 4,
+      cities: [{ id: FIRST_CITY_ID, name: '', city, createdAt: 0, updatedAt: 0 }],
+      currentCityId: FIRST_CITY_ID,
+      sharedTemplates: [],
+      mazes: [],
+      mazeRecords: {},
+      mazeChallenges: {},
+    }
+    expect(importSave(json)).toEqual(v4)
+    expect(migrate(structuredClone(v1))).toEqual(v4)
   })
   it('round-trips a v2 save with plate colours and the new colours', () => {
     const save = createEmptySave()
@@ -116,7 +144,7 @@ describe('serialize', () => {
     expect(importSave(exportSave(save))).toEqual(save)
   })
   it('keeps a valid workshop plate colour and drops one that is not a colour', () => {
-    const base = { schemaVersion: SCHEMA_VERSION, blueprints: [], city: {} }
+    const base = { schemaVersion: V3, blueprints: [], city: {} }
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 10 } } }).workshop.baseplate).toEqual({ w: 8, d: 8, c: 10 })
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 99 } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
     expect(migrate({ ...base, workshop: { baseplate: { w: 8, d: 8, c: 'red' } } }).workshop.baseplate).toEqual({ w: 8, d: 8 })
@@ -134,7 +162,7 @@ describe('serialize', () => {
   it('drops figure styles it cannot read, keeping the bricks', () => {
     const fig = (extra: object) => ({ id: 'f', p: 'minifig', x: 0, y: 0, z: 0, r: 0, c: 0, ...extra })
     const out = migrate({
-      schemaVersion: SCHEMA_VERSION,
+      schemaVersion: V3,
       blueprints: [
         { id: 'bp', name: 'x', kind: 'building', tags: [], baseplate: { w: 8, d: 8 }, createdAt: 1, updatedAt: 1, bricks: [fig({ fig: { torso: 'red' } })] },
       ],
@@ -149,7 +177,7 @@ describe('serialize', () => {
   it('keeps a figure style only on minifigure bricks', () => {
     const brick = { id: 'b', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0, c: 0 }
     const out = migrate({
-      schemaVersion: SCHEMA_VERSION, blueprints: [], city: {},
+      schemaVersion: V3, blueprints: [], city: {},
       workshop: { bricks: [{ ...brick, fig: figPreset('chef') }] },
     })
     expect(out.workshop.bricks).toEqual([brick])
@@ -158,14 +186,14 @@ describe('serialize', () => {
   describe('placement sizes (CityPlacement.s)', () => {
     const pl = (extra: Record<string, unknown> = {}) => ({ id: 'p', source: 'tpl:tree', cx: 1, cz: 2, rot: 0, ...extra })
     const load = (...placements: unknown[]) =>
-      migrate({ schemaVersion: SCHEMA_VERSION, blueprints: [], city: { size: 48, roads: [], placements }, workshop: {} }).city.placements
+      migrate({ schemaVersion: V3, blueprints: [], city: { size: 48, roads: [], placements }, workshop: {} }).cities[0].city.placements
 
     it('loads an old save without sizes unchanged', () => {
       expect(load(pl(), pl({ id: 'q', rot: 3 }))).toEqual([pl(), pl({ id: 'q', rot: 3 })])
     })
     it('round-trips a scaled placement', () => {
       const save = createEmptySave()
-      save.city.placements = [pl({ s: 4 }) as never, pl({ id: 'q', cx: 9 }) as never]
+      save.cities[0].city.placements = [pl({ s: 4 }) as never, pl({ id: 'q', cx: 9 }) as never]
       expect(importSave(exportSave(save))).toEqual(save)
     })
     it('rounds and clamps sizes into 1..10, garbage becomes x1 (the field is dropped)', () => {
@@ -177,7 +205,7 @@ describe('serialize', () => {
   })
 
   describe('sharing fields', () => {
-    const base = { schemaVersion: SCHEMA_VERSION, blueprints: [], city: {}, workshop: {} }
+    const base = { schemaVersion: V3, blueprints: [], city: {}, workshop: {} }
     const template = {
       id: 'shared_1', name: { vi: 'Xe', en: 'Xe' }, difficulty: 1, kind: 'vehicle', tags: [], baseplate: { w: 8, d: 8 },
       bricks: [{ id: 'shared_1-0', p: 'minifig', x: 0, y: 0, z: 0, r: 0, c: 0, fig: figPreset('chef') }], steps: [[0]],
@@ -241,16 +269,16 @@ describe('serialize: mazes (schema 3)', () => {
   }
 
   it('loads a v2 save without mazes, adding empty maze fields', () => {
-    const v2: Record<string, unknown> = { ...createEmptySave(), schemaVersion: 2 }
+    const v2: Record<string, unknown> = { ...emptyV3(), schemaVersion: 2 }
     for (const k of ['sharedTemplates', 'mazes', 'mazeRecords', 'mazeChallenges']) delete v2[k]
     const out = migrate(structuredClone(v2))
-    expect(out.schemaVersion).toBe(3)
+    expect(out.schemaVersion).toBe(4)
     expect(out).toMatchObject({ sharedTemplates: [], mazes: [], mazeRecords: {}, mazeChallenges: {} })
     expect(importSave(JSON.stringify({ app: 'bricktown', ...v2 }))).toEqual(createEmptySave())
   })
 
   it('keeps what a late v2 save already had (shared mazes, challenges) through the migration', () => {
-    const v2 = { ...createEmptySave(), schemaVersion: 2, mazes: [maze({ id: 'shared' })], mazeChallenges: { shared: { timeMs: 5000, from: 'An' } } }
+    const v2: Record<string, unknown> = { ...emptyV3(), schemaVersion: 2, mazes: [maze({ id: 'shared' })], mazeChallenges: { shared: { timeMs: 5000, from: 'An' } } }
     const { mazeRecords: _r, ...withoutRecords } = v2
     void _r
     const out = migrate(structuredClone(withoutRecords))
@@ -361,14 +389,14 @@ describe('serialize: mazes (schema 3)', () => {
 
 describe('serialize: city terrain and rails (optional, v3)', () => {
   const load = (city: Record<string, unknown>) =>
-    migrate({ schemaVersion: SCHEMA_VERSION, blueprints: [], city: { size: 10, roads: [], placements: [], ...city }, workshop: {} }).city
+    migrate({ schemaVersion: V3, blueprints: [], city: { size: 10, roads: [], placements: [], ...city }, workshop: {} }).cities[0].city
 
   it('loads an old city without them unchanged (no fields added)', () => {
     expect(load({ roads: ['1,1'] })).toEqual({ size: 10, roads: ['1,1'], placements: [] })
   })
   it('round-trips terrain and rails', () => {
     const save = createEmptySave()
-    save.city = { ...save.city, roads: ['4,0', '4,1', '4,2'], rails: ['3,1', '4,1', '5,1'], terrain: { water: ['9,9'], pavement: ['0,0'], sand: ['1,0'] } }
+    save.cities[0].city = { ...firstCity(save), roads: ['4,0', '4,1', '4,2'], rails: ['3,1', '4,1', '5,1'], terrain: { water: ['9,9'], pavement: ['0,0'], sand: ['1,0'] } }
     expect(importSave(exportSave(save))).toEqual(save)
   })
   it('keeps only valid cells, one kind per cell, no water under roads or rails; empty layers are dropped', () => {

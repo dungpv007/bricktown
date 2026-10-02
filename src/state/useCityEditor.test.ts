@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CELL } from '../core/city'
-import { SAMPLE_CITY } from '../content/cities/sample'
+import { currentCity, emptyCity } from '../core/cities'
 import { createEmptySave } from '../core/serialize'
 import { useCityEditor } from './useCityEditor'
 import { useGame } from './useGame'
 
 const ed = () => useCityEditor.getState()
-const city = () => useGame.getState().data.city
+const city = () => currentCity(useGame.getState().data)
 /** World point at the centre of cell (cx, cz). */
 const at = (cx: number, cz: number): [number, number] => [(cx + 0.5) * CELL, (cz + 0.5) * CELL]
 
@@ -230,17 +230,18 @@ describe('useCityEditor placements', () => {
   })
 })
 
+const blueprint = (id: string, part = 'brick_2x4') => ({
+  id,
+  name: id,
+  kind: 'building' as const,
+  tags: [],
+  baseplate: { w: 16, d: 16 },
+  bricks: [{ id: 'a', p: part, x: 0, y: 0, z: 0, r: 0 as const, c: 1 }],
+  createdAt: 1,
+  updatedAt: 1,
+})
+
 describe('useCityEditor stale sources', () => {
-  const blueprint = (id: string, part = 'brick_2x4') => ({
-    id,
-    name: id,
-    kind: 'building' as const,
-    tags: [],
-    baseplate: { w: 16, d: 16 },
-    bricks: [{ id: 'a', p: part, x: 0, y: 0, z: 0, r: 0 as const, c: 1 }],
-    createdAt: 1,
-    updatedAt: 1,
-  })
 
   it('a deleted blueprint is dropped from the place tool instead of adding an invisible placement', () => {
     useGame.getState().upsertBlueprint(blueprint('bpX'))
@@ -283,21 +284,62 @@ describe('useCityEditor stale sources', () => {
   })
 })
 
-describe('useCityEditor.loadSampleCity', () => {
-  it('replaces the city with a fresh sample town and forgets undo and the selection', () => {
+describe('useCityEditor with many cities', () => {
+  it('edits the current city only; switching cities forgets undo and the selection', () => {
+    const first = useGame.getState().data.currentCityId
     ed().paintRoad({ cx: 1, cz: 1 }, { cx: 3, cz: 1 })
     ed().selectSource('tpl:house_small')
     ed().tapGround(...at(2, 2))
     expect(ed().selectedPlacementId).not.toBeNull()
     expect(ed().canUndo).toBe(true)
 
-    ed().loadSampleCity()
-    expect(city().roads).toEqual(SAMPLE_CITY.roads)
-    expect(city().rails).toEqual(SAMPLE_CITY.rails)
-    expect(city().placements.map((p) => p.source)).toEqual(SAMPLE_CITY.placements.map((p) => p.source))
-    expect(ed().canUndo).toBe(false)
+    const second = useGame.getState().addCity(emptyCity(), 'Hai')!
+    expect(useGame.getState().data.currentCityId).toBe(second)
+    expect(ed().canUndo).toBe(false) // a new current city: the history belonged to the first one
     expect(ed().selectedPlacementId).toBeNull()
-    ed().undo() // nothing to go back to: the old city stays gone
-    expect(city().roads).toEqual(SAMPLE_CITY.roads)
+    expect(city()).toEqual(emptyCity())
+    ed().undo() // nothing to undo: the first city's snapshot must never land in this one
+    expect(city()).toEqual(emptyCity())
+
+    ed().paintRoad({ cx: 5, cz: 5 }, { cx: 6, cz: 5 })
+    expect(ed().canUndo).toBe(true)
+    expect(useGame.getState().switchCity(first)).toBe(true)
+    expect(ed().canUndo).toBe(false)
+    expect(city().roads).toEqual(['1,1', '2,1', '3,1'])
+    expect(city().placements).toHaveLength(1)
+    ed().undo()
+    expect(city().placements).toHaveLength(1) // still there: undo was reset by the switch
+    const data = useGame.getState().data
+    expect(data.cities.find((c) => c.id === second)!.city.roads).toEqual(['5,5', '6,5'])
+  })
+
+  it('deleting the current city resets undo; deleting the last city is refused', () => {
+    const first = useGame.getState().data.currentCityId
+    const second = useGame.getState().addCity(emptyCity(), 'Hai')!
+    ed().paintRoad({ cx: 1, cz: 1 }, { cx: 2, cz: 1 })
+    expect(ed().canUndo).toBe(true)
+    expect(useGame.getState().deleteCity(second)).toBe(true)
+    expect(useGame.getState().data.currentCityId).toBe(first)
+    expect(ed().canUndo).toBe(false)
+    expect(useGame.getState().deleteCity(first)).toBe(false)
+    expect(useGame.getState().data.cities).toHaveLength(1)
+  })
+
+  it('deleting a blueprint removes its placements from every city', () => {
+    useGame.getState().upsertBlueprint(blueprint('bpZ'))
+    const pl = { id: 'z', source: 'bpZ', cx: 2, cz: 2, rot: 0 as const }
+    useGame.getState().setCity({ ...emptyCity(), placements: [pl] })
+    useGame.getState().addCity({ ...emptyCity(), placements: [pl, { ...pl, id: 't', source: 'tpl:tree', cx: 6 }] }, 'Hai')
+    useGame.getState().deleteBlueprint('bpZ')
+    expect(useGame.getState().data.cities.map((c) => c.city.placements.map((p) => p.id))).toEqual([[], ['t']])
+  })
+
+  it('renaming or duplicating another city keeps the undo history', () => {
+    ed().paintRoad({ cx: 1, cz: 1 }, { cx: 2, cz: 1 })
+    const id = useGame.getState().data.currentCityId
+    useGame.getState().renameCity(id, 'Phố')
+    expect(useGame.getState().duplicateCity(id, 'Phố 2')).not.toBeNull()
+    expect(useGame.getState().data.currentCityId).toBe(id)
+    expect(ed().canUndo).toBe(true)
   })
 })

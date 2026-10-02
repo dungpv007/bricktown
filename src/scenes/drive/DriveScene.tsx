@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import * as THREE from 'three'
+import { currentCity } from '../../core/cities'
 import { analyzeDrive, spawnPoint } from '../../core/drive'
+import BtCanvas from '../../render/BtCanvas'
 import { makeSizeOf, resolveSource } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
 import { useGame } from '../../state/useGame'
@@ -22,6 +24,8 @@ const SPAWN_DROP = 0.4
 /** Camera follow rate (1 / s): higher = tighter. */
 const FOLLOW_RATE = 4
 
+const CAMERA = { fov: 55, near: 0.5, far: 1500 }
+
 const tmpPos = new THREE.Vector3()
 const tmpQuat = new THREE.Quaternion()
 const tmpFwd = new THREE.Vector3()
@@ -34,8 +38,9 @@ function ChaseCamera({ target, length }: { target: RefObject<THREE.Group | null>
   const camera = useThree((s) => s.camera)
   const heading = useRef(new THREE.Vector3(0, 0, -1))
   const placed = useRef(false)
-  const distance = Math.max(20, length * 2.6)
-  const height = distance * 0.55
+  // Pulled well back and up, so a kid sees the streets around the car, not just its bumper.
+  const distance = Math.max(34, length * 4.2)
+  const height = distance * 0.9 // steeper: buildings beside the road block the view less
   const desired = useMemo(() => new THREE.Vector3(), [])
   const look = useMemo(() => new THREE.Vector3(), [])
 
@@ -49,7 +54,7 @@ function ChaseCamera({ target, length }: { target: RefObject<THREE.Group | null>
 
     const h = heading.current
     desired.set(tmpPos.x - h.x * distance, tmpPos.y + height, tmpPos.z - h.z * distance)
-    look.set(tmpPos.x + h.x * distance * 0.5, tmpPos.y, tmpPos.z + h.z * distance * 0.5)
+    look.set(tmpPos.x + h.x * distance * 0.3, tmpPos.y, tmpPos.z + h.z * distance * 0.3)
     if (placed.current) camera.position.lerp(desired, 1 - Math.exp(-FOLLOW_RATE * dt))
     else camera.position.copy(desired)
     placed.current = true
@@ -59,7 +64,7 @@ function ChaseCamera({ target, length }: { target: RefObject<THREE.Group | null>
 }
 
 function DriveWorld({ setup, spawn }: { setup: DrivableSetup; spawn: [number, number, number] }) {
-  const city = useGame((s) => s.data.city)
+  const city = useGame((s) => currentCity(s.data))
   const blueprints = useGame((s) => s.data.blueprints)
   const chassis = useRef<THREE.Group>(null)
   const length = setup.config.chassis.halfExtents[2] * 2
@@ -93,7 +98,7 @@ export default function DriveScene({ source, onChangeVehicle }: { source: string
   const setup = useMemo(() => (bricks ? analyzeDrive(bricks) : null), [bricks])
   const [spawn] = useState<[number, number, number]>(() => {
     const data = useGame.getState().data
-    const { x, z } = spawnPoint(data.city, makeSizeOf(data))
+    const { x, z } = spawnPoint(currentCity(data), makeSizeOf(data))
     return [x, SPAWN_DROP, z]
   })
 
@@ -106,11 +111,11 @@ export default function DriveScene({ source, onChangeVehicle }: { source: string
 
   return (
     <>
-      <Canvas shadows="percentage" dpr={[1, 1.5]} camera={{ fov: 55, near: 0.5, far: 1500 }} data-testid="drive-canvas">
+      <BtCanvas testId="drive-canvas" animated camera={CAMERA}>
         <color attach="background" args={[SKY]} />
         <fog attach="fog" args={[SKY, 250, 700]} />
         <DriveWorld setup={setup} spawn={spawn} />
-      </Canvas>
+      </BtCanvas>
       <DriveUI source={source} onChangeVehicle={onChangeVehicle} />
     </>
   )

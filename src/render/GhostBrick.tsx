@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { brickBodyGeometry } from '../core/parts/brickGeometry'
 import { brickCenter } from '../core/rotation'
 import type { FigStyle, Rot } from '../core/types'
+import { useFrameRequest } from './frameDriver'
 import { ghostMaterial } from './materials'
 
 interface Props {
@@ -38,11 +39,16 @@ export default function GhostBrick({ partId, fig, rot, anchor, valid, visible = 
   const meshRef = useRef<THREE.Mesh>(null)
   const shakeStart = useRef<number | null>(null)
   const firstShakeKey = useRef(shakeKey)
+  const invalidate = useThree((s) => s.invalidate)
   useEffect(() => {
-    if (shakeKey !== firstShakeKey.current) shakeStart.current = performance.now()
-  }, [shakeKey])
+    if (shakeKey === firstShakeKey.current) return
+    shakeStart.current = performance.now()
+    invalidate()
+  }, [shakeKey, invalidate])
 
   const shown = visible && anchor !== null
+  // The glow pulses while the ghost is up (render on demand: ask for frames).
+  useFrameRequest(shown, 'ambient')
   const a = anchor ?? ORIGIN
   const probe = { id: 'ghost', p: partId, x: a.x, y: a.y, z: a.z, r: rot, c: 0, ...(fig ? { fig } : {}) }
   const [cx, cy, cz] = brickCenter(probe)
@@ -59,8 +65,10 @@ export default function GhostBrick({ partId, fig, rot, anchor, valid, visible = 
     let offset = 0
     if (shakeStart.current !== null) {
       const t = (performance.now() - shakeStart.current) / 1000
-      if (t < SHAKE_SECONDS) offset = Math.sin(t * 60) * SHAKE_AMPLITUDE * (1 - t / SHAKE_SECONDS)
-      else shakeStart.current = null
+      if (t < SHAKE_SECONDS) {
+        offset = Math.sin(t * 60) * SHAKE_AMPLITUDE * (1 - t / SHAKE_SECONDS)
+        invalidate()
+      } else shakeStart.current = null
     }
     mesh.position.x = cx + offset
   })

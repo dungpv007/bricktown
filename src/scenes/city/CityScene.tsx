@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
+import { currentCity } from '../../core/cities'
 import { addRoads, CELL, placementCells, scaleOf } from '../../core/city'
 import { cellsOnLine, clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
 import { brushLine, eraseKeys, type RoadBrush } from '../../core/avenues'
@@ -12,17 +13,19 @@ import { paintTerrain, type TerrainBrush } from '../../core/terrain'
 import type { Baseplate, Blueprint, CityPlacement, CityState } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import BakedMeshes from '../../render/BakedMeshes'
+import BtCanvas from '../../render/BtCanvas'
 import { createGhostMaterial } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
 import { installShadowProxies } from '../../render/shadowProxies'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
+import { useSunShadow } from '../../render/useSunShadow'
 import { useApp } from '../../state/useApp'
 import { onCityReplaced } from '../../state/cityReplaced'
 import { useCityEditor } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
+import { useGraphics } from '../../state/useGraphics'
 import { useRoadBrush } from '../../state/useRoadBrush'
-import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
 import { fitCityFrame } from './cityFraming'
 import { cityScreen } from './cityScreen'
@@ -61,6 +64,7 @@ function Lights({ size }: { size: number }) {
   const span = size * CELL
   const mid = span / 2
   const target = useMemo(() => new THREE.Object3D(), [])
+  const { castShadow, mapSize } = useSunShadow(SHADOW_MAP_SIZE)
 
   useLayoutEffect(() => {
     const cam = light.current?.shadow.camera
@@ -86,8 +90,8 @@ function Lights({ size }: { size: number }) {
         target={target}
         position={[mid + span * 0.3, span * 0.6, mid + span * 0.2]}
         intensity={2.2}
-        castShadow
-        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+        castShadow={castShadow}
+        shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.05}
       />
@@ -209,7 +213,9 @@ function stopGlide(controls: MapControlsImpl) {
 function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
   const viewport = useThree((s) => s.size)
   const [start] = useState(() => {
-    const { city, blueprints } = useGame.getState().data
+    const { data } = useGame.getState()
+    const { blueprints } = data
+    const city = currentCity(data)
     let [x, z] = contentCenter(city, blueprints)
     let distance = startDistance(city, blueprints)
     const fit = fitCityFrame(framePoints(city, blueprints), {
@@ -364,13 +370,14 @@ const rayHit = new THREE.Vector3()
 const projected = new THREE.Vector3()
 
 function CityWorld() {
-  const city = useGame((s) => s.data.city)
+  const city = useGame((s) => currentCity(s.data))
   const blueprints = useGame((s) => s.data.blueprints)
   const roadMode = useCityEditor((s) => s.roadMode)
   const selectedSource = useCityEditor((s) => s.selectedSource)
   const selectedPlacementId = useCityEditor((s) => s.selectedPlacementId)
   const errorSeq = useCityEditor((s) => s.errorSeq)
   const npcOn = useApp((s) => s.npcOn)
+  const npcFactor = useGraphics().npcFactor
   const el = useThree((s) => s.gl.domElement)
   const getThree = useThree((s) => s.get)
 
@@ -423,7 +430,7 @@ function CityWorld() {
         return
       }
       const { data } = useGame.getState()
-      setPreview({ source, plan: planPlacement(data.city, source, point.x, point.z, makeSizeOf(data)) })
+      setPreview({ source, plan: planPlacement(currentCity(data), source, point.x, point.z, makeSizeOf(data)) })
     },
     [setPreview],
   )
@@ -485,7 +492,7 @@ function CityWorld() {
       }
       const hit = raycaster.ray.intersectPlane(GROUND_PLANE, rayHit)
       const point = hit ? { x: hit.x, z: hit.z } : null
-      const span = useGame.getState().data.city.size * CELL
+      const span = currentCity(useGame.getState().data).size * CELL
       const inside = point !== null && point.x >= 0 && point.z >= 0 && point.x < span && point.z < span
       return { placementId, point, inside }
     },
@@ -515,7 +522,7 @@ function CityWorld() {
     },
     tapOutside: () => useCityEditor.getState().selectPlacement(null),
     dragStart: (id, from) => {
-      const placement = useGame.getState().data.city.placements.find((p) => p.id === id)
+      const placement = currentCity(useGame.getState().data).placements.find((p) => p.id === id)
       if (!placement) return
       const c = placementCenter(placement, sizeOf(placement.source))
       moveRef.current = { placement, dx: c.x - from.x, dz: c.z - from.z, plan: null }
@@ -531,7 +538,7 @@ function CityWorld() {
         return
       }
       const { data } = useGame.getState()
-      m.plan = planMove(data.city, m.placement, point.x + m.dx, point.z + m.dz, makeSizeOf(data))
+      m.plan = planMove(currentCity(data), m.placement, point.x + m.dx, point.z + m.dz, makeSizeOf(data))
       setPreview({ source: m.placement.source, plan: m.plan })
     },
     dragEnd: (drop) => {
@@ -575,7 +582,7 @@ function CityWorld() {
       else if (s.kind === 'paint') {
         if (s.layer === 'road') ed.paintRoad(s.from, s.to, s.brush)
         else ed.paintRail(s.from, s.to)
-      } else if (s.layer === 'road') ed.eraseRoads(eraseKeys(useGame.getState().data.city.roads, s.keys, s.brush))
+      } else if (s.layer === 'road') ed.eraseRoads(eraseKeys(currentCity(useGame.getState().data).roads, s.keys, s.brush))
       else ed.eraseRails([...s.keys])
     },
     hover: updateHover,
@@ -637,7 +644,7 @@ function CityWorld() {
       {display.rails && <Rails rails={display.rails} roads={display.roads} shadows={false} />}
       <Placements placements={shown} blueprints={blueprints} shadowProxies />
       {/* Ambient life follows the saved city (not a stroke in progress); picking ignores it (see `pick`). */}
-      {npcOn && <NpcLife city={city} blueprints={blueprints} />}
+      {npcOn && npcFactor > 0 && <NpcLife city={city} blueprints={blueprints} density={npcFactor} />}
       {selected && selectedCells && (
         <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selectedCells.cw} cd={selectedCells.cd} color={SELECTED} opacity={0.55} />
       )}
@@ -647,14 +654,20 @@ function CityWorld() {
   )
 }
 
+/** Read imperatively (gestures, layout effects): a change asks for a frame. */
+const WATCH = [useGame, useCityEditor, useApp]
+
+/**
+ * The City renders on demand: frames come from input, edits and the camera; it only runs a loop (at
+ * the graphics frame cap) while something in it moves on its own (city life, water).
+ */
 export default function CityScene() {
   useEvictStaleBakesOnUnmount()
   return (
-    <Canvas shadows="percentage" dpr={[1, 1.5]} data-testid="city-canvas">
+    <BtCanvas testId="city-canvas" watch={WATCH}>
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 450, 900]} />
       <CityWorld />
-      <DevStats />
-    </Canvas>
+    </BtCanvas>
   )
 }

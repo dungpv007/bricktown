@@ -1,4 +1,7 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { levelOf } from '../state/graphics'
+import { useApp } from '../state/useApp'
+import { deviceSignals } from '../state/useGraphics'
 import { browserCanAnimateMenuBg } from './menuBgPolicy'
 
 /**
@@ -50,13 +53,16 @@ function useIdleAfterDelay(enabled: boolean): boolean {
 
 /** `paused`: something covers the whole menu (first-launch tour, save slots), so the town need not move. */
 export default function MenuBackdrop({ paused = false }: { paused?: boolean }) {
-  const [animate] = useState(browserCanAnimateMenuBg)
+  const [canAnimate] = useState(browserCanAnimateMenuBg)
+  // 🔋 Tiết kiệm pin keeps the poster: no 3D at all behind the menu.
+  const battery = useApp((s) => levelOf(s.graphicsPreset, deviceSignals()) === 'battery')
+  const animate = canAnimate && !battery
   const [still] = useState(stillRequested)
   const due = useIdleAfterDelay(animate)
   const [ready, setReady] = useState(false)
   const [lost, setLost] = useState(false)
   // A lost WebGL context (GPU reset, memory pressure) drops the town for this visit: back to the poster.
-  const live = due && !lost
+  const live = due && !lost && animate
   const onReady = useCallback(() => setReady(true), [])
   const onContextLost = useCallback(() => {
     setReady(false)

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { DEVICE_CLASSES, type DeviceClass } from './deviceClass'
+import { GRAPHICS_PRESETS, presetToggles, sanitizeToggles, type GraphicsPreset, type GraphicsToggles } from './graphics'
 
 export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive' | 'maze' | 'mazeDrive'
 export type Lang = 'vi' | 'en'
@@ -24,6 +25,10 @@ export interface AppState {
   colorsCollapsed: Partial<Record<DeviceClass, boolean>>
   /** Ambient City life (cars, trains, people) on; off by default when the device asks for reduced motion. */
   npcOn: boolean
+  /** Graphics preset (⚙️ Đồ họa); AUTO is decided from the device (see state/graphics). */
+  graphicsPreset: GraphicsPreset
+  /** The player's own toggles, used while the preset is 'custom'. */
+  graphicsCustom: GraphicsToggles
   setMode: (mode: Mode) => void
   setLang: (lang: Lang) => void
   setDifficulty: (difficulty: Difficulty) => void
@@ -34,6 +39,9 @@ export interface AppState {
   setSfxVolume: (volume: number) => void
   setColorsCollapsed: (deviceClass: DeviceClass, collapsed: boolean) => void
   setNpcOn: (on: boolean) => void
+  setGraphicsPreset: (preset: GraphicsPreset) => void
+  /** Switches to 'custom' with these toggles. */
+  setGraphicsCustom: (toggles: GraphicsToggles) => void
 }
 
 /** Whether the colour picker is folded on `deviceClass`: the kid's choice, else folded on portrait phones only. */
@@ -83,7 +91,13 @@ const LANGS: readonly Lang[] = ['vi', 'en']
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal']
 const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
 
-type Prefs = Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed' | 'npcOn'>
+type Prefs = Pick<
+  AppState,
+  'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed' | 'npcOn' | 'graphicsPreset' | 'graphicsCustom'
+>
+
+/** Custom toggles before the player made any: Cân bằng on a tablet. */
+const DEFAULT_CUSTOM: GraphicsToggles = presetToggles('balanced', 'tablet')
 
 /**
  * Keeps only persisted preference values that are valid; anything else falls back to defaults.
@@ -105,6 +119,8 @@ export function sanitizePrefs(persisted: unknown): Partial<Prefs> {
   if (typeof p.musicVolume === 'number' && Number.isFinite(p.musicVolume)) out.musicVolume = normalizeVolume(p.musicVolume)
   if (typeof p.sfxVolume === 'number' && Number.isFinite(p.sfxVolume)) out.sfxVolume = normalizeVolume(p.sfxVolume)
   if (typeof p.npcOn === 'boolean') out.npcOn = p.npcOn
+  if (GRAPHICS_PRESETS.includes(p.graphicsPreset as GraphicsPreset)) out.graphicsPreset = p.graphicsPreset as GraphicsPreset
+  if (p.graphicsCustom !== undefined) out.graphicsCustom = sanitizeToggles(p.graphicsCustom, DEFAULT_CUSTOM)
   if (typeof p.colorsCollapsed === 'object' && p.colorsCollapsed !== null) {
     const saved = p.colorsCollapsed as Record<string, unknown>
     const kept: Partial<Record<DeviceClass, boolean>> = {}
@@ -127,6 +143,8 @@ export const useApp = create<AppState>()(
       sfxVolume: DEFAULT_VOLUME,
       colorsCollapsed: {},
       npcOn: !prefersReducedMotion(),
+      graphicsPreset: 'auto',
+      graphicsCustom: DEFAULT_CUSTOM,
       setMode: (mode) => set({ mode }),
       setLang: (lang) => set({ lang }),
       setDifficulty: (difficulty) => set({ difficulty }),
@@ -138,6 +156,8 @@ export const useApp = create<AppState>()(
       setColorsCollapsed: (deviceClass, collapsed) =>
         set((s) => ({ colorsCollapsed: { ...s.colorsCollapsed, [deviceClass]: collapsed } })),
       setNpcOn: (npcOn) => set({ npcOn }),
+      setGraphicsPreset: (graphicsPreset) => set({ graphicsPreset }),
+      setGraphicsCustom: (toggles) => set({ graphicsPreset: 'custom', graphicsCustom: sanitizeToggles(toggles, DEFAULT_CUSTOM) }),
     }),
     {
       name: 'bricktown-prefs',
@@ -152,6 +172,8 @@ export const useApp = create<AppState>()(
         sfxVolume: s.sfxVolume,
         colorsCollapsed: s.colorsCollapsed,
         npcOn: s.npcOn,
+        graphicsPreset: s.graphicsPreset,
+        graphicsCustom: s.graphicsCustom,
       }),
       merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),
     },

@@ -1,4 +1,5 @@
 import { PLATE_MAX } from './baseplate'
+import { DEFAULT_CITY_SIZE, FIRST_CITY_ID, MAX_CITIES, emptyCity, sanitizeCityName } from './cities'
 import { MIN_SCALE, normalizeScale } from './city'
 import { COLORS } from './colors'
 import { newId } from './ids'
@@ -6,9 +7,9 @@ import { MINIFIG_PART, parseFig } from './figures'
 import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, isBorder, isCorner, type Cell, type Maze } from './maze'
 import { validateTemplate } from './template'
 import { normalizeCellKeys, normalizeTerrain } from './terrain'
-import type { Baseplate, Blueprint, Brick, CityPlacement, CityState, MazeChallenge, MazeRecord, SaveData, Template } from './types'
+import type { Baseplate, Blueprint, Brick, CityPlacement, CityState, MazeChallenge, MazeRecord, SavedCity, SaveData, Template } from './types'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 /** Best runs of the ready-made mazes are kept under `tpl:<template id>`. */
 const TEMPLATE_KEY_PREFIX = 'tpl:'
@@ -17,7 +18,8 @@ export function createEmptySave(): SaveData {
   return {
     schemaVersion: SCHEMA_VERSION,
     blueprints: [],
-    city: { size: 48, roads: [], placements: [] },
+    cities: [{ id: FIRST_CITY_ID, name: '', city: emptyCity(), createdAt: 0, updatedAt: 0 }],
+    currentCityId: FIRST_CITY_ID,
     workshop: { kind: 'building', baseplate: { w: 16, d: 16 }, bricks: [] },
     guided: null,
     completedTemplates: [],
@@ -50,6 +52,18 @@ export const MIGRATIONS: Record<number, Migration> = {
     mazeRecords: isRecord(data.mazeRecords) ? data.mazeRecords : {},
     mazeChallenges: isRecord(data.mazeChallenges) ? data.mazeChallenges : {},
   }),
+  /**
+   * v4 keeps many cities per slot: the one `city` becomes the first of `cities` (default name, shown
+   * in the kid's language) and the current one. Nothing else changes. A save without a city object
+   * stays without `cities`, so it is still refused as unreadable (and backed up) instead of
+   * silently starting over.
+   */
+  3: (data) => {
+    const { city, ...rest } = data
+    if (!isRecord(city)) return rest
+    const first: SavedCity = { id: FIRST_CITY_ID, name: '', city: city as unknown as CityState, createdAt: 0, updatedAt: 0 }
+    return { ...rest, cities: [first], currentCityId: FIRST_CITY_ID }
+  },
 }
 // `CityState.terrain` and `CityState.rails` were added during v3 without a bump: both optional (absent
 // = all grass / no railway); `normalize` keeps only valid keys and drops water under roads or rails.
@@ -82,10 +96,10 @@ export function migrate(raw: unknown): SaveData {
     data = { ...step(data), schemaVersion: version + 1 }
     version += 1
   }
-  if (!Array.isArray(data.blueprints) || !isRecord(data.city) || !isRecord(data.workshop)) {
+  if (!Array.isArray(data.blueprints) || !Array.isArray(data.cities) || !isRecord(data.workshop)) {
     throw new Error(UNSUPPORTED)
   }
-  return normalize(data, data.city, data.workshop)
+  return normalize(data, data.cities, data.workshop)
 }
 
 const KINDS: readonly string[] = ['building', 'vehicle', 'prop']
@@ -97,17 +111,22 @@ const arrayOr = <T>(v: unknown, fallback: T[]): T[] => (Array.isArray(v) ? (v as
  * Fills in whatever a hand-edited or older file left out with the empty-save defaults, so the rest
  * of the app can trust the shape (a missing `guided` or `city.roads` must not crash a scene).
  */
-function normalize(data: Record<string, unknown>, city: Record<string, unknown>, workshop: Record<string, unknown>): SaveData {
+function normalize(data: Record<string, unknown>, rawCities: unknown[], workshop: Record<string, unknown>): SaveData {
   const empty = createEmptySave()
+  const { cities, currentCityId } = normalizeCities(rawCities, data.currentCityId)
   const baseplate = workshop.baseplate
   const guided = data.guided
+  // A stray v3 `city` (hand-edited file) must not ride along beside `cities`.
+  const { city: _legacyCity, ...known } = data
+  void _legacyCity
   return {
-    ...(data as unknown as SaveData),
+    ...(known as unknown as SaveData),
     schemaVersion: SCHEMA_VERSION,
     blueprints: arrayOr<Blueprint>(data.blueprints, []).map((bp) =>
       isRecord(bp) && Array.isArray(bp.bricks) ? { ...bp, bricks: normalizeBricks(bp.bricks) } : bp,
     ),
-    city: normalizeCity(city, empty.city.size),
+    cities,
+    currentCityId,
     workshop: {
       kind: typeof workshop.kind === 'string' && KINDS.includes(workshop.kind) ? (workshop.kind as SaveData['workshop']['kind']) : empty.workshop.kind,
       baseplate:
@@ -240,6 +259,48 @@ function normalizeMazeRecords(raw: unknown): Record<string, MazeRecord> {
     out[key] = { timeMs, stars, coins }
   }
   return out
+}
+
+/**
+ * The kid's cities as stored, repaired without losing any that can be read: entries without a city
+ * object are dropped; a duplicate (or missing) id gets a new one; names are cleaned (controls and
+ * hiding characters out, trimmed, at most 40 characters; '' = the default name); timestamps default
+ * to 0. An empty list gets one empty city; more than `MAX_CITIES` keeps the first ones, always with
+ * the current city among them; a current id that matches no city falls back to the first city.
+ */
+function normalizeCities(raw: unknown[], rawCurrent: unknown): { cities: SavedCity[]; currentCityId: string } {
+  const taken = new Set<string>()
+  const fresh = () => {
+    let id = newId('city')
+    while (taken.has(id)) id = newId('city')
+    return id
+  }
+  let cities: SavedCity[] = []
+  let current: SavedCity | undefined
+  for (const c of raw) {
+    if (!isRecord(c) || !isRecord(c.city)) continue
+    const keep = typeof c.id === 'string' && c.id !== '' && !taken.has(c.id)
+    const id = keep ? (c.id as string) : fresh()
+    taken.add(id)
+    const saved: SavedCity = {
+      id,
+      name: sanitizeCityName(c.name),
+      city: normalizeCity(c.city, DEFAULT_CITY_SIZE),
+      createdAt: isFiniteNumber(c.createdAt) ? c.createdAt : 0,
+      updatedAt: isFiniteNumber(c.updatedAt) ? c.updatedAt : 0,
+    }
+    // The current city is the first one with that id (a duplicate that got a new id is not it).
+    if (keep && id === rawCurrent) current = saved
+    cities.push(saved)
+  }
+  if (cities.length === 0) {
+    cities = [{ id: FIRST_CITY_ID, name: '', city: emptyCity(), createdAt: 0, updatedAt: 0 }]
+  }
+  if (cities.length > MAX_CITIES) {
+    const first = cities.slice(0, MAX_CITIES)
+    cities = current && !first.includes(current) ? [...first.slice(0, MAX_CITIES - 1), current] : first
+  }
+  return { cities, currentCityId: (current ?? cities[0]).id }
 }
 
 /**

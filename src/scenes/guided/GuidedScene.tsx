@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGuidedTemplate } from '../../state/guidedTemplates'
 import { COLORS, GLASS_COLOR } from '../../core/colors'
@@ -13,6 +13,8 @@ import { findMatch, placedBricks } from '../../core/template'
 import type { Brick, FigStyle, GuidedState, Rot, Template } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import { useTap } from '../../input/useTap'
+import BtCanvas from '../../render/BtCanvas'
+import { useFrameRequest } from '../../render/frameDriver'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks, { brickOfInstance } from '../../render/InstancedBricks'
 import { useApp } from '../../state/useApp'
@@ -86,6 +88,8 @@ function TargetGhost({ brick, pulse = true, onPointer }: { brick: Brick; pulse?:
   })
   useEffect(() => () => material.dispose(), [material])
   const meshRef = useRef<THREE.Mesh>(null)
+  // Render on demand: the pulse asks for frames (at the ambient rate) while it runs.
+  useFrameRequest(pulse, 'ambient')
   useFrame(({ clock }) => {
     const mat = meshRef.current?.material as THREE.MeshStandardMaterial | undefined
     if (!mat) return
@@ -124,15 +128,17 @@ function PlacePop({ brick }: { brick: Brick }) {
   useEffect(() => () => material.dispose(), [material])
   const meshRef = useRef<THREE.Mesh>(null)
   const start = useRef<number | null>(null)
-  useFrame(({ clock }) => {
+  useFrame(({ clock, invalidate }) => {
     const mesh = meshRef.current
     if (!mesh || !mesh.visible) return
     if (start.current === null) start.current = clock.elapsedTime
     const k = (clock.elapsedTime - start.current) / POP_SECONDS
     if (k >= 1) {
       mesh.visible = false
+      invalidate() // one more frame without the puff
       return
     }
+    invalidate() // the next step of the puff
     mesh.scale.setScalar(1 + 0.3 * k)
     ;(mesh.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - k)
   })
@@ -382,13 +388,16 @@ function GuidedWorld() {
   return <TemplateWorld template={template} guided={celebration ? null : guided} celebrating={celebration !== null} />
 }
 
+/** Read imperatively (the drag, the hint hand): a change asks for a frame. */
+const WATCH = [useGame, useGuided, useGuidedDrag]
+
 /** 3D view of a Guided Build: placed bricks, pulsing ghosts for the bricks of the current step. */
 export default function GuidedScene() {
   return (
-    <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="guided-canvas">
+    <BtCanvas testId="guided-canvas" watch={WATCH}>
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 80, 220]} />
       <GuidedWorld />
-    </Canvas>
+    </BtCanvas>
   )
 }
