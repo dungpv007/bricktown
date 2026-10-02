@@ -53,7 +53,7 @@ export const GAMES: readonly GameDef[] = [
     name: { vi: 'Tiệm bánh', en: 'Bakery' },
     color: 'var(--bt-orange)',
     templates: ['bakery'],
-    scene: null, // G2: lazyScene(() => import('./bakery/BakeryGame'))
+    scene: lazyScene(() => import('./bakery/BakeryGame')),
   },
 
   {

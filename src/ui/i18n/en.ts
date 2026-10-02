@@ -307,6 +307,8 @@ export const en: Record<keyof typeof vi, string> = {
   mazeChallengeDone: 'Beaten',
   guidedShared: 'Shared with me',
   mazeSeconds: '{n}s',
+  bakeryFrosting: 'Pick the frosting',
+  bakeryRoundCoins: 'Coins this round',
   menuRolePlay: 'Role play',
   playCoins: 'Coins',
   playStart: 'Start',

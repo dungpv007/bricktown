@@ -305,6 +305,8 @@ export const vi = {
   mazeChallengeDone: 'Đã vượt',
   guidedShared: 'Được chia sẻ',
   mazeSeconds: '{n}s',
+  bakeryFrosting: 'Chọn màu kem',
+  bakeryRoundCoins: 'Xu lượt này',
   menuRolePlay: 'Nhập vai',
   playCoins: 'Xu',
   playStart: 'Bắt đầu',
