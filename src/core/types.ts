@@ -1,4 +1,5 @@
 import type { Maze } from './maze'
+import type { PlayData } from '../play/types'
 
 /** Rotation in quarter turns counter-clockwise around +Y (viewed from above). */
 export type Rot = 0 | 1 | 2 | 3
@@ -194,4 +195,9 @@ export interface SaveData {
   mazeRecords: Record<string, MazeRecord>
   /** A friend's time to beat, keyed by maze id. */
   mazeChallenges: Record<string, MazeChallenge>
+  /**
+   * Role-play rewards (coins, stickers, shop items; see play/types). Optional and added during v4
+   * without a bump: absent = nothing earned yet; `normalize` repairs it (see `normalizePlay`).
+   */
+  play?: PlayData
 }

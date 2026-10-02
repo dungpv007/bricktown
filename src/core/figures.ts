@@ -109,6 +109,23 @@ export const FIG_PRESETS: FigPreset[] = [
     name: { vi: 'Đầu bếp sushi', en: 'Sushi chef' },
     style: { torso: 0, legs: 1, arms: 0, face: 'smile', hat: 'chef', print: 'apron' },
   },
+  // Shop items (play/unlocks): locked in the palettes until bought with role-play coins. They only
+  // combine existing hats, prints and colours, so no save value is new.
+  {
+    id: 'king',
+    name: { vi: 'Nhà vua', en: 'King' },
+    style: { torso: 22, legs: 1, arms: 22, face: 'beard', hat: 'crown', print: 'suit' },
+  },
+  {
+    id: 'princess',
+    name: { vi: 'Công chúa', en: 'Princess' },
+    style: { torso: 12, legs: 27, face: 'smile', hat: 'crown', print: 'plain' },
+  },
+  {
+    id: 'superstar',
+    name: { vi: 'Siêu sao', en: 'Superstar' },
+    style: { torso: 29, legs: 1, face: 'glasses', hat: 'cap', hatColor: 13, print: 'stripes' },
+  },
 ]
 
 const PRESET_BY_ID: Record<string, FigPreset> = Object.fromEntries(FIG_PRESETS.map((p) => [p.id, p]))

@@ -6,6 +6,7 @@ import type { PartCategory, PartDef, PartShape } from '../core/types'
 import { usePaletteDrag } from '../input/paletteDrag'
 import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
+import { LockedButton, useLocked } from '../play/ui/locks'
 import { getPartThumbnail } from '../render/thumbnails'
 import { FigureImage } from './FigureEditor'
 import { useT, type TKey } from './i18n'
@@ -169,10 +170,71 @@ function PaletteButton({ select, toggle, dragToPlace, className, ...rest }: Pale
   )
 }
 
+/** A ready-made figure in the palette, or its 🔒 button while it is a shop item not bought yet. */
+function FigurePresetButton({ preset, current, dragToPlace }: { preset: (typeof FIG_PRESETS)[number]; current: string | null; dragToPlace: boolean }) {
+  const lang = useApp((s) => s.lang)
+  const price = useLocked('figure', preset.id)
+  const select = () => useEditor.getState().setPart(MINIFIG_PART)
+  if (price !== null) {
+    return (
+      <LockedButton testId={`fig-preset-${preset.id}`} label={preset.name[lang]} price={price} className="bt-btn bt-part-btn bt-fig-btn">
+        <FigureImage fig={preset.style} />
+      </LockedButton>
+    )
+  }
+  return (
+    <PaletteButton
+      className="bt-btn bt-part-btn bt-fig-btn"
+      data-testid={`fig-preset-${preset.id}`}
+      aria-label={preset.name[lang]}
+      aria-pressed={current === figKey(preset.style)}
+      dragToPlace={dragToPlace}
+      select={() => {
+        useEditor.getState().setFig(preset.style)
+        select()
+      }}
+      toggle={() => {
+        const ed = useEditor.getState()
+        if (current === figKey(preset.style)) return ed.setPart(null)
+        ed.setFig(preset.style)
+        select()
+      }}
+    >
+      <FigureImage fig={preset.style} />
+    </PaletteButton>
+  )
+}
+
+/** A catalog part in the palette, or its 🔒 button while it is a shop item not bought yet. */
+function PartButton({ part, color, hex, dragToPlace, lockable }: { part: PartDef; color: number; hex: string; dragToPlace: boolean; lockable: boolean }) {
+  const partId = useEditor((s) => s.partId)
+  const price = useLocked('part', part.id)
+  if (price !== null && lockable) {
+    return (
+      <LockedButton testId={`part-${part.id}`} label={sizeLabel(part)} price={price} className="bt-btn bt-part-btn">
+        <PartButtonImage part={part} color={color} hex={hex} />
+      </LockedButton>
+    )
+  }
+  return (
+    <PaletteButton
+      className="bt-btn bt-part-btn"
+      data-testid={`part-${part.id}`}
+      aria-label={sizeLabel(part)}
+      aria-pressed={partId === part.id}
+      dragToPlace={dragToPlace}
+      select={() => useEditor.getState().setPart(part.id)}
+      toggle={() => useEditor.getState().togglePart(part.id)}
+    >
+      <PartButtonImage part={part} color={color} hex={hex} />
+      <span className="bt-part-label">{sizeLabel(part)}</span>
+    </PaletteButton>
+  )
+}
+
 /** The figure tab: ✏️ (customise the figure to place, shown in its current look), then the ready-made figures. */
 function FigureButtons({ dragToPlace }: { dragToPlace: boolean }) {
   const t = useT()
-  const lang = useApp((s) => s.lang)
   const partId = useEditor((s) => s.partId)
   const fig = useEditor((s) => s.fig)
   const select = () => useEditor.getState().setPart(MINIFIG_PART)
@@ -192,26 +254,7 @@ function FigureButtons({ dragToPlace }: { dragToPlace: boolean }) {
         <span className="bt-fig-edit-badge" aria-hidden="true">✏️</span>
       </button>
       {FIG_PRESETS.map((p) => (
-        <PaletteButton
-          key={p.id}
-          className="bt-btn bt-part-btn bt-fig-btn"
-          data-testid={`fig-preset-${p.id}`}
-          aria-label={p.name[lang]}
-          aria-pressed={current === figKey(p.style)}
-          dragToPlace={dragToPlace}
-          select={() => {
-            useEditor.getState().setFig(p.style)
-            select()
-          }}
-          toggle={() => {
-            const ed = useEditor.getState()
-            if (current === figKey(p.style)) return ed.setPart(null)
-            ed.setFig(p.style)
-            select()
-          }}
-        >
-          <FigureImage fig={p.style} />
-        </PaletteButton>
+        <FigurePresetButton key={p.id} preset={p} current={current} dragToPlace={dragToPlace} />
       ))}
     </>
   )
@@ -232,8 +275,6 @@ export default function PartPalette({ allowedParts, dragToPlace = false }: Props
   const color = useEditor((s) => s.color)
   const rot = useEditor((s) => s.rot)
   const setCategory = useEditor((s) => s.setCategory)
-  const setPart = useEditor((s) => s.setPart)
-  const togglePart = useEditor((s) => s.togglePart)
   const rotateCurrent = useEditor((s) => s.rotateCurrent)
   const hex = COLORS[color]?.hex ?? '#ffffff'
   const current = partId === null ? undefined : PARTS.find((p) => p.id === partId)
@@ -277,19 +318,7 @@ export default function PartPalette({ allowedParts, dragToPlace = false }: Props
         </button>
         {!allowedParts && category === 'figure' && <FigureButtons dragToPlace={dragToPlace} />}
         {(allowedParts || category !== 'figure') && parts.map((p) => (
-          <PaletteButton
-            key={p.id}
-            className="bt-btn bt-part-btn"
-            data-testid={`part-${p.id}`}
-            aria-label={sizeLabel(p)}
-            aria-pressed={partId === p.id}
-            dragToPlace={dragToPlace}
-            select={() => setPart(p.id)}
-            toggle={() => togglePart(p.id)}
-          >
-            <PartButtonImage part={p} color={color} hex={hex} />
-            <span className="bt-part-label">{sizeLabel(p)}</span>
-          </PaletteButton>
+          <PartButton key={p.id} part={p} color={color} hex={hex} dragToPlace={dragToPlace} lockable={!allowedParts} />
         ))}
       </div>
     </div>

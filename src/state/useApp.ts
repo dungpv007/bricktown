@@ -4,7 +4,16 @@ import { DEVICE_CLASSES, type DeviceClass } from './deviceClass'
 import { CITY_TIMES, type CityTime } from '../core/timeOfDay'
 import { GRAPHICS_PRESETS, presetToggles, sanitizeToggles, type GraphicsPreset, type GraphicsToggles } from './graphics'
 
-export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive' | 'maze' | 'mazeDrive'
+export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive' | 'maze' | 'mazeDrive' | 'play'
+
+/** The role-play game being played (mode 'play') and where Back returns to. */
+export interface PlaySession {
+  gameId: string
+  /** Started from a City placement's ▶️ (back to the City, same view) or from the menu's 🎮 card. */
+  from: 'city' | 'menu'
+  /** The placement whose ▶️ started it (the shop the kid tapped). */
+  placementId?: string
+}
 export type Lang = 'vi' | 'en'
 export type Difficulty = 'easy' | 'normal'
 export type SlotId = 1 | 2 | 3
@@ -34,6 +43,10 @@ export interface AppState {
   cityTime: CityTime
   /** City automatic day / night cycle (also needs the graphics switch, and no reduced motion). */
   cityTimeAuto: boolean
+  /** City ▶️ badges over the shops that offer a role-play game. */
+  playBadges: boolean
+  /** The role-play game in progress (mode 'play'); null otherwise. Not remembered. */
+  play: PlaySession | null
   setMode: (mode: Mode) => void
   setLang: (lang: Lang) => void
   setDifficulty: (difficulty: Difficulty) => void
@@ -49,6 +62,9 @@ export interface AppState {
   setGraphicsCustom: (toggles: GraphicsToggles) => void
   setCityTime: (time: CityTime) => void
   setCityTimeAuto: (on: boolean) => void
+  setPlayBadges: (on: boolean) => void
+  /** Opens a role-play game (mode 'play'). */
+  startPlay: (session: PlaySession) => void
 }
 
 /** Whether the colour picker is folded on `deviceClass`: the kid's choice, else folded on portrait phones only. */
@@ -100,7 +116,7 @@ const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
 
 type Prefs = Pick<
   AppState,
-  'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed' | 'npcOn' | 'graphicsPreset' | 'graphicsCustom' | 'cityTime' | 'cityTimeAuto'
+  'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed' | 'npcOn' | 'graphicsPreset' | 'graphicsCustom' | 'cityTime' | 'cityTimeAuto' | 'playBadges'
 >
 
 /** Custom toggles before the player made any: Cân bằng on a tablet. */
@@ -130,6 +146,7 @@ export function sanitizePrefs(persisted: unknown): Partial<Prefs> {
   if (p.graphicsCustom !== undefined) out.graphicsCustom = sanitizeToggles(p.graphicsCustom, DEFAULT_CUSTOM)
   if (CITY_TIMES.includes(p.cityTime as CityTime)) out.cityTime = p.cityTime as CityTime
   if (typeof p.cityTimeAuto === 'boolean') out.cityTimeAuto = p.cityTimeAuto
+  if (typeof p.playBadges === 'boolean') out.playBadges = p.playBadges
   if (typeof p.colorsCollapsed === 'object' && p.colorsCollapsed !== null) {
     const saved = p.colorsCollapsed as Record<string, unknown>
     const kept: Partial<Record<DeviceClass, boolean>> = {}
@@ -156,7 +173,10 @@ export const useApp = create<AppState>()(
       graphicsCustom: DEFAULT_CUSTOM,
       cityTime: 'noon',
       cityTimeAuto: false,
-      setMode: (mode) => set({ mode }),
+      playBadges: true,
+      play: null,
+      // Leaving a game (any route) ends its session.
+      setMode: (mode) => set(mode === 'play' ? { mode } : { mode, play: null }),
       setLang: (lang) => set({ lang }),
       setDifficulty: (difficulty) => set({ difficulty }),
       setSlot: (slotId) => set({ slotId }),
@@ -171,6 +191,8 @@ export const useApp = create<AppState>()(
       setGraphicsCustom: (toggles) => set({ graphicsPreset: 'custom', graphicsCustom: sanitizeToggles(toggles, DEFAULT_CUSTOM) }),
       setCityTime: (cityTime) => set({ cityTime }),
       setCityTimeAuto: (cityTimeAuto) => set({ cityTimeAuto }),
+      setPlayBadges: (playBadges) => set({ playBadges }),
+      startPlay: (play) => set({ mode: 'play', play }),
     }),
     {
       name: 'bricktown-prefs',
@@ -189,6 +211,7 @@ export const useApp = create<AppState>()(
         graphicsCustom: s.graphicsCustom,
         cityTime: s.cityTime,
         cityTimeAuto: s.cityTimeAuto,
+        playBadges: s.playBadges,
       }),
       merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),
     },

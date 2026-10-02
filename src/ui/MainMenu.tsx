@@ -11,6 +11,8 @@ import InstallHint from './InstallHint'
 import MenuBackdrop from './MenuBackdrop'
 import Onboarding, { onboardingPending } from './Onboarding'
 import SlotMenu from './SlotMenu'
+import SceneBoundary from './SceneBoundary'
+import { LazyPlayHub } from '../play/ui/ShopHost'
 
 type PlayMode = Exclude<Mode, 'menu'>
 
@@ -35,12 +37,13 @@ export default function MainMenu() {
   const [slotsOpen, setSlotsOpen] = useState(false)
   const [audioOpen, setAudioOpen] = useState(false)
   const [touring, setTouring] = useState(onboardingPending)
+  const [playOpen, setPlayOpen] = useState(false)
   // The share import dialogs (picker, preview, "added!") sit over the menu too: hold the town still under them.
   const importing = useShareImport((s) => s.pickerOpen || s.incoming !== null || s.done !== null)
 
   return (
     <div className="bt-screen bt-menu" data-testid="main-menu">
-      <MenuBackdrop paused={slotsOpen || audioOpen || touring || importing} />
+      <MenuBackdrop paused={slotsOpen || audioOpen || touring || importing || playOpen} />
       <h1 className="bt-title">{t('appTitle')}</h1>
       <div className="bt-cards bt-menu-cards">
         {CARDS.map((c) => (
@@ -55,6 +58,10 @@ export default function MainMenu() {
             {t(c.labelKey)}
           </button>
         ))}
+        <button className="bt-card" style={{ background: 'var(--bt-play-card, #e0457b)' }} data-testid="menu-play" onClick={() => setPlayOpen(true)}>
+          <span className="bt-card-icon" aria-hidden="true">🎮</span>
+          {t('menuRolePlay')}
+        </button>
       </div>
       <div className="bt-row">
         <button
@@ -128,6 +135,11 @@ export default function MainMenu() {
       <InstallHint />
       {audioOpen && <AudioSettings onClose={() => setAudioOpen(false)} />}
       {slotsOpen && <SlotMenu onClose={() => setSlotsOpen(false)} />}
+      {playOpen && (
+        <SceneBoundary>
+          <LazyPlayHub onClose={() => setPlayOpen(false)} />
+        </SceneBoundary>
+      )}
       <Onboarding onDone={() => setTouring(false)} />
     </div>
   )

@@ -1,0 +1,450 @@
+/* ---------- Role-play games (src/play): kit HUD, hub, City badges, shop locks ---------- */
+
+/* City: the ▶️ over a shop that offers a game (placed on screen by scenes/city/PlayBadges). */
+.bt-city-ui > .bt-play-badges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* only the badges take taps; the map still pans under the layer */
+}
+
+.bt-play-badges .bt-play-badge {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+}
+
+.bt-btn.bt-play-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(56px * var(--bt-s));
+  height: calc(56px * var(--bt-s));
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: calc(4px * var(--bt-s)) solid var(--bt-white);
+  border-radius: 50%;
+  background: var(--bt-yellow);
+  color: var(--bt-ink);
+  font-size: calc(26px * var(--bt-s));
+  line-height: 1;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(255, 213, 0, 0.7);
+  /* A soft pulsing glow (no movement: the badge stays an easy, still target). */
+  animation: bt-play-badge-glow 1.8s ease-out infinite;
+}
+
+@keyframes bt-play-badge-glow {
+  0% { box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25), 0 0 0 0 rgba(255, 213, 0, 0.75); }
+  70%, 100% { box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25), 0 0 0 calc(14px * var(--bt-s)) rgba(255, 213, 0, 0); }
+}
+
+/* The game screen: the canvas, then the kit's HTML overlays. */
+.bt-play-screen {
+  background: #cfe8f0;
+}
+
+.bt-play-hud-top {
+  position: absolute;
+  top: calc(12px * var(--bt-s) + var(--bt-safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Phones held upright: under the top bar, which is full there. */
+@media (max-width: 599.98px) {
+  .bt-play-hud-top {
+    top: calc(var(--bt-touch) + 20px * var(--bt-s) + var(--bt-safe-top));
+  }
+}
+
+.bt-btn.bt-coin-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(6px * var(--bt-s));
+  background: var(--bt-yellow);
+  cursor: default;
+  font-variant-numeric: tabular-nums;
+}
+
+.bt-btn.bt-coin-counter:active {
+  transform: none;
+}
+
+.bt-play-progress {
+  display: flex;
+  gap: calc(8px * var(--bt-s));
+  padding: calc(8px * var(--bt-s)) calc(12px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-play-progress-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(36px * var(--bt-s));
+  height: calc(36px * var(--bt-s));
+  border-radius: 50%;
+  background: #dfe6ea;
+  font-size: calc(22px * var(--bt-s));
+}
+
+.bt-play-progress-dot[data-done='true'] {
+  background: var(--bt-yellow);
+}
+
+.bt-play-overlay {
+  position: absolute;
+  inset: 0;
+  /* Under the top bar (z-index 10): its ← always works. */
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(16px * var(--bt-s) + var(--bt-safe-top)) calc(16px * var(--bt-s)) calc(16px * var(--bt-s) + var(--bt-safe-bottom));
+  box-sizing: border-box;
+  overflow: hidden;
+  background: rgba(27, 42, 65, 0.25);
+}
+
+.bt-play-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(16px * var(--bt-s));
+  max-width: 100%;
+  padding: calc(24px * var(--bt-s)) calc(32px * var(--bt-s));
+  box-sizing: border-box;
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--bt-shadow);
+  text-align: center;
+}
+
+.bt-play-card-icon {
+  font-size: calc(88px * var(--bt-s));
+  line-height: 1;
+}
+
+.bt-play-card-title {
+  font-size: calc(28px * var(--bt-s));
+  font-weight: 800;
+}
+
+.bt-btn.bt-play-big {
+  min-width: calc(96px * var(--bt-s));
+  min-height: calc(80px * var(--bt-s));
+  font-size: calc(36px * var(--bt-s));
+}
+
+.bt-play-earned {
+  font-size: calc(44px * var(--bt-s));
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.bt-play-new-stickers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(12px * var(--bt-s));
+}
+
+.bt-play-new-stickers .bt-sticker {
+  animation: bt-sticker-reveal 0.7s 0.4s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes bt-sticker-reveal {
+  0% { transform: scale(0) rotate(-30deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Stickers (summary, sticker book). */
+.bt-sticker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(4px * var(--bt-s));
+  width: calc(104px * var(--bt-s));
+  min-height: calc(104px * var(--bt-s));
+  padding: calc(8px * var(--bt-s));
+  box-sizing: border-box;
+  border: calc(4px * var(--bt-s)) dashed transparent;
+  border-radius: calc(20px * var(--bt-s));
+  background: #fff7d1;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.15);
+}
+
+.bt-sticker-big {
+  width: calc(140px * var(--bt-s));
+  min-height: calc(140px * var(--bt-s));
+}
+
+.bt-sticker[data-locked='true'] {
+  border-color: #c3ccd2;
+  background: #eef2f4;
+  box-shadow: none;
+}
+
+.bt-sticker[data-locked='true'] .bt-sticker-icon {
+  color: #a3b0b9;
+  font-weight: 800;
+}
+
+.bt-sticker-icon {
+  font-size: calc(44px * var(--bt-s));
+  line-height: 1;
+}
+
+.bt-sticker-big .bt-sticker-icon {
+  font-size: calc(64px * var(--bt-s));
+}
+
+.bt-sticker-name {
+  font-size: max(11px, calc(14px * var(--bt-s)));
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+}
+
+/* Order bubbles (drei Html, centred on the point above a customer's head). */
+.bt-order-bubble {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 18px;
+  background: var(--bt-white);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.18);
+  transform: translateY(-50%);
+  white-space: nowrap;
+  animation: bt-celebrate-in 0.4s ease-out both;
+}
+
+.bt-order-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  margin-left: -10px;
+  border: 10px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--bt-white);
+}
+
+.bt-order-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+}
+
+.bt-order-item img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+.bt-order-emoji {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.bt-order-count {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  padding: 0 5px;
+  border-radius: 10px;
+  background: var(--bt-ink);
+  color: var(--bt-white);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.bt-order-done {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bt-green);
+  color: var(--bt-white);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* The idle hint: a hand that taps (or slides for a drag). */
+.bt-hint-hand {
+  display: block;
+  font-size: 48px;
+  line-height: 1;
+  transform-origin: 50% 0;
+  animation: bt-hint-tap 1s ease-in-out infinite;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.3));
+}
+
+.bt-hint-hand-drag {
+  animation: bt-hint-drag 1.8s ease-in-out infinite;
+}
+
+@keyframes bt-hint-tap {
+  0%, 100% { transform: translate(-30%, 10%) scale(1); }
+  50% { transform: translate(-30%, -10%) scale(0.9); }
+}
+
+@keyframes bt-hint-drag {
+  0% { transform: translate(-30%, 10%); opacity: 0; }
+  15% { opacity: 1; }
+  80% { transform: translate(calc(-30% + var(--bt-hint-dx)), calc(10% + var(--bt-hint-dy))); opacity: 1; }
+  100% { transform: translate(calc(-30% + var(--bt-hint-dx)), calc(10% + var(--bt-hint-dy))); opacity: 0; }
+}
+
+/* Main menu: the 🎮 hub (game picker, sticker book, shop). */
+.bt-dialog.bt-play-hub {
+  width: min(100%, 820px);
+  max-height: 100%;
+}
+
+.bt-play-hub-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(12px * var(--bt-s));
+  width: 100%;
+}
+
+.bt-play-tabs {
+  display: flex;
+  gap: calc(8px * var(--bt-s));
+}
+
+.bt-play-games {
+  width: 100%;
+}
+
+.bt-play-games .bt-card {
+  position: relative;
+}
+
+.bt-play-soon {
+  padding: 2px calc(8px * var(--bt-s));
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--bt-ink);
+  font-size: max(11px, calc(14px * var(--bt-s)));
+}
+
+.bt-sticker-grid,
+.bt-shop-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(12px * var(--bt-s));
+  width: 100%;
+}
+
+.bt-play-count {
+  font-size: calc(22px * var(--bt-s));
+  font-weight: 800;
+}
+
+.bt-shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(6px * var(--bt-s));
+  width: calc(132px * var(--bt-s));
+  padding: calc(10px * var(--bt-s));
+  box-sizing: border-box;
+  border-radius: calc(20px * var(--bt-s));
+  background: var(--bt-white);
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-shop-item[data-owned='true'] {
+  background: #e4f6e8;
+}
+
+.bt-shop-pic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(72px * var(--bt-s));
+  height: calc(72px * var(--bt-s));
+  font-size: calc(48px * var(--bt-s));
+}
+
+.bt-shop-pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.bt-shop-name {
+  font-size: max(12px, calc(15px * var(--bt-s)));
+  font-weight: 700;
+  text-align: center;
+}
+
+.bt-btn.bt-shop-buy {
+  min-height: calc(48px * var(--bt-s));
+  padding: 0 calc(12px * var(--bt-s));
+  font-size: calc(20px * var(--bt-s));
+}
+
+.bt-btn.bt-shop-buy:disabled {
+  opacity: 0.5;
+}
+
+/* Palettes and the figure editor: a locked shop item shows 🔒 and its price. */
+.bt-locked {
+  position: relative;
+}
+
+.bt-locked > img,
+.bt-locked > .bt-part-emoji,
+.bt-locked > svg {
+  opacity: 0.45;
+  filter: grayscale(0.6);
+}
+
+.bt-lock-chip {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--bt-ink);
+  color: var(--bt-white);
+  font-size: max(10px, calc(12px * var(--bt-s)));
+  font-weight: 800;
+  line-height: 1.3;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-play-badge,
+  .bt-hint-hand,
+  .bt-order-bubble,
+  .bt-play-new-stickers .bt-sticker {
+    animation: none;
+  }
+}
