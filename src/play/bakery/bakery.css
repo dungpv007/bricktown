@@ -1,0 +1,185 @@
+/* 🎂 The bakery game (src/play/bakery). */
+
+.bt-bakery {
+  position: absolute;
+  inset: 0;
+}
+
+.bt-bakery-hud {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+}
+
+.bt-bakery-tally {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: calc(52px * var(--bt-s));
+  padding: 0 calc(14px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(24px * var(--bt-s));
+  font-weight: 800;
+  color: #7a4a00;
+}
+
+/* Frosting colours: big round blobs of cream along the bottom. */
+.bt-bakery-palette {
+  position: absolute;
+  left: 50%;
+  bottom: calc(14px * var(--bt-s) + var(--bt-safe-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: calc(12px * var(--bt-s));
+  padding: calc(10px * var(--bt-s)) calc(14px * var(--bt-s));
+  border-radius: calc(var(--bt-radius) * 1.6);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--bt-shadow);
+  animation: bt-bakery-rise 0.3s ease-out;
+}
+
+.bt-btn.bt-bakery-swatch {
+  position: relative;
+  width: max(var(--bt-touch), calc(64px * var(--bt-s)));
+  height: max(var(--bt-touch), calc(64px * var(--bt-s)));
+  min-width: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.65) 0 18%, transparent 19%), var(--bt-swatch);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s;
+}
+
+.bt-btn.bt-bakery-swatch[data-picked='true'] {
+  border-color: var(--bt-yellow, #ffd500);
+  transform: scale(1.12);
+  box-shadow: 0 0 0 4px rgba(255, 213, 0, 0.5);
+}
+
+.bt-bakery-palette-hint {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  font-size: 44px;
+  line-height: 1;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 2px rgba(0, 0, 0, 0.3));
+  animation: bt-bakery-tap 1s ease-in-out infinite;
+}
+
+/* The oven timer: a dial that fills over the bake, then rings. */
+.bt-bakery-timer {
+  --bt-fill: #ff8a1a;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: conic-gradient(var(--bt-fill) calc(var(--bt-p, 0) * 1turn), #fff 0);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  animation: bt-bakery-dial var(--bt-bake-ms, 3s) linear forwards;
+}
+
+.bt-bakery-timer::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.bt-bakery-timer-face {
+  position: relative;
+  font-size: 32px;
+  line-height: 1;
+  animation: bt-bakery-tick 0.5s ease-in-out infinite alternate;
+}
+
+.bt-bakery-timer[data-done='true'] {
+  --bt-fill: #ffd500;
+  animation: none;
+  --bt-p: 1;
+}
+
+.bt-bakery-timer[data-done='true'] .bt-bakery-timer-face {
+  animation: bt-bakery-ring 0.15s ease-in-out 6 alternate;
+}
+
+@property --bt-p {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+/* The bonus star for a cake like the picture. */
+.bt-bakery-star {
+  display: block;
+  font-size: 64px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.3));
+  animation: bt-bakery-star 0.6s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+/* Coins flying from the customer to the round's tally. */
+.bt-bakery-coin {
+  position: fixed;
+  z-index: 7;
+  margin: -18px 0 0 -18px;
+  font-size: 36px;
+  line-height: 1;
+  pointer-events: none;
+  animation: bt-bakery-fly 0.85s cubic-bezier(0.55, -0.35, 0.7, 1) both;
+}
+
+@keyframes bt-bakery-fly {
+  0% { transform: translate(0, 0) scale(0.3); opacity: 0; }
+  15% { transform: translate(0, -30px) scale(1.2); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0.6); opacity: 1; }
+}
+
+@keyframes bt-bakery-dial {
+  to { --bt-p: 1; }
+}
+
+@keyframes bt-bakery-tick {
+  from { transform: rotate(-12deg); }
+  to { transform: rotate(12deg); }
+}
+
+@keyframes bt-bakery-ring {
+  from { transform: rotate(-25deg) scale(1.1); }
+  to { transform: rotate(25deg) scale(1.1); }
+}
+
+@keyframes bt-bakery-star {
+  from { transform: scale(0) rotate(-90deg); }
+  to { transform: scale(1) rotate(0); }
+}
+
+@keyframes bt-bakery-rise {
+  from { transform: translate(-50%, 40px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+@keyframes bt-bakery-tap {
+  0%, 100% { transform: translate(-30%, 10%) scale(1); }
+  50% { transform: translate(-30%, -10%) scale(0.9); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-bakery-palette,
+  .bt-bakery-timer-face,
+  .bt-bakery-star,
+  .bt-bakery-palette-hint {
+    animation: none;
+  }
+  .bt-bakery-coin {
+    display: none;
+  }
+}
