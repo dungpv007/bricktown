@@ -1620,9 +1620,11 @@ form.bt-dialog,
   pointer-events: none;
 }
 
+/* The tools shrink (and scroll) before anything leaves the screen: a short phone shows part of the list. */
 .bt-city-left > .bt-toolbar {
   position: static;
-  flex: none;
+  flex: 0 1 auto;
+  min-height: calc(var(--bt-touch) * 2);
   max-height: none;
   pointer-events: auto;
 }
@@ -2663,6 +2665,11 @@ form.bt-dialog,
   .bt-city-ui .bt-toolbar-sep,
   .bt-maze-tools .bt-toolbar-sep {
     grid-column: 1 / -1;
+  }
+
+  /* Two columns are wider than the drawer's left margin: the City tools stop above it (and scroll). */
+  .bt-city-left > .bt-toolbar {
+    max-height: calc(100% - var(--bt-palette-h) - var(--bt-gap));
   }
 }
 

@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TEMPLATES } from '../../content/templates'
 import { MAX_SCALE, MIN_SCALE, scaleOf } from '../../core/city'
 import { buildCityPackage } from '../../core/share'
+import type { TerrainBrush } from '../../core/terrain'
 import type { Blueprint, Template } from '../../core/types'
 import { usePaletteDrag } from '../../input/paletteDrag'
 import { getThumbnail } from '../../render/thumbnails'
 import { isTemplateSource, resolveRenderable, templateSource } from '../../render/sources'
 import { useDeviceClass } from '../../state/deviceClass'
 import { useApp } from '../../state/useApp'
-import { useCityEditor } from '../../state/useCityEditor'
+import { useCityEditor, type PaintLayer } from '../../state/useCityEditor'
 import { useEditor, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import { KIND_ICON } from '../../ui/blueprintKinds'
@@ -19,39 +20,76 @@ import ShareDialog from '../../ui/share/ShareDialog'
 import TopRight from '../../ui/TopRight'
 import { useThumbnail } from '../../ui/useThumbnail'
 
-/** Left column, top: road mode (with its eraser while on), then undo / redo. */
+const PAINT_TOOLS: Array<{ layer: PaintLayer; icon: string; labelKey: TKey; eraserKey?: TKey }> = [
+  { layer: 'road', icon: '🛣️', labelKey: 'cityToolRoad', eraserKey: 'cityRoadEraser' },
+  { layer: 'rail', icon: '🛤️', labelKey: 'cityToolRail', eraserKey: 'cityRailEraser' },
+  { layer: 'terrain', icon: '🏞️', labelKey: 'cityToolTerrain' },
+]
+
+const TERRAIN_BRUSH_UI: Array<{ brush: TerrainBrush; icon: string; labelKey: TKey }> = [
+  { brush: 'water', icon: '💧', labelKey: 'terrainWater' },
+  { brush: 'pavement', icon: '⬜', labelKey: 'terrainPavement' },
+  { brush: 'sand', icon: '🟨', labelKey: 'terrainSand' },
+  { brush: 'grass', icon: '🟩', labelKey: 'terrainGrass' },
+]
+
+/**
+ * Left column, top: the painting tools (roads, rails, terrain), each followed while it is on by its
+ * own choices (the 🧽 eraser; the terrain brushes), then undo / redo. Scrolls when it is taller than
+ * the screen.
+ */
 function CityToolbar() {
   const t = useT()
-  const roadMode = useCityEditor((s) => s.roadMode)
+  const paintLayer = useCityEditor((s) => s.paintLayer)
   const roadTool = useCityEditor((s) => s.roadTool)
-  const setRoadMode = useCityEditor((s) => s.setRoadMode)
+  const terrainBrush = useCityEditor((s) => s.terrainBrush)
+  const setPaintLayer = useCityEditor((s) => s.setPaintLayer)
   const setRoadTool = useCityEditor((s) => s.setRoadTool)
+  const setTerrainBrush = useCityEditor((s) => s.setTerrainBrush)
   const undo = useCityEditor((s) => s.undo)
   const redo = useCityEditor((s) => s.redo)
   const canUndo = useCityEditor((s) => s.canUndo)
   const canRedo = useCityEditor((s) => s.canRedo)
   return (
-    <div className="bt-toolbar bt-hud-panel" role="toolbar" aria-orientation="vertical">
-      <button
-        className="bt-btn bt-icon-btn"
-        data-testid="city-road-mode"
-        aria-label={t('cityToolRoad')}
-        aria-pressed={roadMode}
-        onClick={() => setRoadMode(!roadMode)}
-      >
-        🛣️
-      </button>
-      {roadMode && (
-        <button
-          className="bt-btn bt-icon-btn"
-          data-testid="city-road-eraser"
-          aria-label={t('cityRoadEraser')}
-          aria-pressed={roadTool === 'erase'}
-          onClick={() => setRoadTool(roadTool === 'erase' ? 'paint' : 'erase')}
-        >
-          🧽
-        </button>
-      )}
+    <div className="bt-toolbar bt-hud-panel" role="toolbar" aria-orientation="vertical" data-testid="city-toolbar">
+      {PAINT_TOOLS.map(({ layer, icon, labelKey, eraserKey }) => (
+        <Fragment key={layer}>
+          <button
+            className="bt-btn bt-icon-btn"
+            data-testid={`city-${layer}-mode`}
+            aria-label={t(labelKey)}
+            aria-pressed={paintLayer === layer}
+            onClick={() => setPaintLayer(paintLayer === layer ? null : layer)}
+          >
+            {icon}
+          </button>
+          {paintLayer === layer && eraserKey && (
+            <button
+              className="bt-btn bt-icon-btn bt-city-subtool"
+              data-testid={`city-${layer}-eraser`}
+              aria-label={t(eraserKey)}
+              aria-pressed={roadTool === 'erase'}
+              onClick={() => setRoadTool(roadTool === 'erase' ? 'paint' : 'erase')}
+            >
+              🧽
+            </button>
+          )}
+          {paintLayer === layer &&
+            layer === 'terrain' &&
+            TERRAIN_BRUSH_UI.map(({ brush, icon: brushIcon, labelKey: brushKey }) => (
+              <button
+                key={brush}
+                className="bt-btn bt-icon-btn bt-city-subtool"
+                data-testid={`city-terrain-${brush}`}
+                aria-label={t(brushKey)}
+                aria-pressed={terrainBrush === brush}
+                onClick={() => setTerrainBrush(brush)}
+              >
+                {brushIcon}
+              </button>
+            ))}
+        </Fragment>
+      ))}
       <div className="bt-toolbar-sep" aria-hidden="true" />
       <button className="bt-btn bt-icon-btn" data-testid="city-undo" aria-label={t('toolUndo')} disabled={!canUndo} onClick={undo}>
         ↶
@@ -259,7 +297,10 @@ function SourceDrawer() {
 function ShareCity() {
   const t = useT()
   const [open, setOpen] = useState(false)
-  const empty = useGame((s) => s.data.city.placements.length === 0 && s.data.city.roads.length === 0)
+  const empty = useGame((s) => {
+    const { placements, roads, rails, terrain } = s.data.city
+    return placements.length === 0 && roads.length === 0 && !rails?.length && !terrain
+  })
   const build = useCallback(() => {
     const { city, blueprints } = useGame.getState().data
     return buildCityPackage(city, blueprints, { name: t('shareCityName') })

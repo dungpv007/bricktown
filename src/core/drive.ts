@@ -77,7 +77,7 @@ const cellCenter = (cx: number, cz: number) => ({ x: (cx + 0.5) * CELL, z: (cz +
 
 /**
  * Where the car starts (facing -Z): the first road cell with road ahead of it, else the first
- * road cell, else the free cell nearest the city centre.
+ * road cell, else the free dry cell nearest the city centre.
  */
 export function spawnPoint(city: CityState, sizeOf: SizeOf): { x: number; z: number } {
   const cells = city.roads.map((key) => key.split(',').map(Number) as [number, number])
@@ -88,7 +88,8 @@ export function spawnPoint(city: CityState, sizeOf: SizeOf): { x: number; z: num
     return cellCenter(cx, cz)
   }
 
-  const covered = new Set<string>()
+  // Not under a model, not in the water.
+  const covered = new Set<string>(city.terrain?.water ?? [])
   for (const p of city.placements) {
     const { cw, cd } = placementCells(p, sizeOf(p.source))
     for (let x = p.cx; x < p.cx + cw; x++) for (let z = p.cz; z < p.cz + cd; z++) covered.add(roadKey(x, z))

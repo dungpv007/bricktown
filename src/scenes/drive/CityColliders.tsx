@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { CELL } from '../../core/city'
 import { isSolidBox, placementWorldBox, type Box } from '../../core/drive'
+import { cellRuns } from '../../core/terrain'
 import type { Blueprint, CityState } from '../../core/types'
 import { bakedModelBox } from '../../render/placementTransform'
 import { resolveRenderable } from '../../render/sources'
@@ -22,7 +23,7 @@ interface Solid {
 
 /**
  * Static physics for the city: a ground slab under the plate and the land around it, invisible
- * walls at the plate edge, and one fixed box per placed model taller than `MIN_SOLID_HEIGHT` (its baked
+ * walls at the plate edge and around water, and one fixed box per placed model taller than `MIN_SOLID_HEIGHT` (its baked
  * bounding box, turned, scaled and moved like the drawn model).
  */
 export default function CityColliders({ city, blueprints }: { city: CityState; blueprints: Blueprint[] }) {
@@ -55,6 +56,9 @@ export default function CityColliders({ city, blueprints }: { city: CityState; b
     return out
   }, [city.placements, blueprints])
 
+  // Water is out of bounds: a wall box over each row of water cells (rails, sand and pavement are driven on).
+  const water = useMemo(() => cellRuns(city.terrain?.water ?? []), [city.terrain])
+
   const span = city.size * CELL
   const mid = span / 2
   const groundHalf = mid + GROUND_BORDER
@@ -69,6 +73,14 @@ export default function CityColliders({ city, blueprints }: { city: CityState; b
       <CuboidCollider args={[t, wallY, wallHalfLen]} position={[span + t, wallY, mid]} friction={BUILDING_FRICTION} />
       <CuboidCollider args={[wallHalfLen, wallY, t]} position={[mid, wallY, -t]} friction={BUILDING_FRICTION} />
       <CuboidCollider args={[wallHalfLen, wallY, t]} position={[mid, wallY, span + t]} friction={BUILDING_FRICTION} />
+      {water.map((r) => (
+        <CuboidCollider
+          key={`w${r.cx0},${r.cz}`}
+          args={[((r.cx1 - r.cx0) * CELL) / 2, wallY, CELL / 2]}
+          position={[((r.cx0 + r.cx1) / 2) * CELL, wallY, (r.cz + 0.5) * CELL]}
+          friction={BUILDING_FRICTION}
+        />
+      ))}
       {solids.map((s) => (
         <CuboidCollider key={s.id} args={s.half} position={s.center} friction={BUILDING_FRICTION} />
       ))}

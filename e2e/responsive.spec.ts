@@ -202,6 +202,47 @@ async function expectCityActionsFit(page: Page) {
   }
 }
 
+/**
+ * The City tool bar: on screen, clear of the drawer, every tool a big touch target, and every tool
+ * reachable (shown in full, or scrolled to inside the bar when the list is taller than the screen).
+ */
+async function expectCityToolsFit(page: Page) {
+  const r = await page.evaluate(() => {
+    const box = (el: Element) => {
+      const b = el.getBoundingClientRect()
+      return { x: b.x, y: b.y, w: b.width, h: b.height }
+    }
+    const bar = document.querySelector('[data-testid="city-toolbar"]')
+    const drawer = document.querySelector('[data-testid="city-drawer"]')
+    if (!bar || !drawer) return null
+    const scrolls = bar.scrollHeight > bar.clientHeight + 1 || bar.scrollWidth > bar.clientWidth + 1
+    const cs = getComputedStyle(bar)
+    const tools = [...bar.querySelectorAll('button')].map((b) => {
+      b.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      const t = box(b)
+      const outer = box(bar)
+      const inside = t.x >= outer.x - 1 && t.y >= outer.y - 1 && t.x + t.w <= outer.x + outer.w + 1 && t.y + t.h <= outer.y + outer.h + 1
+      return { name: b.getAttribute('data-testid') ?? '', w: t.w, h: t.h, inside }
+    })
+    bar.scrollTo(0, 0)
+    return { bar: box(bar), drawer: box(drawer), tools, scrolls, scrollable: /(auto|scroll)/.test(cs.overflowY + cs.overflowX), vw: innerWidth, vh: innerHeight }
+  })
+  expect(r, 'city toolbar is shown').not.toBeNull()
+  if (!r) return
+  expect(r.bar.x).toBeGreaterThanOrEqual(-1)
+  expect(r.bar.y).toBeGreaterThanOrEqual(-1)
+  expect(r.bar.x + r.bar.w).toBeLessThanOrEqual(r.vw + 1)
+  expect(r.bar.y + r.bar.h).toBeLessThanOrEqual(r.vh + 1)
+  const ix = Math.min(r.bar.x + r.bar.w, r.drawer.x + r.drawer.w) - Math.max(r.bar.x, r.drawer.x)
+  const iy = Math.min(r.bar.y + r.bar.h, r.drawer.y + r.drawer.h) - Math.max(r.bar.y, r.drawer.y)
+  expect(ix > 1 && iy > 1, 'the tool bar overlaps the drawer').toBe(false)
+  if (r.scrolls) expect(r.scrollable, 'a tool list taller than the screen scrolls').toBe(true)
+  for (const t of r.tools) {
+    expect(t.inside, `${t.name} can be reached`).toBe(true)
+    expect(Math.min(t.w, t.h), `${t.name} is a big touch target`).toBeGreaterThanOrEqual(40)
+  }
+}
+
 /** Opens the Sound dialog on the menu, checks it, and closes it with a backdrop tap. */
 async function checkAudioDialog(page: Page) {
   await page.getByTestId('audio-settings').click()
@@ -283,6 +324,16 @@ for (const [width, height] of [
     await page.getByTestId('city-road-mode').click()
     await expect(page.getByTestId('city-road-eraser')).toBeVisible()
     await expectTidy(page, 'city, road mode')
+    await expectCityToolsFit(page)
+    // Rails (with their eraser), then terrain with its four brushes: the longest tool list.
+    await page.getByTestId('city-rail-mode').click()
+    await expect(page.getByTestId('city-rail-eraser')).toBeVisible()
+    await expectTidy(page, 'city, rail mode')
+    await expectCityToolsFit(page)
+    await page.getByTestId('city-terrain-mode').click()
+    await expect(page.getByTestId('city-terrain-grass')).toBeAttached()
+    await expectTidy(page, 'city, terrain mode')
+    await expectCityToolsFit(page)
     await page.getByTestId('back').click()
 
     await page.getByTestId('menu-drive').click()

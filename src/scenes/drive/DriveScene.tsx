@@ -8,7 +8,9 @@ import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
 import { useGame } from '../../state/useGame'
 import CityGround from '../city/CityGround'
 import Placements from '../city/Placements'
+import Rails from '../city/Rails'
 import Roads from '../city/Roads'
+import Terrain from '../city/Terrain'
 import CityColliders from './CityColliders'
 import DriveUI from './DriveUI'
 import Sun from './Sun'
@@ -66,7 +68,9 @@ function DriveWorld({ setup, spawn }: { setup: DrivableSetup; spawn: [number, nu
       <Sun target={chassis} />
       <ChaseCamera target={chassis} length={length} />
       <CityGround size={city.size} />
+      <Terrain terrain={city.terrain} />
       <Roads roads={city.roads} />
+      {city.rails && <Rails rails={city.rails} roads={city.roads} />}
       <Placements placements={city.placements} blueprints={blueprints} />
       {/* Physics steps before the camera reads the car (lower priority runs first). */}
       <Physics timeStep={1 / 60} gravity={[0, -GRAVITY, 0]} updatePriority={-50}>

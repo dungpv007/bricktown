@@ -7,10 +7,25 @@ export function roadKey(cx: number, cz: number): string {
 }
 
 // Connection bitmask: N = -Z, E = +X, S = +Z, W = -X.
-const N = 1
-const E = 2
-const S = 4
-const W = 8
+export const N = 1
+export const E = 2
+export const S = 4
+export const W = 8
+
+/** The four directions as (bit, dx, dz), in mask order N, E, S, W. */
+export const DIRS: ReadonlyArray<{ bit: number; dx: number; dz: number }> = [
+  { bit: N, dx: 0, dz: -1 },
+  { bit: E, dx: 1, dz: 0 },
+  { bit: S, dx: 0, dz: 1 },
+  { bit: W, dx: -1, dz: 0 },
+]
+
+/** Which of the 4 neighbours of (cx, cz) are in `cells` (a N | E | S | W mask). */
+export function neighbourMask(cells: Set<string>, cx: number, cz: number): number {
+  let mask = 0
+  for (const d of DIRS) if (cells.has(roadKey(cx + d.dx, cz + d.dz))) mask |= d.bit
+  return mask
+}
 
 /** Rotate a connection mask 90 degrees counter-clockwise (viewed from above): N->W, W->S, S->E, E->N. */
 function rotateMask(mask: number): number {
@@ -46,18 +61,21 @@ const TILE_BY_MASK: Array<{ tile: RoadTile; rot: Rot }> = (() => {
   return table
 })()
 
-/** Which tile + rotation to render at (cx, cz), based on its 4 neighbours in `roads`. */
+/** Tile + rotation for a neighbour mask (see `neighbourMask`). A straight is rot 0 along Z (N-S), rot 1 along X. */
+export function tileForMask(mask: number): { tile: RoadTile; rot: Rot } {
+  return TILE_BY_MASK[mask & 15]
+}
+
+/**
+ * Which tile + rotation to render at (cx, cz), based on its 4 neighbours in `roads`. Works for any
+ * auto-tiled cell layer: rails use it with the rail cells.
+ */
 export function roadTileAt(
   roads: Set<string>,
   cx: number,
   cz: number,
 ): { tile: RoadTile; rot: Rot } {
-  let mask = 0
-  if (roads.has(roadKey(cx, cz - 1))) mask |= N
-  if (roads.has(roadKey(cx + 1, cz))) mask |= E
-  if (roads.has(roadKey(cx, cz + 1))) mask |= S
-  if (roads.has(roadKey(cx - 1, cz))) mask |= W
-  return TILE_BY_MASK[mask]
+  return TILE_BY_MASK[neighbourMask(roads, cx, cz)]
 }
 
 /**

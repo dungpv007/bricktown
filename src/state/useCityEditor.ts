@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import * as sfx from '../audio/sfx'
 import {
   addPlacement,
-  addRoads,
   MAX_SCALE,
   MIN_SCALE,
   movePlacement,
@@ -12,25 +11,38 @@ import {
   scalePlacement,
   type PlaceError,
 } from '../core/city'
-import { clampCell, duplicateCell, planPlacement, removeRoads, type Cell } from '../core/cityPlan'
+import { clampCell, duplicateCell, planPlacement, type Cell } from '../core/cityPlan'
 import { newId } from '../core/ids'
+import { eraseRails, eraseRoads, paintRails, paintRoads } from '../core/rails'
 import { paintRoadLine } from '../core/roads'
+import { paintTerrain, type TerrainBrush } from '../core/terrain'
 import type { CityState } from '../core/types'
 import { makeSizeOf, resolveRenderable } from '../render/sources'
 import { onCityReplaced } from './cityReplaced'
 import { createHistory } from './history'
 import { useGame } from './useGame'
 
-/** In road mode one finger paints roads, or erases them with the eraser. */
+/** In road (or rail) mode one finger paints roads (rails), or erases them with the eraser. */
 export type RoadTool = 'paint' | 'erase'
+
+/** The painting tools: roads, rails and terrain (water, pavement, sand, grass). */
+export type PaintLayer = 'road' | 'rail' | 'terrain'
 
 /** Why a city action was refused: a placement error, or 'nothing' when there was nothing to act on. */
 export type CityError = PlaceError | 'nothing'
 
 export interface CityEditorState {
-  /** Road mode: one-finger drags paint / erase roads; selecting and moving placements is off. */
+  /** The painting tool that is on, if any: one-finger drags paint with it instead of selecting / moving placements. */
+  paintLayer: PaintLayer | null
+  /**
+   * A painting tool is on (`paintLayer !== null`; the name predates rails and terrain): one-finger
+   * drags paint, selecting and moving placements is off.
+   */
   roadMode: boolean
+  /** Paint or erase, for the road and rail tools. */
   roadTool: RoadTool
+  /** What the terrain tool paints (grass = erase). */
+  terrainBrush: TerrainBrush
   /** Template (`tpl:<id>`) or blueprint id a tap on the empty ground quick-places (a Kho card). */
   selectedSource: string | null
   /** The selected placement: the action bar acts on it. */
@@ -42,9 +54,12 @@ export interface CityEditorState {
   errorSeq: number
   canUndo: boolean
   canRedo: boolean
-  /** Road mode on or off (either way the selection is dropped). */
+  /** Road mode on or off (either way the selection is dropped); `setPaintLayer('road' | null)`. */
   setRoadMode: (on: boolean) => void
+  /** Turns a painting tool on (null: off), with its eraser off; the selection is dropped. */
+  setPaintLayer: (layer: PaintLayer | null) => void
   setRoadTool: (tool: RoadTool) => void
+  setTerrainBrush: (brush: TerrainBrush) => void
   /** Picks the Kho card a tap on the ground quick-places; the same card again (or null) unpicks it. */
   selectSource: (source: string | null) => void
   selectPlacement: (id: string | null) => void
@@ -53,6 +68,12 @@ export interface CityEditorState {
   paintRoad: (from: Cell, to: Cell) => void
   /** Removes the road cells `keys` (one undo step); rejected when none of them is a road. */
   eraseRoads: (keys: string[]) => void
+  /** Paints an L-shaped railway from one cell to another; refused like roads (water, a bad level crossing). */
+  paintRail: (from: Cell, to: Cell) => void
+  /** Removes the rail cells `keys` (one undo step); rejected when none of them is a rail. */
+  eraseRails: (keys: string[]) => void
+  /** Paints the terrain brush on the cells `keys` (one undo step); rejected when nothing could change. */
+  paintTerrain: (keys: string[]) => void
   /**
    * Tap on the empty ground at world point (x, z), in studs: quick-places the picked source there
    * (facing a road) and selects it, or deselects when no source is picked.
@@ -142,9 +163,17 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
     set({ lastError: null, selectedPlacementId: kept ? id : null, ...historyFlags() })
   }
 
+  /** Commits a road / rail stroke result. */
+  const commitPaint = (before: CityState, result: { city: CityState | null; error: CityError | null }) =>
+    commit(before, result.city, result.error ?? 'overlap', sfx.snap)
+
+  const offPaint = { paintLayer: null, roadMode: false, roadTool: 'paint' } as const
+
   return {
+    paintLayer: null,
     roadMode: false,
     roadTool: 'paint',
+    terrainBrush: 'water',
     selectedSource: null,
     selectedPlacementId: null,
     draggedSource: null,
@@ -153,8 +182,10 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
     canUndo: false,
     canRedo: false,
 
-    setRoadMode: (on) => set({ roadMode: on, roadTool: 'paint', selectedPlacementId: null }),
+    setRoadMode: (on) => get().setPaintLayer(on ? 'road' : null),
+    setPaintLayer: (layer) => set({ paintLayer: layer, roadMode: layer !== null, roadTool: 'paint', selectedPlacementId: null }),
     setRoadTool: (roadTool) => set({ roadTool }),
+    setTerrainBrush: (terrainBrush) => set({ terrainBrush }),
     selectSource: (source) => set((s) => ({ selectedSource: source === s.selectedSource ? null : source })),
     selectPlacement: (id) => set({ selectedPlacementId: id }),
     setDraggedSource: (draggedSource) => set({ draggedSource }),
@@ -162,15 +193,32 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
     paintRoad: (from, to) => {
       const before = city()
       const keys = paintRoadLine([], clampCell(from, before.size), clampCell(to, before.size))
-      const after = addRoads(before, keys, sizeOf())
-      // Every cell was already a road or under a building: nothing changed, keep history clean.
-      const changed = after.roads.length !== before.roads.length
-      commit(before, changed ? after : null, 'overlap', sfx.snap)
+      // Nothing changed (every cell a road already, under a building or water) or a bad level
+      // crossing: refused, history kept clean.
+      commitPaint(before, paintRoads(before, keys, sizeOf()))
     },
 
     eraseRoads: (keys) => {
       const before = city()
-      commit(before, removeRoads(before, keys), 'nothing', sfx.pop)
+      commit(before, eraseRoads(before, keys), 'nothing', sfx.pop)
+    },
+
+    paintRail: (from, to) => {
+      const before = city()
+      const keys = paintRoadLine([], clampCell(from, before.size), clampCell(to, before.size))
+      commitPaint(before, paintRails(before, keys, sizeOf()))
+    },
+
+    eraseRails: (keys) => {
+      const before = city()
+      commit(before, eraseRails(before, keys), 'nothing', sfx.pop)
+    },
+
+    paintTerrain: (keys) => {
+      const before = city()
+      const brush = get().terrainBrush
+      // Water refused everywhere it was dragged (roads, rails, buildings): say why.
+      commit(before, paintTerrain(before, keys, brush, sizeOf()), brush === 'water' ? 'water' : 'nothing', sfx.snap)
     },
 
     tapGround: (x, z) => {
@@ -182,7 +230,7 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
     dropSource: (source, x, z) => {
       // Dropping a model is selection work: leave road mode. Nothing stays selected if the drop is
       // refused, so the refusal cannot shake some other building.
-      set({ roadMode: false, roadTool: 'paint', selectedPlacementId: null })
+      set({ ...offPaint, selectedPlacementId: null })
       placeAt(source, x, z)
     },
 
@@ -246,8 +294,7 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
       const { selectedSource } = get()
       set({
         lastError: null,
-        roadMode: false,
-        roadTool: 'paint',
+        ...offPaint,
         ...historyFlags(),
         selectedPlacementId: null,
         selectedSource: selectedSource !== null && canDraw(selectedSource) ? selectedSource : null,

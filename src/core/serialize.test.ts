@@ -358,3 +358,30 @@ describe('serialize: mazes (schema 3)', () => {
     expect(migrate({ ...createEmptySave(), mazes: {} }).mazes).toEqual([])
   })
 })
+
+describe('serialize: city terrain and rails (optional, v3)', () => {
+  const load = (city: Record<string, unknown>) =>
+    migrate({ schemaVersion: SCHEMA_VERSION, blueprints: [], city: { size: 10, roads: [], placements: [], ...city }, workshop: {} }).city
+
+  it('loads an old city without them unchanged (no fields added)', () => {
+    expect(load({ roads: ['1,1'] })).toEqual({ size: 10, roads: ['1,1'], placements: [] })
+  })
+  it('round-trips terrain and rails', () => {
+    const save = createEmptySave()
+    save.city = { ...save.city, roads: ['4,0', '4,1', '4,2'], rails: ['3,1', '4,1', '5,1'], terrain: { water: ['9,9'], pavement: ['0,0'], sand: ['1,0'] } }
+    expect(importSave(exportSave(save))).toEqual(save)
+  })
+  it('keeps only valid cells, one kind per cell, no water under roads or rails; empty layers are dropped', () => {
+    const city = load({
+      roads: ['2,2'],
+      rails: ['3,3', '3,3', '10,0', 'x', 7, '3,4'],
+      terrain: { water: ['2,2', '3,3', '5,5', '5,5', '-1,2'], pavement: ['5,5', '6,6'], sand: 'nope', extra: ['7,7'] },
+    })
+    expect(city.rails).toEqual(['3,3', '3,4'])
+    expect(city.terrain).toEqual({ water: ['5,5'], pavement: ['6,6'], sand: [] })
+    const empty = load({ rails: [], terrain: { water: ['99,99'] } })
+    expect(empty).not.toHaveProperty('rails')
+    expect(empty).not.toHaveProperty('terrain')
+    expect(load({ rails: 'x', terrain: 5 })).toEqual({ size: 10, roads: [], placements: [] })
+  })
+})

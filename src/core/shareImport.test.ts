@@ -4,7 +4,7 @@ import { createEmptyMaze, setEntry, setExit, type Maze } from './maze'
 import { MAX_HEIGHT_PLATES } from './model'
 import { createEmptySave } from './serialize'
 import { buildCityPackage, buildMazePackage, buildModelPackage, decodeShare, encodeShare, type SharePackage } from './share'
-import { packShare } from './shareCodec'
+import { compress, packShare } from './shareCodec'
 import { DEFAULT_SHARE_NAMES, SHARE_LIMITS, applyImport, planImport, sanitizeName, validatePackage } from './shareImport'
 import { validateTemplate } from './template'
 import type { Blueprint, Brick, CityState, SaveData } from './types'
@@ -442,5 +442,106 @@ describe('planImport / applyImport', () => {
     expect(next.city.placements.map((p) => [p.cx, p.cz, p.rot])).toEqual([[2, 2, 0], [6, 2, 1], [10, 2, 0], [14, 2, 2]])
     expect(new Set(next.city.placements.map((p) => p.id)).size).toBe(4)
     expect(next.city.placements.map((p) => p.id)).not.toContain('pl0')
+  })
+})
+
+describe('city terrain and rails (optional layers)', () => {
+  const layers = {
+    roads: ['0,0', '1,0', '3,7', '3,8', '3,9'], // crosses the rail at 3,8, at right angles
+    rails: ['0,8', '1,8', '2,8', '3,8', '4,8', '5,8'],
+    terrain: { water: ['5,10', '6,10', '5,11', '6,11'], pavement: ['0,5', '1,5'], sand: ['4,10'] },
+  }
+  const layered = (over: Partial<CityState> = {}): SharePackage => {
+    const pkg = cityPkg()
+    return { ...pkg, city: { ...pkg.city!, city: { ...pkg.city!.city, ...layers, ...over } } }
+  }
+
+  it('round-trips terrain and rails through a link; old links have neither', () => {
+    const built = buildCityPackage({ ...cityPkg().city!.city, ...layers }, cityPkg().city!.blueprints)
+    expect(built.city!.city.rails).toEqual(layers.rails)
+    const out = decodeShare(encodeShare(layered())) as SharePackage
+    expect(out).not.toHaveProperty('error')
+    expect(out.city!.city.terrain).toEqual(layers.terrain)
+    expect(out.city!.city.rails).toEqual(layers.rails)
+    const old = decodeShare(encodeShare(cityPkg())) as SharePackage
+    expect(old.city!.city).not.toHaveProperty('terrain')
+    expect(old.city!.city).not.toHaveProperty('rails')
+    // Empty layers are not sent, and come back absent.
+    const empty = decodeShare(encodeShare(layered({ rails: [], terrain: { water: [], pavement: [], sand: [] } }))) as SharePackage
+    expect(empty.city!.city).not.toHaveProperty('terrain')
+    expect(empty.city!.city).not.toHaveProperty('rails')
+  })
+
+  it('imports the layers with the city', () => {
+    const pkg = validatePackage(layered()) as SharePackage
+    const plan = planImport(createEmptySave(), pkg, 9)
+    if (plan.kind !== 'city') throw new Error()
+    expect(plan.city.terrain).toEqual(layers.terrain)
+    expect(plan.city.rails).toEqual(layers.rails)
+    expect(applyImport(createEmptySave(), plan).city.rails).toEqual(layers.rails)
+  })
+
+  it('rejects malformed, off-map or overlapping layers and water under roads or rails', () => {
+    const t = layers.terrain
+    const bad: Array<Partial<CityState>> = [
+      { rails: 'x' as never },
+      { rails: ['24,0'] },
+      { rails: ['1,1,1'] },
+      { rails: [5 as never] },
+      { terrain: [] as never },
+      { terrain: { ...t, water: 'x' as never } },
+      { terrain: { water: t.water } as never }, // a list missing
+      { terrain: { ...t, sand: ['-1,0'] } },
+      { terrain: { ...t, sand: ['5,10'] } }, // water and sand at once
+      { terrain: { ...t, water: [...t.water, '0,0'] } }, // under a road
+      { terrain: { ...t, water: [...t.water, '0,8'] } }, // under a rail
+    ]
+    for (const over of bad) expect(validatePackage(layered(over)), JSON.stringify(over)).toEqual({ error: 'invalid' })
+    const all = Array.from({ length: 24 * 24 + 1 }, (_, i) => `${i % 24},${Math.floor(i / 24) % 24}`)
+    expect(validatePackage(layered({ rails: all }))).toEqual({ error: 'too_big' })
+    expect(validatePackage(layered({ terrain: { ...t, pavement: all } }))).toEqual({ error: 'too_big' })
+  })
+
+  it('rejects a road and a rail meeting anywhere but at a straight crossing', () => {
+    expect(validatePackage(layered({ roads: ['0,0', '1,0', '3,7', '3,8'] }))).toEqual({ error: 'invalid' }) // the road ends on the rail
+    expect(validatePackage(layered({ roads: ['0,0', '1,0', '2,8', '3,8'] }))).toEqual({ error: 'invalid' }) // along the rail
+    expect(validatePackage(layered({ rails: ['3,8'] }))).toEqual({ error: 'invalid' }) // a lone rail cell on the road
+  })
+
+  it('applies the placement rules: nothing on rails, water only under water models', () => {
+    const pkg = layered()
+    const [p1, ...rest] = pkg.city!.city.placements // bp_a: 1 x 2 cells
+    const at = (cx: number, cz: number) => validatePackage(layered({ placements: [{ ...p1, cx, cz }, ...rest] }))
+    expect(at(2, 7)).toEqual({ error: 'invalid' }) // 2,8 is a rail
+    expect(at(5, 9)).toEqual({ error: 'invalid' }) // 5,10 is water
+    expect(at(0, 4)).not.toHaveProperty('error') // pavement is fine
+    // A water model (a bridge) must touch water.
+    const bridgeBp = { ...pkg.city!.blueprints[0], id: 'bp_w', tags: ['water'] }
+    const withBridge = (cx: number, cz: number) =>
+      validatePackage({
+        ...pkg,
+        city: {
+          city: { ...pkg.city!.city, ...layers, placements: [...pkg.city!.city.placements, { ...p1, id: 'w', source: 'bp_w', cx, cz }] },
+          blueprints: [...pkg.city!.blueprints, bridgeBp],
+        },
+      })
+    expect(withBridge(6, 9)).not.toHaveProperty('error') // 6,9 land + 6,10 water
+    expect(withBridge(8, 10)).toEqual({ error: 'invalid' }) // dry land only
+    // A template is a water model when templateSize says so.
+    const tplPkg = layered({ placements: [{ id: 't', source: 'tpl:boat', cx: 5, cz: 10, rot: 0 }] })
+    expect(validatePackage(tplPkg)).toEqual({ error: 'invalid' }) // unknown: an ordinary one-cell model, on water
+    expect(validatePackage(tplPkg, { templateSize: () => ({ w: 8, d: 8, water: true }) })).not.toHaveProperty('error')
+  })
+
+  it('never throws on crafted compact layers', () => {
+    const c = packShare(layered())
+    const variants = [
+      { T: 5 }, { T: [[1, 2]] }, { T: [1, 2, 3] }, { T: [['x', 1], [], []] }, { T: [[], [], [], []] },
+      { R: 'x' }, { R: [1] }, { R: [1, 2, 3, 4, 'x', null] }, { T: [Array(2 * 48 * 48 + 2).fill(0), [], []] },
+    ]
+    for (const v of variants) {
+      const payload = compress(JSON.stringify({ ...c, c: { ...c.c!, ...v } }))
+      expect(decodeShare(payload), JSON.stringify(v).slice(0, 60)).toHaveProperty('error')
+    }
   })
 })

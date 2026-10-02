@@ -176,6 +176,48 @@ describe('useCityEditor placements', () => {
     expect(ed().selectedPlacementId).toBeNull()
   })
 
+  it('switches between the painting tools, each starting with its eraser off', () => {
+    ed().setPaintLayer('rail')
+    expect([ed().paintLayer, ed().roadMode]).toEqual(['rail', true])
+    ed().setRoadTool('erase')
+    ed().setPaintLayer('terrain')
+    expect([ed().paintLayer, ed().roadTool]).toEqual(['terrain', 'paint'])
+    ed().setPaintLayer(null)
+    expect(ed().roadMode).toBe(false)
+  })
+
+  it('paints and erases rails in one undo step each; a road along a rail is refused', () => {
+    ed().paintRail({ cx: 1, cz: 5 }, { cx: 6, cz: 5 })
+    expect(city().rails).toHaveLength(6)
+    ed().paintRoad({ cx: 3, cz: 2 }, { cx: 3, cz: 8 }) // across, at right angles: a level crossing
+    expect(city().roads).toContain('3,5')
+    const seq = ed().errorSeq
+    ed().paintRoad({ cx: 4, cz: 5 }, { cx: 5, cz: 5 }) // along the rail
+    expect(ed().lastError).toBe('crossing')
+    expect(ed().errorSeq).toBe(seq + 1)
+    ed().eraseRails(['5,5', '6,5'])
+    expect(city().rails).toHaveLength(4)
+    ed().undo()
+    expect(city().rails).toHaveLength(6)
+  })
+
+  it('paints terrain with the chosen brush; no water on roads; grass erases', () => {
+    ed().paintRoad({ cx: 0, cz: 0 }, { cx: 2, cz: 0 })
+    ed().setPaintLayer('terrain')
+    ed().paintTerrain(['0,1', '1,1', '1,0'])
+    expect(city().terrain?.water).toEqual(['0,1', '1,1'])
+    ed().paintTerrain(['0,0'])
+    expect(ed().lastError).toBe('water')
+    ed().setTerrainBrush('pavement')
+    ed().paintTerrain(['1,1', '5,5'])
+    expect(city().terrain).toEqual({ water: ['0,1'], pavement: ['1,1', '5,5'], sand: [] })
+    ed().setTerrainBrush('grass')
+    ed().paintTerrain(['0,1', '1,1', '5,5'])
+    expect(city()).not.toHaveProperty('terrain')
+    ed().undo()
+    expect(city().terrain?.pavement).toEqual(['1,1', '5,5'])
+  })
+
   it('reset forgets the undo history and leaves road mode', () => {
     ed().setRoadMode(true)
     ed().paintRoad({ cx: 0, cz: 0 }, { cx: 0, cz: 0 })

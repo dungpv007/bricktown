@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { getTemplate } from '../content/templates'
+import { sourceSize } from '../core/city'
 import { isShareError, parseShareHash, parseShareText, type ShareError, type ShareErrorCode, type SharePackage } from '../core/share'
 import { applyImport, planImport, type ImportPlan, type ShareImportOptions } from '../core/shareImport'
 import { t } from '../ui/i18n'
@@ -52,7 +53,10 @@ export interface ShareImportState {
 /** Built-in template sizes (city placements) and names for nameless creations in the kid's language. */
 export function shareImportOptions(lang: Lang = useApp.getState().lang): ShareImportOptions {
   return {
-    templateSize: (id) => getTemplate(id)?.baseplate,
+    templateSize: (id) => {
+      const tpl = getTemplate(id)
+      return tpl && sourceSize(tpl.baseplate, tpl.tags)
+    },
     names: { model: t('shareKindModel', lang), maze: t('mazeDefaultName', lang), city: t('menuCity', lang) },
   }
 }

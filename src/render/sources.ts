@@ -1,5 +1,6 @@
 import { getTemplate, TEMPLATES } from '../content/templates'
 import { bakeBricks, bakeKey, type BakedModel } from '../core/bake'
+import { sourceSize, type SourceSize } from '../core/city'
 import type { Baseplate, BlueprintKind, Brick, SaveData } from '../core/types'
 import type { Lang } from '../state/useApp'
 
@@ -60,11 +61,17 @@ export function resolveRenderable(
 
 const UNKNOWN_SIZE: Baseplate = { w: 8, d: 8 }
 
-/** Footprint lookup for the core city functions; unknown sources count as one cell. */
-export function makeSizeOf(data: Pick<SaveData, 'blueprints'>): (source: string) => Baseplate {
-  const byId = new Map(data.blueprints.map((b) => [b.id, b.baseplate]))
-  return (source) =>
-    (isTemplateSource(source) ? templateOf(source)?.baseplate : byId.get(source)) ?? UNKNOWN_SIZE
+/**
+ * Footprint lookup for the core city functions (plate, flagged `water` for water models, see
+ * `sourceSize`); unknown sources count as one dry-land cell.
+ */
+export function makeSizeOf(data: Pick<SaveData, 'blueprints'>): (source: string) => SourceSize {
+  const byId = new Map(data.blueprints.map((b) => [b.id, sourceSize(b.baseplate, b.tags)]))
+  return (source) => {
+    if (!isTemplateSource(source)) return byId.get(source) ?? UNKNOWN_SIZE
+    const tpl = templateOf(source)
+    return tpl ? sourceSize(tpl.baseplate, tpl.tags) : UNKNOWN_SIZE
+  }
 }
 
 /**

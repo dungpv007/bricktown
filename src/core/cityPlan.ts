@@ -1,4 +1,5 @@
 import { CELL, canPlaceInCity, footprintCells, placementCells, type PlaceError } from './city'
+import { eraseRoads } from './rails'
 import { roadKey } from './roads'
 import type { Baseplate, CityPlacement, CityState, Rot } from './types'
 
@@ -109,11 +110,12 @@ export function cellsOnLine(from: Cell, to: Cell): Cell[] {
   return cells
 }
 
-/** The city without those of `keys` that are roads; null when none of them is. */
+/**
+ * The city without those of `keys` that are roads (and the road of a level crossing that stops being
+ * a straight); null when none of them is. See `eraseRoads` in core/rails.
+ */
 export function removeRoads(city: CityState, keys: Iterable<string>): CityState | null {
-  const gone = new Set(keys)
-  const roads = city.roads.filter((k) => !gone.has(k))
-  return roads.length === city.roads.length ? null : { ...city, roads }
+  return eraseRoads(city, keys)
 }
 
 /**

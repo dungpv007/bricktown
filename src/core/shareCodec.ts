@@ -62,9 +62,11 @@ export interface CompactPackage {
   z?: { m: CompactMaze; b?: number[] }
   /**
    * City: size, roads as flat `[cx, cz, ...]`, placements `[blueprintIdx | 'tpl:<id>', cx, cz, rot]`,
-   * plus a fifth item, the size multiplier, only for a scaled (x2..x10) placement.
+   * plus a fifth item, the size multiplier, only for a scaled (x2..x10) placement. Optional, sent
+   * only when there are any (older links have neither): terrain `T` as three flat cell lists
+   * `[water, pavement, sand]`, and rails `R` as a flat cell list.
    */
-  c?: { s: number; r: number[]; p: Array<Array<number | string>>; b: CompactBlueprint[] }
+  c?: { s: number; r: number[]; p: Array<Array<number | string>>; b: CompactBlueprint[]; T?: number[][]; R?: number[] }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -235,18 +237,25 @@ export function packShare(pkg: SharePackage): CompactPackage {
   if (pkg.city) {
     const { city, blueprints } = pkg.city
     const indexOf = new Map(blueprints.map((b, i) => [b.id, i]))
-    out.c = {
-      s: city.size,
-      r: city.roads.flatMap((k) => {
+    const flat = (keys: string[]) =>
+      keys.flatMap((k) => {
         const { cx, cz } = parseCellKey(k)
         return [cx, cz]
-      }),
+      })
+    out.c = {
+      s: city.size,
+      r: flat(city.roads),
       p: city.placements.map((p) => {
         const tuple = [indexOf.get(p.source) ?? p.source, p.cx, p.cz, p.rot]
         return p.s === undefined || p.s === 1 ? tuple : [...tuple, p.s]
       }),
       b: blueprints.map((b) => packBlueprint(b, parts, figs)),
     }
+    const { terrain, rails } = city
+    if (terrain && terrain.water.length + terrain.pavement.length + terrain.sand.length > 0) {
+      out.c.T = [flat(terrain.water), flat(terrain.pavement), flat(terrain.sand)]
+    }
+    if (rails && rails.length > 0) out.c.R = flat(rails)
   }
   if (parts.items.length > 0) out.P = parts.items
   if (figs.items.length > 0) out.F = figs.items
@@ -375,16 +384,27 @@ function unpackRoads(flat: unknown): unknown {
   return roads
 }
 
+/** Terrain `[water, pavement, sand]` flat lists back as key lists (null for anything else). */
+function unpackTerrain(t: unknown): unknown {
+  capped(t, 3)
+  if (!Array.isArray(t) || t.length !== 3) return null
+  const [water, pavement, sand] = t.map(unpackRoads)
+  return { water, pavement, sand }
+}
+
 function unpackCity(c: unknown, time: unknown, parts: unknown[], figs: unknown[]): unknown {
   if (!isLoose(c)) return null
   const placements = capped(c.p, MAX_CITY_CELLS)
   const blueprints = capped(c.b, SHARE_LIMITS.cityBlueprints)
+  const city: Loose = {
+    size: c.s,
+    roads: unpackRoads(c.r),
+    placements: Array.isArray(placements) ? placements.map(unpackPlacement) : null,
+  }
+  if (c.T !== undefined) city.terrain = unpackTerrain(c.T)
+  if (c.R !== undefined) city.rails = unpackRoads(c.R)
   return {
-    city: {
-      size: c.s,
-      roads: unpackRoads(c.r),
-      placements: Array.isArray(placements) ? placements.map(unpackPlacement) : null,
-    },
+    city,
     blueprints: Array.isArray(blueprints) ? blueprints.map((b, i) => unpackBlueprint(b, i, time, parts, figs)) : null,
   }
 }

@@ -5,6 +5,8 @@ interface CityData {
   size: number
   roads: string[]
   placements: Array<{ id: string; source: string; cx: number; cz: number; rot: number; s?: number }>
+  terrain?: { water: string[]; pavement: string[]; sand: string[] }
+  rails?: string[]
 }
 interface BtWindow {
   __bt: {
@@ -337,5 +339,61 @@ test('city: the size control scales the selected model (one undo step each) and 
   await expect(label).toHaveText('×2')
   await page.getByTestId('city-undo').click()
   await expect(label).toHaveText('×3')
+  expect(errors).toEqual([])
+})
+
+test('city: a painted lake and a rail loop persist across a reload', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByTestId('menu-city').click()
+  const canvas = page.getByTestId('mode-city').locator('canvas')
+  await expect(canvas).toBeVisible()
+  const box = (await canvas.boundingBox())!
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<[number, number]>) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([px, py], id) => ({ x: px, y: py, id })) })
+  /** One finger along `points`, in small steps. */
+  const stroke = async (points: Array<[number, number]>) => {
+    await touch('touchStart', [points[0]])
+    for (let i = 1; i < points.length; i++) {
+      const [ax, ay] = points[i - 1]
+      const [bx, by] = points[i]
+      for (let k = 1; k <= 6; k++) await touch('touchMove', [[ax + ((bx - ax) * k) / 6, ay + ((by - ay) * k) / 6]])
+    }
+    await touch('touchEnd', [])
+  }
+
+  // A lake: the terrain tool with the water brush, zigzagging over a patch left of the centre.
+  await page.getByTestId('city-terrain-mode').click()
+  await expect(page.getByTestId('city-terrain-water')).toHaveAttribute('aria-pressed', 'true')
+  await stroke([[x - 260, y - 60], [x - 120, y - 60], [x - 120, y - 20], [x - 260, y - 20], [x - 260, y + 20], [x - 120, y + 20]])
+  const water = (await cityData(page)).terrain?.water ?? []
+  expect(water.length).toBeGreaterThanOrEqual(6)
+
+  // A rail loop right of the centre: two L strokes between the same two corners close a rectangle.
+  await page.getByTestId('city-rail-mode').click()
+  await stroke([[x + 60, y - 80], [x + 260, y + 60]])
+  await stroke([[x + 260, y + 60], [x + 60, y - 80]])
+  const rails = (await cityData(page)).rails ?? []
+  const set = new Set(rails)
+  const links = (k: string) => {
+    const [cx, cz] = k.split(',').map(Number)
+    return [`${cx + 1},${cz}`, `${cx - 1},${cz}`, `${cx},${cz + 1}`, `${cx},${cz - 1}`].filter((n) => set.has(n)).length
+  }
+  expect(rails.length).toBeGreaterThanOrEqual(8)
+  expect(rails.every((k) => links(k) === 2), 'every rail cell has two rail neighbours: a closed loop').toBe(true)
+
+  await flushAutosave(page)
+  await expect.poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.rails?.length).toBe(rails.length)
+  await page.reload()
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+  await page.getByTestId('menu-city').click()
+  await expect(canvas).toBeVisible()
+  const after = await cityData(page)
+  expect(new Set(after.terrain?.water)).toEqual(new Set(water))
+  expect(new Set(after.rails)).toEqual(set)
   expect(errors).toEqual([])
 })

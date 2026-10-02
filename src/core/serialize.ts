@@ -5,7 +5,8 @@ import { newId } from './ids'
 import { MINIFIG_PART, parseFig } from './figures'
 import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, isBorder, isCorner, type Cell, type Maze } from './maze'
 import { validateTemplate } from './template'
-import type { Baseplate, Blueprint, Brick, CityPlacement, MazeChallenge, MazeRecord, SaveData, Template } from './types'
+import { normalizeCellKeys, normalizeTerrain } from './terrain'
+import type { Baseplate, Blueprint, Brick, CityPlacement, CityState, MazeChallenge, MazeRecord, SaveData, Template } from './types'
 
 export const SCHEMA_VERSION = 3
 
@@ -50,6 +51,9 @@ export const MIGRATIONS: Record<number, Migration> = {
     mazeChallenges: isRecord(data.mazeChallenges) ? data.mazeChallenges : {},
   }),
 }
+// `CityState.terrain` and `CityState.rails` were added during v3 without a bump: both optional (absent
+// = all grass / no railway); `normalize` keeps only valid keys and drops water under roads or rails.
+// An older client ignores them (and drops them on its next save).
 // `CityPlacement.s` (a model drawn x2..x10) was added during v3 without a bump: it is optional, an
 // absent one means x1, and `normalize` rounds / clamps it into 1..10 (garbage becomes x1). An older
 // client simply ignores it and draws the model at its normal size.
@@ -103,11 +107,7 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
     blueprints: arrayOr<Blueprint>(data.blueprints, []).map((bp) =>
       isRecord(bp) && Array.isArray(bp.bricks) ? { ...bp, bricks: normalizeBricks(bp.bricks) } : bp,
     ),
-    city: {
-      size: isPositiveInt(city.size) ? city.size : empty.city.size,
-      roads: arrayOr<string>(city.roads, []).filter((r) => typeof r === 'string'),
-      placements: arrayOr<unknown>(city.placements, []).map(normalizePlacement),
-    },
+    city: normalizeCity(city, empty.city.size),
     workshop: {
       kind: typeof workshop.kind === 'string' && KINDS.includes(workshop.kind) ? (workshop.kind as SaveData['workshop']['kind']) : empty.workshop.kind,
       baseplate:
@@ -240,6 +240,25 @@ function normalizeMazeRecords(raw: unknown): Record<string, MazeRecord> {
     out[key] = { timeMs, stars, coins }
   }
   return out
+}
+
+/**
+ * The city as stored, made safe. `terrain` and `rails` (added during v3, optional) keep only valid
+ * cell keys inside the grid; terrain lists never share a cell and lose any water under a road or a
+ * rail; empty ones are dropped. Roads keep their old lenient check (any string).
+ */
+function normalizeCity(city: Record<string, unknown>, defaultSize: number): CityState {
+  const size = isPositiveInt(city.size) ? city.size : defaultSize
+  const roads = arrayOr<string>(city.roads, []).filter((r) => typeof r === 'string')
+  const rails = normalizeCellKeys(city.rails, size)
+  const terrain = normalizeTerrain(city.terrain, size, new Set([...roads, ...rails]))
+  return {
+    size,
+    roads,
+    placements: arrayOr<unknown>(city.placements, []).map(normalizePlacement),
+    ...(terrain ? { terrain } : {}),
+    ...(rails.length > 0 ? { rails } : {}),
+  }
 }
 
 /** A placement as stored, with its size multiplier made safe (see `normalizeScale`); x1 drops it. */

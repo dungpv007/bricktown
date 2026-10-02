@@ -96,7 +96,16 @@ export function buildCityPackage(
   })
   return {
     ...pkgHeader('city', opts.name ?? '', opts.now ?? Date.now()),
-    city: { city: { size: city.size, roads: [...city.roads], placements }, blueprints: [...used.values()] },
+    city: {
+      city: {
+        size: city.size,
+        roads: [...city.roads],
+        placements,
+        ...(city.terrain ? { terrain: { water: [...city.terrain.water], pavement: [...city.terrain.pavement], sand: [...city.terrain.sand] } } : {}),
+        ...(city.rails && city.rails.length > 0 ? { rails: [...city.rails] } : {}),
+      },
+      blueprints: [...used.values()],
+    },
   }
 }
 

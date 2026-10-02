@@ -109,10 +109,27 @@ export interface CityPlacement {
   s?: number
 }
 
+/**
+ * Painted ground of a city, by "cx,cz" key; a cell in none of the lists is grass. The lists never
+ * share a cell, and no water lies under a road or a rail (see core/terrain).
+ */
+export interface CityTerrain {
+  water: string[]
+  pavement: string[]
+  sand: string[]
+}
+
 export interface CityState {
   size: number // cells per side
   roads: string[] // "cx,cz" keys
   placements: CityPlacement[]
+  /** Painted ground; absent = all grass. Optional and added during v3 (normalised on load, no bump). */
+  terrain?: CityTerrain
+  /**
+   * Railway cells ("cx,cz" keys), auto-tiled like roads; absent = none. A cell that is also a road is a
+   * level crossing (only where both are perpendicular straights, see core/rails). Added during v3.
+   */
+  rails?: string[]
 }
 
 export interface WorkshopState {

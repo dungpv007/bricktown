@@ -1,16 +1,17 @@
 import { PLATE_MAX } from './baseplate'
-import { CELL, canPlaceInCity, isScale } from './city'
+import { CELL, canPlaceInCity, isScale, sourceSize, type SourceSize } from './city'
 import { COLORS } from './colors'
 import { isFigure, parseFig } from './figures'
 import { newId } from './ids'
 import { MAX_BRICKS, MAX_HEIGHT_PLATES } from './model'
 import { MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, isBorder, isCorner, solve, type Cell, type Maze } from './maze'
 import { PART_BY_ID } from './parts/catalog'
+import { invalidCrossings } from './rails'
 import { footprint } from './rotation'
 import type { MazeBest, ShareErrorCode, ShareError, ShareKind, SharePackage } from './share'
 import { validateTemplate } from './template'
 import type {
-  Baseplate, Blueprint, BlueprintKind, Brick, CityPlacement, CityState, MazeChallenge, Rot, SaveData, Template,
+  Baseplate, Blueprint, BlueprintKind, Brick, CityPlacement, CityState, CityTerrain, MazeChallenge, Rot, SaveData, Template,
 } from './types'
 
 /**
@@ -42,8 +43,11 @@ export const MIN_BEST_MS_PER_CELL = 250
 export const DEFAULT_SHARE_NAMES: Record<ShareKind, string> = { model: 'Mô hình', maze: 'Mê cung', city: 'Thành phố' }
 
 export interface ShareImportOptions {
-  /** Baseplate of a built-in template (for city placements); unknown templates count as one cell. */
-  templateSize?: (templateId: string) => Baseplate | undefined
+  /**
+   * Baseplate of a built-in template (for city placements), flagged `water` for water models (see
+   * `sourceSize`); unknown templates count as one dry-land cell.
+   */
+  templateSize?: (templateId: string) => SourceSize | undefined
   /** Replacement names for empty ones, e.g. in the kid's language. */
   names?: Partial<Record<ShareKind, string>>
 }
@@ -334,8 +338,9 @@ function checkMazeSection(z: Loose, time: number, fallbackName: string): NonNull
 // cities
 
 /**
- * Roads and placements on the map; each placement fits where it is (inside the city, not on a road,
- * not overlapping an earlier one), sized by its blueprint's plate or the template's (`templateSize`)
+ * Roads, optional rails and terrain, and placements on the map; each placement fits where it is
+ * (inside the city, not on a road or rail, on water only if it is a water model, not overlapping an
+ * earlier one), sized by its blueprint's plate or the template's (`templateSize`)
  * times its optional size multiplier `s` (an integer 1..10, else the link is invalid).
  * Only the blueprints a placement uses are kept.
  */
@@ -347,11 +352,28 @@ function checkCity(c: Loose, time: number, fallbackName: string, opts: ShareImpo
   const blueprints = list(c.blueprints, SHARE_LIMITS.cityBlueprints).map((b) => checkBlueprint(b, time, fallbackName))
   const byId = new Map(blueprints.map((b) => [b.id, b]))
   if (byId.size !== blueprints.length) fail('invalid')
-  const sizeOf = (source: string): Baseplate =>
-    source.startsWith(TEMPLATE_PREFIX)
-      ? (opts.templateSize?.(source.slice(TEMPLATE_PREFIX.length)) ?? PLACEHOLDER_PLATE)
-      : (byId.get(source)?.baseplate ?? PLACEHOLDER_PLATE)
+  const sizeOf = (source: string): SourceSize => {
+    if (source.startsWith(TEMPLATE_PREFIX)) return opts.templateSize?.(source.slice(TEMPLATE_PREFIX.length)) ?? PLACEHOLDER_PLATE
+    const bp = byId.get(source)
+    return bp ? sourceSize(bp.baseplate, bp.tags) : PLACEHOLDER_PLATE
+  }
   const placed: CityState = { size, roads: checkKeys(city.roads, size, size), placements: [] }
+  // Optional layers (older links have neither): valid cells, terrain lists apart, no water under a
+  // road or a rail, every road-and-rail cell a straight level crossing.
+  if (city.rails !== undefined) {
+    const rails = checkKeys(city.rails, size, size)
+    if (rails.length > 0) placed.rails = rails
+  }
+  if (city.terrain !== undefined) {
+    const t = record(city.terrain)
+    const terrain: CityTerrain = { water: checkKeys(t.water, size, size), pavement: checkKeys(t.pavement, size, size), sand: checkKeys(t.sand, size, size) }
+    const all = [...terrain.water, ...terrain.pavement, ...terrain.sand]
+    if (new Set(all).size !== all.length) fail('invalid')
+    const dry = new Set([...placed.roads, ...(placed.rails ?? [])])
+    if (terrain.water.some((k) => dry.has(k))) fail('invalid')
+    if (all.length > 0) placed.terrain = terrain
+  }
+  if (invalidCrossings(placed).length > 0) fail('invalid')
   for (const v of list(city.placements, size * size)) {
     const p = record(v)
     const { id, source, cx, cz, rot, s } = p
@@ -478,7 +500,7 @@ export function planImport(data: SaveData, pkg: SharePackage, now = Date.now()):
       return freshBlueprint(bp, id, now)
     })
     const placementIds = new Set<string>()
-    const { size, roads, placements } = pkg.city.city
+    const { size, roads, placements, terrain, rails } = pkg.city.city
     return {
       kind: 'city',
       name: pkg.name,
@@ -486,6 +508,8 @@ export function planImport(data: SaveData, pkg: SharePackage, now = Date.now()):
         size,
         roads: [...roads],
         placements: placements.map((p) => ({ ...p, id: freshId('pl', placementIds), source: remap.get(p.source) ?? p.source })),
+        ...(terrain ? { terrain: { water: [...terrain.water], pavement: [...terrain.pavement], sand: [...terrain.sand] } } : {}),
+        ...(rails ? { rails: [...rails] } : {}),
       },
       blueprints,
       brickCount: bricksIn(blueprints),

@@ -5,7 +5,9 @@ import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { addRoads, CELL, placementCells, scaleOf } from '../../core/city'
 import { cellsOnLine, clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
+import { addRails, eraseRails, eraseRoads } from '../../core/rails'
 import { paintRoadLine, roadKey } from '../../core/roads'
+import { paintTerrain, type TerrainBrush } from '../../core/terrain'
 import type { Baseplate, Blueprint, CityPlacement, CityState } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import BakedMeshes from '../../render/BakedMeshes'
@@ -19,7 +21,9 @@ import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
 import PlacementHighlight from './PlacementHighlight'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
+import Rails from './Rails'
 import Roads from './Roads'
+import Terrain from './Terrain'
 import { useCityGestures, type CityPick, type GroundPoint } from './useCityGestures'
 
 const SKY = '#87ceeb'
@@ -89,7 +93,8 @@ function contentCenter(city: CityState, blueprints: Blueprint[]): [number, numbe
     maxX = Math.max(maxX, cx + cw)
     maxZ = Math.max(maxZ, cz + cd)
   }
-  for (const key of city.roads) {
+  const t = city.terrain
+  for (const key of [...city.roads, ...(city.rails ?? []), ...(t ? [...t.water, ...t.pavement, ...t.sand] : [])]) {
     const [cx, cz] = key.split(',').map(Number)
     add(cx, cz)
   }
@@ -271,8 +276,14 @@ interface Move {
   plan: PlacementPlan | null
 }
 
-/** A road stroke in progress: painting an L from `from` to `to`, or erasing every cell passed over. */
-type Stroke = { kind: 'paint'; from: Cell; to: Cell } | { kind: 'erase'; last: Cell; keys: Set<string> }
+/**
+ * A painting stroke in progress, on the road or rail layer: painting an L from `from` to `to`, or
+ * erasing every cell passed over; on the terrain: the brush on every cell passed over.
+ */
+type Stroke =
+  | { kind: 'paint'; layer: 'road' | 'rail'; from: Cell; to: Cell }
+  | { kind: 'erase'; layer: 'road' | 'rail'; last: Cell; keys: Set<string> }
+  | { kind: 'terrain'; brush: TerrainBrush; last: Cell; keys: Set<string> }
 
 interface HitBox {
   id: string
@@ -300,11 +311,14 @@ function CityWorld() {
     strokeRef.current = next
     setStrokeState(next)
   }, [])
-  const displayRoads = useMemo(() => {
-    if (!stroke) return city.roads
-    if (stroke.kind === 'erase') return city.roads.filter((k) => !stroke.keys.has(k))
+  // The city as the stroke would leave it (roads, rails and terrain), drawn live; the rules that refuse
+  // a whole stroke (a bad level crossing) are checked when it is released.
+  const display = useMemo<CityState>(() => {
+    if (!stroke) return city
+    if (stroke.kind === 'terrain') return paintTerrain(city, stroke.keys, stroke.brush, sizeOf) ?? city
+    if (stroke.kind === 'erase') return (stroke.layer === 'road' ? eraseRoads : eraseRails)(city, stroke.keys) ?? city
     const keys = paintRoadLine([], clampCell(stroke.from, city.size), clampCell(stroke.to, city.size))
-    return addRoads(city, keys, sizeOf).roads
+    return stroke.layer === 'road' ? addRoads(city, keys, sizeOf) : addRails(city, keys, sizeOf)
   }, [stroke, city, sizeOf])
 
   // The ghost: stored only when it changes, so pointer moves within one cell re-render nothing.
@@ -445,8 +459,13 @@ function CityWorld() {
     },
     roadStart: (point) => {
       const cell = pointToCell(point.x, point.z)
-      const erase = useCityEditor.getState().roadTool === 'erase'
-      setStroke(erase ? { kind: 'erase', last: cell, keys: new Set([roadKey(cell.cx, cell.cz)]) } : { kind: 'paint', from: cell, to: cell })
+      const { paintLayer, roadTool, terrainBrush } = useCityEditor.getState()
+      const keys = new Set([roadKey(cell.cx, cell.cz)])
+      if (paintLayer === 'terrain') setStroke({ kind: 'terrain', brush: terrainBrush, last: cell, keys })
+      else {
+        const layer = paintLayer === 'rail' ? 'rail' : 'road'
+        setStroke(roadTool === 'erase' ? { kind: 'erase', layer, last: cell, keys } : { kind: 'paint', layer, from: cell, to: cell })
+      }
     },
     roadMove: (point) => {
       const s = strokeRef.current
@@ -458,7 +477,7 @@ function CityWorld() {
         // Every cell on the straight line between two samples too, so a fast finger leaves no gaps.
         const keys = new Set(s.keys)
         for (const c of cellsOnLine(s.last, cell)) keys.add(roadKey(c.cx, c.cz))
-        setStroke({ kind: 'erase', last: cell, keys })
+        setStroke({ ...s, last: cell, keys })
       }
     },
     roadEnd: (apply) => {
@@ -466,8 +485,9 @@ function CityWorld() {
       setStroke(null)
       if (!apply || !s) return
       const ed = useCityEditor.getState()
-      if (s.kind === 'paint') ed.paintRoad(s.from, s.to)
-      else ed.eraseRoads([...s.keys])
+      if (s.kind === 'terrain') ed.paintTerrain([...s.keys])
+      else if (s.kind === 'paint') (s.layer === 'road' ? ed.paintRoad : ed.paintRail)(s.from, s.to)
+      else (s.layer === 'road' ? ed.eraseRoads : ed.eraseRails)([...s.keys])
     },
     hover: updateHover,
   })
@@ -511,7 +531,9 @@ function CityWorld() {
       <CameraRig size={city.size} roadMode={roadMode} />
       <Lights size={city.size} />
       <CityGround size={city.size} />
-      <Roads roads={displayRoads} />
+      <Terrain terrain={display.terrain} />
+      <Roads roads={display.roads} />
+      {display.rails && <Rails rails={display.rails} roads={display.roads} />}
       <Placements placements={shown} blueprints={blueprints} />
       {selected && selectedCells && (
         <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selectedCells.cw} cd={selectedCells.cd} color={SELECTED} opacity={0.55} />
