@@ -62,7 +62,7 @@ export const GAMES: readonly GameDef[] = [
     name: { vi: 'Thu ngân tạp hóa', en: 'Grocery cashier' },
     color: 'var(--bt-green)',
     templates: ['grocery'],
-    scene: null, // G3: lazyScene(() => import('./grocery/GroceryGame'))
+    scene: lazyScene(() => import('./grocery/GroceryGame')),
   },
 
   {
