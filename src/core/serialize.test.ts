@@ -202,6 +202,15 @@ describe('serialize', () => {
       ])
       expect(load(pl({ s: 'big' }), pl({ s: NaN }), pl({ s: null }), pl({ s: Infinity }), pl({ s: [3] }))).toEqual([pl(), pl(), pl(), pl(), pl()])
     })
+    it('keeps a valid road fit (CityPlacement.fit) and drops anything else', () => {
+      expect(load(pl({ fit: 0.5 }), pl({ s: 3, fit: 0.1 }))).toEqual([pl({ fit: 0.5 }), pl({ s: 3, fit: 0.1 })])
+      expect(load(pl({ fit: 1 }), pl({ fit: 0 }), pl({ fit: 2 }), pl({ fit: 'x' }), pl({ fit: NaN }), pl({ fit: null }))).toEqual([
+        pl(), pl(), pl(), pl(), pl(), pl(),
+      ])
+      const save = createEmptySave()
+      save.cities[0].city.placements = [pl({ fit: 0.3125 }) as never]
+      expect(importSave(exportSave(save))).toEqual(save)
+    })
   })
 
   describe('sharing fields', () => {

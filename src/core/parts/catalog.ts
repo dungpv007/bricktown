@@ -94,6 +94,10 @@ export const PARTS: PartDef[] = [
   printed('heart', 'heart', 1, 1),
   printed('star', 'star', 1, 1),
   printed('fish', 'fish', 1, 1),
+  // Shop items (play/unlocks): the shop signs as flat tiles, locked in the palette until bought.
+  printed('sushi', 'sushi', 2, 1),
+  printed('bakery', 'bakery', 2, 1),
+  printed('grocery', 'grocery', 2, 1),
   board('sushi', 'sushi', 6, 9),
   board('bakery', 'bakery', 6, 9),
   board('toys', 'toys', 6, 9),

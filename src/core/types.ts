@@ -1,4 +1,5 @@
 import type { Maze } from './maze'
+import type { PlayData } from '../play/types'
 
 /** Rotation in quarter turns counter-clockwise around +Y (viewed from above). */
 export type Rot = 0 | 1 | 2 | 3
@@ -107,6 +108,12 @@ export interface CityPlacement {
    * The model is drawn `s` times bigger and its footprint is the plate's studs x `s`, in cells.
    */
   s?: number
+  /**
+   * Road fit: a vehicle standing on a road that is wider than the road is drawn `fit` (0.01..<1)
+   * times smaller on top of `s`, so it fits the road (see `settleVehicle` in core/city). Derived by
+   * the City rules whenever a vehicle is placed, moved, turned or resized; absent = 1 (full size).
+   */
+  fit?: number
 }
 
 /**
@@ -188,4 +195,9 @@ export interface SaveData {
   mazeRecords: Record<string, MazeRecord>
   /** A friend's time to beat, keyed by maze id. */
   mazeChallenges: Record<string, MazeChallenge>
+  /**
+   * Role-play rewards (coins, stickers, shop items; see play/types). Optional and added during v4
+   * without a bump: absent = nothing earned yet; `normalize` repairs it (see `normalizePlay`).
+   */
+  play?: PlayData
 }

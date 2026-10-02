@@ -29,7 +29,7 @@ describe('figure presets', () => {
     expect(new Set(ids).size).toBe(ids.length)
     expect(ids).toEqual([
       'police', 'police_chief', 'robber', 'chef', 'waiter', 'customer', 'customer2',
-      'firefighter', 'astronaut', 'construction', 'doctor', 'kid', 'sushi_chef',
+      'firefighter', 'astronaut', 'construction', 'doctor', 'kid', 'sushi_chef', 'king', 'princess', 'superstar',
     ])
     for (const p of FIG_PRESETS) {
       expect(p.name.vi.length, p.id).toBeGreaterThan(0)

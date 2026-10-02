@@ -200,6 +200,67 @@ test('city: tap selects (rotate, delete), a placement drags to a new cell, a Kho
   expect(errors).toEqual([])
 })
 
+test('city: a car dragged from the Kho onto a road is placed on it, drives with the traffic and persists', async ({ page }) => {
+  interface CarBt {
+    __bt: {
+      npcStats: { placed: number }
+      cityScreen: { cellToClient: ((cx: number, cz: number) => { x: number; y: number }) | null }
+    }
+  }
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  const placedCars = () => page.evaluate(() => (window as unknown as CarBt).__bt.npcStats.placed)
+  const toClient = (cx: number, cz: number) =>
+    page.evaluate(([x, z]) => (window as unknown as CarBt).__bt.cityScreen.cellToClient!(x, z), [cx, cz] as const)
+  await page.goto('/')
+  await page.getByTestId('main-menu').waitFor()
+  // A loop of streets around a grass square in the middle of the view.
+  await page.evaluate(() => {
+    const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i)
+    const row = (z: number, x0: number, x1: number) => range(x0, x1).map((x) => `${x},${z}`)
+    const col = (x: number, z0: number, z1: number) => range(z0, z1).map((z) => `${x},${z}`)
+    const game = (window as unknown as BtWindow).__bt.useGame.getState()
+    game.setCity({ size: 48, roads: [...new Set([...row(18, 18, 30), ...row(30, 18, 30), ...col(18, 18, 30), ...col(30, 18, 30)])], placements: [] })
+  })
+  await page.getByTestId('menu-city').click()
+  await sizedBox(page.getByTestId('mode-city').locator('canvas'))
+  await cityCanvasBox(page)
+
+  // Drag the car card onto the far street, at (24, 18).
+  const target = await toClient(24, 18)
+  await page.getByTestId('src-tpl-car').scrollIntoViewIfNeeded()
+  const card = (await page.getByTestId('src-tpl-car').boundingBox())!
+  await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(card.x + card.width / 2, card.y - 60, { steps: 6 })
+  await page.mouse.move(target.x, target.y, { steps: 10 })
+  await page.mouse.up()
+  const city = await cityData(page)
+  expect(city.placements).toHaveLength(1)
+  const car = city.placements[0] as CityData['placements'][number] & { fit?: number }
+  expect(car.source).toBe('tpl:car')
+  expect(city.roads).toContain(`${car.cx},${car.cz}`) // on the road, shrunk to its lane
+  expect(car.fit).toBeLessThan(1)
+  // Selected (just dropped) it stands still; deselected it joins the traffic.
+  await expect(page.getByTestId('city-action-bar')).toBeVisible()
+  expect(await placedCars()).toBe(0)
+  const grass = await toClient(24, 24)
+  await page.mouse.click(grass.x, grass.y)
+  await expect(page.getByTestId('city-action-bar')).toHaveCount(0)
+  await expect.poll(placedCars).toBe(1)
+
+  // It is saved, and drives again after a reload.
+  await flushAutosave(page)
+  await expect.poll(async () => (await savedCityData(page))?.placements.map((p) => p.source)).toEqual(['tpl:car'])
+  await page.reload()
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+  await page.getByTestId('menu-city').click()
+  await expect(page.getByTestId('mode-city').locator('canvas')).toBeVisible()
+  expect((await cityData(page)).placements).toEqual([car])
+  await expect.poll(placedCars).toBe(1)
+  expect(errors).toEqual([])
+})
+
 test('city: a picked Kho card quick-places where the ground is tapped; undo / redo', async ({ page }) => {
   await page.goto('/')
   await page.getByTestId('menu-city').click()

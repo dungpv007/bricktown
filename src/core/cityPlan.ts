@@ -1,4 +1,4 @@
-import { CELL, canPlaceInCity, footprintCells, placementCells, type PlaceError } from './city'
+import { CELL, canPlaceInCity, footprintCells, placementCells, roadSpot, rotFacing, settleVehicle, type PlaceError, type SourceSize } from './city'
 import { eraseRoads } from './rails'
 import { roadKey } from './roads'
 import type { Baseplate, CityPlacement, CityState, Rot } from './types'
@@ -8,7 +8,7 @@ import type { Baseplate, CityPlacement, CityState, Rot } from './types'
  * goes and which way it faces. Models face -Z at rot 0 (doors, vehicle noses).
  */
 
-type SizeOf = (source: string) => Baseplate
+type SizeOf = (source: string) => SourceSize
 
 export interface Cell {
   cx: number
@@ -49,6 +49,8 @@ export interface PlacementPlan {
   rot: Rot
   /** Size multiplier of the model being placed (absent = 1, as on a placement). */
   s?: number
+  /** Road fit of a vehicle settled on a road (absent = 1, as on a placement; see `settleVehicle`). */
+  fit?: number
   error: PlaceError | null
 }
 
@@ -63,6 +65,23 @@ const ROT_ORDER: Rot[] = [2, 0, 1, 3]
 export function planPlacement(city: CityState, source: string, x: number, z: number, sizeOf: SizeOf): PlacementPlan {
   const roads = new Set(city.roads)
   const baseplate = sizeOf(source)
+  // A vehicle dropped on a road: along the road (facing an avenue's traffic), shrunk to its lane.
+  const at = pointToCell(x, z)
+  const spot = baseplate.vehicle ? roadSpot(city, at.cx, at.cz) : null
+  if (spot) {
+    const rot: Rot = spot.heading !== undefined ? rotFacing(spot.heading) : spot.axis === 'x' ? 3 : 2
+    const { cw, cd } = footprintCells(baseplate, rot)
+    const o = footprintOrigin(x, z, cw, cd)
+    const start: CityPlacement = {
+      id: '__plan__',
+      source,
+      cx: Math.max(0, Math.min(city.size - cw, o.cx)),
+      cz: Math.max(0, Math.min(city.size - cd, o.cz)),
+      rot,
+    }
+    const p = settleVehicle(city, start, sizeOf)
+    return { cx: p.cx, cz: p.cz, rot: p.rot, ...(p.fit === undefined ? {} : { fit: p.fit }), error: canPlaceInCity(city, p, sizeOf) }
+  }
   let best: { plan: PlacementPlan; score: number } | null = null
   let fallback: PlacementPlan | null = null
   for (const rot of ROT_ORDER) {
@@ -81,7 +100,7 @@ export function planPlacement(city: CityState, source: string, x: number, z: num
 }
 
 /** World-space centre (studs) of a placement's rotated (and scaled) footprint. */
-export function placementCenter(p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's'>, baseplate: Baseplate): { x: number; z: number } {
+export function placementCenter(p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's' | 'fit'>, baseplate: Baseplate): { x: number; z: number } {
   const { cw, cd } = placementCells(p, baseplate)
   return { x: (p.cx + cw / 2) * CELL, z: (p.cz + cd / 2) * CELL }
 }
@@ -120,24 +139,34 @@ export function removeRoads(city: CityState, keys: Iterable<string>): CityState 
 
 /**
  * Where moving `placement` so its footprint is centred on world point (x, z) puts it: same rotation
- * and size, slid inside the grid; `error` says why it cannot go there (the placement itself is not
- * in the way).
+ * and size, slid inside the grid (a vehicle then settles on the road there, or gets its full size
+ * back off it: see `settleVehicle`); `error` says why it cannot go there (the placement itself is
+ * not in the way). Pass `rot` and `fit` on to `movePlacement` with the cell.
  */
 export function planMove(city: CityState, placement: CityPlacement, x: number, z: number, sizeOf: SizeOf): PlacementPlan {
   const { cw, cd } = placementCells(placement, sizeOf(placement.source))
   const o = footprintOrigin(x, z, cw, cd)
   const cx = Math.max(0, Math.min(city.size - cw, o.cx))
   const cz = Math.max(0, Math.min(city.size - cd, o.cz))
-  const error = canPlaceInCity(city, { ...placement, cx, cz }, sizeOf, placement.id)
-  return { cx, cz, rot: placement.rot, ...(placement.s === undefined ? {} : { s: placement.s }), error }
+  const p = settleVehicle(city, { ...placement, cx, cz }, sizeOf)
+  const error = canPlaceInCity(city, p, sizeOf, placement.id)
+  return {
+    cx: p.cx,
+    cz: p.cz,
+    rot: p.rot,
+    ...(p.s === undefined ? {} : { s: p.s }),
+    ...(p.fit === undefined ? {} : { fit: p.fit }),
+    error,
+  }
 }
 
 /**
  * Where a copy of `placement` (same source, rotation and size) goes: the first free spot right next to it,
  * trying +X, -X, +Z, -Z, then the four corners, then one footprint further out (+X, -X, +Z, -Z).
- * Null when none of them fits.
+ * Null when none of them fits. A vehicle copy settles on the road there or gets its full size back
+ * off it (`settleVehicle`): see `duplicatePlacement`.
  */
-export function duplicateCell(city: CityState, placement: CityPlacement, sizeOf: SizeOf): Cell | null {
+export function duplicatePlacement(city: CityState, placement: CityPlacement, id: string, sizeOf: SizeOf): CityPlacement | null {
   const { cw, cd } = placementCells(placement, sizeOf(placement.source))
   const steps: Array<[number, number]> = [
     [1, 0], [-1, 0], [0, 1], [0, -1],
@@ -145,8 +174,14 @@ export function duplicateCell(city: CityState, placement: CityPlacement, sizeOf:
     [2, 0], [-2, 0], [0, 2], [0, -2],
   ]
   for (const [sx, sz] of steps) {
-    const cell = { cx: placement.cx + sx * cw, cz: placement.cz + sz * cd }
-    if (canPlaceInCity(city, { ...placement, id: '__copy__', ...cell }, sizeOf) === null) return cell
+    const copy = settleVehicle(city, { ...placement, id, cx: placement.cx + sx * cw, cz: placement.cz + sz * cd }, sizeOf)
+    if (canPlaceInCity(city, copy, sizeOf) === null) return copy
   }
   return null
+}
+
+/** The min-corner cell of `duplicatePlacement`'s copy (null when none fits). */
+export function duplicateCell(city: CityState, placement: CityPlacement, sizeOf: SizeOf): Cell | null {
+  const copy = duplicatePlacement(city, placement, '__copy__', sizeOf)
+  return copy && { cx: copy.cx, cz: copy.cz }
 }

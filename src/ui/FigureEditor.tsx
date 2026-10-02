@@ -11,6 +11,7 @@ import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
 import { useT, type TKey } from './i18n'
 import { useThumbnail } from './useThumbnail'
+import { LockedButton, useLocked } from '../play/ui/locks'
 
 /** Solid and metallic colours (see `isFigColor`): a gold crown shows as picked. */
 const FIG_COLORS = COLORS.filter((c) => isFigColor(c.id))
@@ -43,6 +44,30 @@ export function FigureImage({ fig, size, className }: { fig: FigStyle; size?: nu
   const url = useThumbnail(key, () => getFigureThumbnail(fig, size))
   if (!url) return <span className="bt-part-emoji" aria-hidden="true">🧑</span>
   return <img className={className ?? 'bt-part-thumb'} src={url} alt="" draggable={false} />
+}
+
+/** A ready-made figure in the ⭐ tab, or its 🔒 button while it is a shop item not bought yet. */
+function PresetOption({ preset, pressed, onPick }: { preset: (typeof FIG_PRESETS)[number]; pressed: boolean; onPick: () => void }) {
+  const lang = useApp((s) => s.lang)
+  const price = useLocked('figure', preset.id)
+  if (price !== null) {
+    return (
+      <LockedButton testId={`fig-editor-preset-${preset.id}`} label={preset.name[lang]} price={price} className="bt-btn bt-part-btn bt-fig-preset">
+        <FigureImage fig={preset.style} />
+      </LockedButton>
+    )
+  }
+  return (
+    <button
+      className="bt-btn bt-part-btn bt-fig-preset"
+      data-testid={`fig-editor-preset-${preset.id}`}
+      aria-label={preset.name[lang]}
+      aria-pressed={pressed}
+      onClick={onPick}
+    >
+      <FigureImage fig={preset.style} />
+    </button>
+  )
 }
 
 function Swatches({ testId, current, onPick }: { testId: string; current: number; onPick: (c: number) => void }) {
@@ -101,7 +126,6 @@ function Options<T extends string>({
  */
 export default function FigureEditor() {
   const t = useT()
-  const lang = useApp((s) => s.lang)
   const target = useEditor((s) => s.figEditor)
   const currentFig = useEditor((s) => s.fig)
   const close = useEditor((s) => s.closeFigEditor)
@@ -153,16 +177,7 @@ export default function FigureEditor() {
             {tab === 'presets' && (
               <div className="bt-fig-options" role="group">
                 {FIG_PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    className="bt-btn bt-part-btn bt-fig-preset"
-                    data-testid={`fig-editor-preset-${p.id}`}
-                    aria-label={p.name[lang]}
-                    aria-pressed={figKey(p.style) === figKey(style)}
-                    onClick={() => apply(p.style)}
-                  >
-                    <FigureImage fig={p.style} />
-                  </button>
+                  <PresetOption key={p.id} preset={p} pressed={figKey(p.style) === figKey(style)} onPick={() => apply(p.style)} />
                 ))}
               </div>
             )}

@@ -1,6 +1,6 @@
 import { PLATE_MAX } from './baseplate'
 import { MAX_CITIES } from './cities'
-import { CELL, canPlaceInCity, isScale, sourceSize, type SourceSize } from './city'
+import { CELL, canPlaceInCity, isFit, isScale, sourceSize, type SourceSize } from './city'
 import { COLORS } from './colors'
 import { isFigure, parseFig } from './figures'
 import { newId } from './ids'
@@ -313,7 +313,7 @@ function checkCity(c: Loose, time: number, fallbackName: string, opts: ShareImpo
   const sizeOf = (source: string): SourceSize => {
     if (source.startsWith(TEMPLATE_PREFIX)) return opts.templateSize?.(source.slice(TEMPLATE_PREFIX.length)) ?? PLACEHOLDER_PLATE
     const bp = byId.get(source)
-    return bp ? sourceSize(bp.baseplate, bp.tags) : PLACEHOLDER_PLATE
+    return bp ? sourceSize(bp.baseplate, bp.tags, bp.kind, bp.bricks) : PLACEHOLDER_PLATE
   }
   const placed: CityState = { size, roads: checkKeys(city.roads, size, size), placements: [] }
   // Optional layers (older links have neither): valid cells, terrain lists apart, no water under a
@@ -334,13 +334,19 @@ function checkCity(c: Loose, time: number, fallbackName: string, opts: ShareImpo
   if (invalidCrossings(placed).length > 0) fail('invalid')
   for (const v of list(city.placements, size * size)) {
     const p = record(v)
-    const { id, source, cx, cz, rot, s } = p
+    const { id, source, cx, cz, rot, s, fit } = p
     if (typeof id !== 'string' || typeof source !== 'string') fail('invalid')
     if (!TEMPLATE_SOURCE.test(source) && !byId.has(source)) fail('invalid')
     if (!isInt(cx) || !isInt(cz) || !isRot(rot)) fail('invalid')
     // Size multiplier: absent (x1, older links) or an integer 1..10; anything else is a broken link.
     if (s !== undefined && !isScale(s)) fail('invalid')
-    const placement: CityPlacement = s === undefined || s === 1 ? { id, source, cx, cz, rot } : { id, source, cx, cz, rot, s }
+    // Road fit: absent (full size, older links), else a number in MIN_FIT..<1, only on a vehicle.
+    if (fit !== undefined && (!isFit(fit) || !sizeOf(source).vehicle)) fail('invalid')
+    const placement: CityPlacement = {
+      id, source, cx, cz, rot,
+      ...(s === undefined || s === 1 ? {} : { s }),
+      ...(fit === undefined ? {} : { fit }),
+    }
     if (canPlaceInCity(placed, placement, sizeOf) !== null) fail('invalid')
     placed.placements.push(placement)
   }

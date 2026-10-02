@@ -3,9 +3,9 @@ import { PARTS, PART_BY_ID, PART_CATEGORIES, getPart } from './catalog'
 import { PRINT_BY_ID } from '../prints'
 
 describe('part catalog', () => {
-  it('has 69 unique part ids', () => {
-    expect(PARTS).toHaveLength(69)
-    expect(new Set(PARTS.map((p) => p.id)).size).toBe(69)
+  it('has 72 unique part ids', () => {
+    expect(PARTS).toHaveLength(72)
+    expect(new Set(PARTS.map((p) => p.id)).size).toBe(72)
   })
 
   it('every part has w, d, h >= 1 as integers', () => {
@@ -25,7 +25,7 @@ describe('part catalog', () => {
   })
 
   it('PART_BY_ID indexes every part', () => {
-    expect(Object.keys(PART_BY_ID)).toHaveLength(69)
+    expect(Object.keys(PART_BY_ID)).toHaveLength(72)
     for (const p of PARTS) expect(PART_BY_ID[p.id]).toBe(p)
   })
 
@@ -63,6 +63,7 @@ describe('part catalog', () => {
       'print_police_2x2', 'print_fire_2x2', 'print_clock_2x2', 'print_stop_2x2', 'print_arrow_2x2',
       'print_menu_1x2', 'print_screen_1x2', 'print_eyes_1x2', 'print_number_1x2',
       'print_heart_1x1', 'print_star_1x1', 'print_fish_1x1',
+      'print_sushi_1x2', 'print_bakery_1x2', 'print_grocery_1x2',
     ])
     for (const p of printed) {
       // A print looks different after a quarter turn, so no rotational symmetry.

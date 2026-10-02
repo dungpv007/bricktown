@@ -59,8 +59,11 @@ function useTitleSqueezed(title: RefObject<HTMLElement | null>): boolean {
   return squeezed
 }
 
-/** `onBack` replaces the default "back to the main menu" (e.g. from an editor back to its picker). */
-export default function TopBar({ titleKey, onBack }: { titleKey: TKey; onBack?: () => void }) {
+/**
+ * `onBack` replaces the default "back to the main menu" (e.g. from an editor back to its picker);
+ * `title` replaces the translated `titleKey` (a role-play game's own name).
+ */
+export default function TopBar({ titleKey, title: text, onBack }: { titleKey: TKey; title?: string; onBack?: () => void }) {
   const t = useT()
   const setMode = useApp((s) => s.setMode)
   const title = useRef<HTMLSpanElement>(null)
@@ -71,7 +74,7 @@ export default function TopBar({ titleKey, onBack }: { titleKey: TKey; onBack?: 
         ←
       </button>
       <span ref={title} className="bt-topbar-title" data-testid="mode-title" data-squeezed={squeezed}>
-        {t(titleKey)}
+        {text ?? t(titleKey)}
       </span>
       <SaveWarning />
     </div>

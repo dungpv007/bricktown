@@ -1,6 +1,6 @@
 import { CELL } from '../city'
 import { cellCenter, laneCurve, leftOf, newPose, opposite, polylinePose, rightOf, type Dir, type Polyline, type Pose } from './geometry'
-import { MAX_TRAINS, ROAD_Y, type NpcNetwork, type RoadNet, type TrainLine } from './network'
+import { MAX_TRAINS, ROAD_Y, type NpcNetwork, type PlacedCar, type RoadNet, type TrainLine } from './network'
 import { mulberry32, type Rng } from './rng'
 
 /**
@@ -43,6 +43,10 @@ export interface Car extends Pose {
   ghost: number
   /** Stopped for a train at a level crossing (or queued behind a car that is). */
   waiting: boolean
+  /** The placement a kid's car drives for (see `PlacedCar`; its `variant` is then -1), null for an ambient car. */
+  placed: string | null
+  /** The `PlacedCar.key` it was started from. */
+  placedKey: string
 }
 
 export interface Train {
@@ -132,6 +136,28 @@ export class NpcSim {
     this.carLengths = options.carLengths && options.carLengths.length > 0 ? options.carLengths : [DEFAULT_CAR_LENGTH]
     this.trainLength = options.trainLength ?? DEFAULT_TRAIN_LENGTH
     this.pedStyles = Math.max(1, options.pedStyles ?? 1)
+  }
+
+  /** Placements whose car is held: not driving (it stands at its placement spot), e.g. while selected. */
+  private held: ReadonlySet<string> = new Set()
+
+  /** The kid's placed cars driving right now. */
+  placedCount(): number {
+    let n = 0
+    for (const c of this.cars) if (c.placed !== null) n++
+    return n
+  }
+
+  /**
+   * Holds the cars of these placements: they leave the traffic (the City draws them at their
+   * placement spot) and start again from there once released.
+   */
+  setHeld(ids: ReadonlySet<string>): void {
+    this.held = ids
+    const net = this.net
+    if (!net) return
+    this.cars = this.cars.filter((c) => c.placed === null || !ids.has(c.placed))
+    this.addPlaced(net)
   }
 
   /** Every NPC drawn: cars, train vehicles and pedestrians. */
@@ -236,6 +262,54 @@ export class NpcSim {
     this.carPose(car, roads)
   }
 
+  /** Starts a placed car in its road cell, heading the way it faces (turned round when that way is wrong on an avenue). */
+  private placePlaced(car: Car, roads: RoadNet, spec: PlacedCar): void {
+    const cell = spec.cell
+    let din = spec.dir
+    if (!(roads.accept[cell] & (1 << din)) && roads.accept[cell] & (1 << opposite(din))) din = opposite(din)
+    car.cell = cell
+    car.din = din
+    car.lane = 1
+    car.oi = this.offset(roads, cell, din, car.lane)
+    this.chooseExit(car, roads)
+    car.s = laneCurve(car.din, car.dout, car.oi, car.oo).length * 0.5
+    car.v = 0
+    car.stuck = 0
+    car.ghost = 0
+    car.waiting = false
+    car.placedKey = spec.key
+    this.carPose(car, roads)
+  }
+
+  /** Respawns a car: a placed car back at its placement, an ambient one on a free cell. */
+  private respawn(car: Car, roads: RoadNet): void {
+    const spec = car.placed === null ? undefined : this.net?.placed.find((p) => p.id === car.placed)
+    if (spec) this.placePlaced(car, roads, spec)
+    else this.placeCar(car, roads, this.freeCell(roads, car))
+  }
+
+  /** Adds a car for every placed car of `net` that is not driving yet nor held. */
+  private addPlaced(net: NpcNetwork): void {
+    const driving = new Set<string>()
+    for (const c of this.cars) if (c.placed !== null) driving.add(c.placed)
+    for (const spec of net.placed) {
+      if (driving.has(spec.id) || this.held.has(spec.id)) continue
+      const car: Car = {
+        cell: 0, din: 0, dout: 0, oi: 0, oo: 0, lane: 1, s: 0, v: 0, x: 0, z: 0, hx: 0, hz: -1,
+        cruise: CAR_CRUISE,
+        variant: -1,
+        length: spec.length,
+        stuck: 0,
+        ghost: 0,
+        waiting: false,
+        placed: spec.id,
+        placedKey: spec.key,
+      }
+      this.placePlaced(car, net.roads, spec)
+      this.cars.push(car)
+    }
+  }
+
   /** A free cell to (re)spawn on: no car within a cell's length; any spawnable cell after a few tries. */
   private freeCell(roads: RoadNet, except?: Car): number {
     const cells = roads.spawnable
@@ -259,6 +333,8 @@ export class NpcSim {
       stuck: 0,
       ghost: 0,
       waiting: false,
+      placed: null,
+      placedKey: '',
     }
     this.placeCar(car, roads, this.freeCell(roads))
     return car
@@ -267,7 +343,11 @@ export class NpcSim {
   private keepCars(old: NpcNetwork | null, net: NpcNetwork): void {
     const roads = net.roads
     const kept: Car[] = []
+    const placedKept: Car[] = []
+    const specs = new Map(net.placed.map((p) => [p.id, p]))
     for (const car of this.cars) {
+      // A placed car keeps driving while its placement stays put (same cell, heading and size).
+      if (car.placed !== null && (this.held.has(car.placed) || specs.get(car.placed)?.key !== car.placedKey)) continue
       const key = old?.roads.keys[car.cell]
       const cell = key === undefined ? undefined : roads.index.get(key)
       if (cell === undefined || roads.degree[cell] === 0) continue
@@ -287,10 +367,12 @@ export class NpcSim {
         else if (reshaped) car.oo = this.offset(roads, cell, car.dout, car.lane)
         car.s = Math.min(car.s, laneCurve(car.din, car.dout, car.oi, car.oo).length - 0.01)
       }
-      kept.push(car)
+      ;(car.placed === null ? kept : placedKept).push(car)
     }
     this.cars = kept.slice(0, net.carTarget)
     while (this.cars.length < net.carTarget) this.cars.push(this.spawnCar(roads))
+    this.cars.push(...placedKept)
+    this.addPlaced(net)
   }
 
   private carPose(car: Car, roads: RoadNet): void {
@@ -375,7 +457,7 @@ export class NpcSim {
       if (car.ghost > 0) car.ghost -= dt
       else if (car.stuck > GHOST_AFTER) car.ghost = GHOST_TIME
       if (car.stuck > RESPAWN_AFTER) {
-        this.placeCar(car, roads, this.freeCell(roads, car))
+        this.respawn(car, roads)
         continue
       }
       car.s += car.v * dt
@@ -384,7 +466,7 @@ export class NpcSim {
         car.s -= len
         const into = roads.nb[car.cell * 4 + car.dout]
         if (into < 0) {
-          this.placeCar(car, roads, this.freeCell(roads, car))
+          this.respawn(car, roads)
           break
         }
         car.cell = into

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { bakedGeometries, bakeShadowBricks, type BakedKind, type BakedModel } from '../../core/bake'
-import { CELL, placementCells, scaleOf } from '../../core/city'
+import { CELL, drawScale, placementCells } from '../../core/city'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { bakedMaterials, castsShadow } from '../../render/materials'
@@ -24,7 +24,7 @@ export const PLACEHOLDER_HEIGHT = 2
 
 /** World-space footprint (studs) of a placement: its rotated (and scaled) footprint cells. */
 export function footprintBox(
-  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's'>,
+  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's' | 'fit'>,
   baseplate: Baseplate,
 ): { x0: number; z0: number; x1: number; z1: number } {
   const { cw, cd } = placementCells(p, baseplate)
@@ -140,7 +140,7 @@ function Placeholders({ placements, sizeOf }: { placements: CityPlacement[]; siz
     placements.forEach((p, i) => {
       const b = footprintBox(p, sizeOf(p.source))
       tmpPos.set((b.x0 + b.x1) / 2, 0, (b.z0 + b.z1) / 2)
-      tmpScale.set(b.x1 - b.x0 - PLACEHOLDER_GAP, PLACEHOLDER_HEIGHT * scaleOf(p), b.z1 - b.z0 - PLACEHOLDER_GAP)
+      tmpScale.set(b.x1 - b.x0 - PLACEHOLDER_GAP, PLACEHOLDER_HEIGHT * drawScale(p), b.z1 - b.z0 - PLACEHOLDER_GAP)
       mesh.setMatrixAt(i, tmpMatrix.compose(tmpPos, NO_ROTATION, tmpScale))
     })
     mesh.count = placements.length

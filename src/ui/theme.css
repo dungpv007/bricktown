@@ -2402,6 +2402,8 @@ form.bt-dialog,
 /* Five mode cards fit on one row on a tablet. */
 .bt-menu-cards {
   width: min(100%, 880px);
+  /* Six cards: one row on tablets, two rows of three on phones. */
+  grid-template-columns: repeat(auto-fit, minmax(calc(128px * var(--bt-s)), 1fr));
 }
 
 .bt-maze-section {

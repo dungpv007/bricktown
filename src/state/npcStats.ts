@@ -4,8 +4,10 @@
  * nothing re-renders when it changes.
  */
 export const npcStats = {
-  /** NPCs drawn right now (0 when the City or its life is off). */
+  /** NPCs drawn right now (0 when the City or its life is off), the kid's placed cars included. */
   count: 0,
+  /** The kid's vehicles driving on the roads right now (see core/npc `PlacedCar`). */
+  placed: 0,
   /** Smoothed milliseconds per frame spent stepping the simulation and writing matrices. */
   frameMs: 0,
   /** Draw calls and triangles of the whole City frame before this one (renderer info). */

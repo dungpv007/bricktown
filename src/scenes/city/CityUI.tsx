@@ -24,6 +24,9 @@ import ShareDialog from '../../ui/share/ShareDialog'
 import TopRight from '../../ui/TopRight'
 import { useThumbnail } from '../../ui/useThumbnail'
 import CityPickerButton from './CityPicker'
+import { gameForSource } from '../../play/registry'
+import { playFromCity } from './playEntry'
+import { PlayBadgeLayer } from './PlayBadges'
 
 const PAINT_TOOLS: Array<{ layer: PaintLayer; icon: string; labelKey: TKey; eraserKey?: TKey }> = [
   { layer: 'road', icon: '🛣️', labelKey: 'cityToolRoad', eraserKey: 'cityRoadEraser' },
@@ -151,9 +154,10 @@ function CityToolbar() {
   )
 }
 
-type CityAction = 'rotate' | 'duplicate' | 'delete' | 'edit' | 'deselect'
+type CityAction = 'play' | 'rotate' | 'duplicate' | 'delete' | 'edit' | 'deselect'
 
 const ACTIONS: Array<{ action: CityAction; icon: string; labelKey: TKey }> = [
+  { action: 'play', icon: '🎮', labelKey: 'playAct' },
   { action: 'rotate', icon: '↻', labelKey: 'actRotate' },
   { action: 'duplicate', icon: '📋', labelKey: 'actDuplicate' },
   { action: 'delete', icon: '🗑️', labelKey: 'actDelete' },
@@ -204,8 +208,8 @@ function CityScaleControl({ scale }: { scale: number }) {
  * shows only for the kid's own blueprints (templates are not editable), 📋 only for models that can
  * be drawn (a grey placeholder is never copied).
  */
-function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; scale: number; onEdit: (bp: Blueprint) => void }) {
-  const { editable, drawable, scale, onEdit } = props
+function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; scale: number; onEdit: (bp: Blueprint) => void; game: { gameId: string; placementId: string } | null }) {
+  const { editable, drawable, scale, onEdit, game } = props
   const t = useT()
   const phone = useDeviceClass() !== 'tablet' // a row under the tools on phones (theme.css)
   const run = (action: CityAction) => {
@@ -216,12 +220,13 @@ function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; s
       case 'delete': return ed.deleteSelected()
       case 'edit': return editable && onEdit(editable)
       case 'deselect': return ed.selectPlacement(null)
+      case 'play': return game && playFromCity(game.gameId, game.placementId)
     }
   }
   return (
     <div className="bt-city-actions" role="toolbar" aria-orientation={phone ? 'horizontal' : 'vertical'} data-testid="city-action-bar">
       <div className="bt-actionbar bt-hud-panel">
-        {ACTIONS.filter(({ action }) => (action !== 'edit' || editable) && (action !== 'duplicate' || drawable)).map(({ action, icon, labelKey }) => (
+        {ACTIONS.filter(({ action }) => (action !== 'edit' || editable) && (action !== 'duplicate' || drawable) && (action !== 'play' || game)).map(({ action, icon, labelKey }) => (
           <button
             key={action}
             className={`bt-btn bt-icon-btn bt-act-${action}`}
@@ -427,6 +432,24 @@ function TimeControls() {
   )
 }
 
+/** ▶️ badges over the shops that offer a role-play game, on or off (remembered with the preferences). */
+function PlayBadgesToggle() {
+  const t = useT()
+  const on = useApp((s) => s.playBadges)
+  return (
+    <button
+      className="bt-btn bt-icon-btn"
+      data-testid="city-play-badges"
+      aria-label={t('playBadges')}
+      title={t('playBadges')}
+      aria-pressed={on}
+      onClick={() => useApp.getState().setPlayBadges(!on)}
+    >
+      ▶️
+    </button>
+  )
+}
+
 /** HTML overlay on top of the city canvas. */
 export default function CityUI() {
   const t = useT()
@@ -444,6 +467,11 @@ export default function CityUI() {
     [selected, blueprints],
   )
   const drawable = useMemo(() => selected !== null && resolveRenderable(selected.source, { blueprints }) !== null, [selected, blueprints])
+  // The role-play game the selected placement's shop offers (🎮 in its action bar).
+  const game = useMemo(() => {
+    const g = selected && gameForSource(selected.source)
+    return g && selected ? { gameId: g.id, placementId: selected.id } : null
+  }, [selected])
 
   // Undo must not reach back into another visit (or another save slot).
   useEffect(() => useCityEditor.getState().reset(), [])
@@ -462,9 +490,11 @@ export default function CityUI() {
 
   return (
     <div className="bt-city-ui">
+      <PlayBadgeLayer />
       <TopRight>
         <TimeControls />
         <NpcToggle />
+        <PlayBadgesToggle />
         <CityPickerButton />
         <ShareCity />
         <button className="bt-btn bt-city-drive" data-testid="city-drive" aria-label={t('menuDrive')} onClick={() => setMode('drive')}>
@@ -473,7 +503,7 @@ export default function CityUI() {
       </TopRight>
       <div className="bt-city-left">
         <CityToolbar />
-        {selected && <CityActionBar editable={editable} drawable={drawable} scale={scaleOf(selected)} onEdit={onEdit} />}
+        {selected && <CityActionBar editable={editable} drawable={drawable} scale={scaleOf(selected)} onEdit={onEdit} game={game} />}
       </div>
       <SourceDrawer />
       <ErrorBadge errorSeq={errorSeq} testId="city-error" />

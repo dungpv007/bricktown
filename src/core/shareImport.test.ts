@@ -279,10 +279,29 @@ describe('validatePackage', () => {
       const [p1] = pkg.city!.city.placements // bp_a: an 8x16 plate, 1 x 2 cells at (2, 2)
       expect(withCity({ placements: [p1, { ...p1, id: 'p9', cz: 3 }] })).toEqual({ error: 'invalid' })
       expect(withCity({ placements: [p1, { id: 'p9', source: 'tpl:tree', cx: 2, cz: 3, rot: 0 }] })).toEqual({ error: 'invalid' })
-      expect(withCity({ roads: ['2,3'], placements: [p1] })).toEqual({ error: 'invalid' })
+      // bp_a is a vehicle: it may stand on a road; the building bp_b may not.
+      expect(withCity({ roads: ['2,3'], placements: [p1] })).not.toHaveProperty('error')
+      expect(withCity({ roads: ['2,3'], placements: [{ ...p1, source: 'bp_b' }] })).toEqual({ error: 'invalid' })
       expect(withCity({ placements: [{ ...p1, cz: 23 }] })).toEqual({ error: 'invalid' }) // 2 cells deep
       expect(withCity({ placements: [{ ...p1, cx: 23, rot: 1 }] })).toEqual({ error: 'invalid' }) // turned: 2 cells wide
       expect(withCity({ placements: [{ ...p1, cx: 22, rot: 1 }] })).not.toHaveProperty('error')
+    })
+    it('accepts a valid road fit on a vehicle only, and round-trips it through a link', () => {
+      const pkg = cityPkg()
+      const [p1] = pkg.city!.city.placements
+      const fitted = { ...p1, fit: 0.3125 }
+      const ok = withCity({ roads: ['2,2', '2,3'], placements: [fitted] }) as SharePackage
+      expect(ok.city?.city.placements[0]).toMatchObject({ fit: 0.3125 })
+      const back = decodeShare(encodeShare(ok))
+      expect(back).not.toHaveProperty('error')
+      expect((back as SharePackage).city?.city.placements[0]).toMatchObject({ fit: 0.3125 })
+      expect((back as SharePackage).city?.city.placements[0]).not.toHaveProperty('s')
+      for (const fit of [0, 1, 1.5, -0.2, 0.001, 'x', null, Number.NaN]) {
+        expect(withCity({ placements: [{ ...p1, fit } as unknown as typeof p1] })).toEqual({ error: 'invalid' })
+      }
+      expect(withCity({ placements: [{ ...p1, source: 'bp_b', fit: 0.5 }] })).toEqual({ error: 'invalid' }) // a building
+      // Old links (no fit) stay valid and carry none.
+      expect((withCity({}) as SharePackage).city?.city.placements[0]).not.toHaveProperty('fit')
     })
     it('sizes template placements with templateSize and unknown templates as one cell', () => {
       const tpl = { id: 'p8', source: 'tpl:garage', cx: 21, cz: 21, rot: 0 as const }

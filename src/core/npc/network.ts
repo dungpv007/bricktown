@@ -1,5 +1,5 @@
 import { deriveRoads, opposite as oppositeSide, rightOf as rightOfSide, type RoadShape, type Side } from '../avenues'
-import { coveredCells, inGrid, type SourceSize } from '../city'
+import { coveredCells, drawScale, inGrid, rotFacing, vehicleRoadCell, type SourceSize } from '../city'
 import { parseKey, type CellGraph } from '../cellGraph'
 import { railGraph, railLines } from '../rails'
 import { DIRS, roadKey } from '../roads'
@@ -82,8 +82,26 @@ export interface PedGraph {
   spawnable: number[]
 }
 
+/**
+ * A vehicle the kid placed on a road: it drives with the city's cars (lanes, junctions, level
+ * crossings), starting from its road cell, heading the way it faces. Its placement stays in the city.
+ */
+export interface PlacedCar {
+  /** The placement's id. */
+  id: string
+  /** Identity of the start (placement, cell, heading, size): a change respawns the car there. */
+  key: string
+  /** Road cell index it starts in, and the heading it faces. */
+  cell: number
+  dir: Dir
+  /** Its length (studs) as drawn: the plate's depth times its size and road fit. */
+  length: number
+}
+
 export interface NpcNetwork {
   roads: RoadNet
+  /** Vehicle placements on the roads, which drive (on top of the `carTarget` ambient cars). */
+  placed: PlacedCar[]
   trains: TrainLine[]
   peds: PedGraph
   /** How many cars and pedestrians this city should have. */
@@ -383,5 +401,20 @@ export function buildNetwork(city: CityState, sizeOf: SizeOf): NpcNetwork {
   const carTarget = roads.spawnable.length === 0 ? 0 : Math.min(MAX_CARS, Math.floor(roadCells / ROADS_PER_CAR), Math.ceil(roads.spawnable.length / 2))
   const pedTarget =
     peds.spawnable.length === 0 ? 0 : Math.min(MAX_PEDS, Math.floor(pavementCells / PAVEMENT_PER_PED + roadCells / ROADS_PER_PED))
-  return { roads, trains: buildTrainLines(city), peds, carTarget, pedTarget }
+  return { roads, placed: placedCars(city, sizeOf, roads, shapes), trains: buildTrainLines(city), peds, carTarget, pedTarget }
+}
+
+/** The vehicle placements standing on a road cell of the network (see `vehicleRoadCell`). */
+function placedCars(city: CityState, sizeOf: SizeOf, roads: RoadNet, shapes: Map<string, RoadShape>): PlacedCar[] {
+  const out: PlacedCar[] = []
+  for (const p of city.placements) {
+    const at = vehicleRoadCell(city, p, sizeOf, shapes)
+    if (!at) continue
+    const cell = roads.index.get(roadKey(at.cx, at.cz))
+    if (cell === undefined || roads.degree[cell] === 0) continue
+    const dir = rotFacing(p.rot) as Dir
+    const length = sizeOf(p.source).d * drawScale(p)
+    out.push({ id: p.id, key: `${p.id}|${p.source}|${at.cx},${at.cz}|${dir}|${length}`, cell, dir, length })
+  }
+  return out
 }
