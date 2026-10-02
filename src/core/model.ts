@@ -125,13 +125,14 @@ type Anchor = { x: number; y: number; z: number }
 const RAY_EPS = 1e-9
 
 /**
- * The top of the highest brick in every column (stud cell) of the plate, 0 where it is empty, and every
- * level a brick top is at. One pass over the bricks; `excludeId` (a brick being moved) does not count.
- * `restOn` is where a footprint with min corner (x, z) comes to rest when lowered from above.
+ * The height spans of the bricks in every column (stud cell) of the plate, and every level a brick top is
+ * at. One pass over the bricks; `excludeId` (a brick being moved) does not count. `under(x, z, fx, fz)`
+ * answers questions about the columns under one footprint (min corner x, z; cells off the plate are empty).
  */
-function columnTops(bricks: Brick[], baseplate: Baseplate, excludeId?: string) {
+function columns(bricks: Brick[], baseplate: Baseplate, excludeId?: string) {
   const { w, d } = baseplate
-  const tops = new Uint16Array(w * d)
+  // Flat [bottom, top, bottom, top, ...] per occupied column.
+  const spans: Array<number[] | undefined> = new Array(w * d)
   const levels = new Set<number>([0])
   for (const b of bricks) {
     if (b.id === excludeId) continue
@@ -140,28 +141,47 @@ function columnTops(bricks: Brick[], baseplate: Baseplate, excludeId?: string) {
     const top = b.y + part.h
     levels.add(top)
     for (let x = Math.max(0, b.x); x < Math.min(w, b.x + fx); x++) {
-      for (let z = Math.max(0, b.z); z < Math.min(d, b.z + fz); z++) {
-        if (tops[x * d + z] < top) tops[x * d + z] = top
+      for (let z = Math.max(0, b.z); z < Math.min(d, b.z + fz); z++) (spans[x * d + z] ??= []).push(b.y, top)
+    }
+  }
+
+  const under = (x: number, z: number, fx: number, fz: number) => {
+    const cols: number[][] = []
+    for (let cx = Math.max(0, x); cx < Math.min(w, x + fx); cx++) {
+      for (let cz = Math.max(0, z); cz < Math.min(d, z + fz); cz++) {
+        const s = spans[cx * d + cz]
+        if (s) cols.push(s)
       }
     }
-  }
-  const restOn = (x: number, z: number, fx: number, fz: number): number => {
-    let y = 0
-    for (let cx = Math.max(0, x); cx < Math.min(w, x + fx); cx++) {
-      for (let cz = Math.max(0, z); cz < Math.min(d, z + fz); cz++) y = Math.max(y, tops[cx * d + cz])
+    /** No brick in these columns overlaps plates [y, y + h). */
+    const free = (y: number, h: number) => cols.every((s) => {
+      for (let i = 0; i < s.length; i += 2) if (s[i] < y + h && y < s[i + 1]) return false
+      return true
+    })
+    /** Lowered from above to level `y`, a part of height `h` lands there: studs at exactly `y` (or the plate), and room. */
+    const landsAt = (y: number, h: number) => {
+      let highest = 0
+      for (const s of cols) for (let i = 1; i < s.length; i += 2) if (s[i] <= y && s[i] > highest) highest = s[i]
+      return highest === y && free(y, h)
     }
-    return y
+    /** The supported levels at or above `from`, lowest first: the plate and the brick tops in these columns. */
+    const restingLevels = (from: number) => {
+      const out = new Set<number>(from <= 0 ? [0] : [])
+      for (const s of cols) for (let i = 1; i < s.length; i += 2) if (s[i] >= from) out.add(s[i])
+      return [...out].sort((a, b) => a - b)
+    }
+    return { free, landsAt, restingLevels }
   }
-  return { levels, restOn }
+  return { levels, under }
 }
 
 /**
- * Where a `part` aimed at `anchor` comes to rest when lowered from above, like a real brick: on the highest
- * studs under its whole footprint. y = max(0, the top of every brick sharing a column with the footprint);
- * x and z never change and the anchor's own y does not matter. So a long brick over a gap between two
- * supports bridges them, resting on the taller one. `excludeId` (a brick being moved) does not count.
- * The result is not checked: off the plate, over the height limit or past the brick limit, `canPlace`
- * still reports the usual error.
+ * Where a dropped `part` really goes from the pointer's `anchor`: moved straight up (x and z never change)
+ * to the lowest free, supported level at or above max(0, anchor.y), so dropping onto studs that are already
+ * taken stacks on top of what is there. It only climbs on a collision: bricks somewhere above (a roof) do not
+ * pull it up. An accepted anchor comes back as it is. When nothing fits (off the plate, over the height
+ * limit, nothing to rest on, brick limit reached) the original anchor comes back, so the caller reports the
+ * usual error. `excludeId` is a brick being moved, which does not count as an obstacle.
  */
 export function settleAnchor(
   bricks: Brick[],
@@ -171,21 +191,42 @@ export function settleAnchor(
   baseplate: Baseplate,
   excludeId?: string,
 ): Anchor {
+  return settleIn(columns(bricks, baseplate, excludeId), bricks, part, r, anchor, baseplate, excludeId)
+}
+
+function settleIn(
+  cols: ReturnType<typeof columns>,
+  bricks: Brick[],
+  part: PartDef,
+  r: Rot,
+  anchor: Anchor,
+  baseplate: Baseplate,
+  excludeId?: string,
+): Anchor {
   const { fx, fz } = footprint(part, r)
-  const y = columnTops(bricks, baseplate, excludeId).restOn(anchor.x, anchor.z, fx, fz)
-  return { x: anchor.x, y, z: anchor.z }
+  const { x, z } = anchor
+  if (x < 0 || z < 0 || x + fx > baseplate.w || z + fz > baseplate.d) return anchor
+  if (excludeId === undefined && bricks.length >= MAX_BRICKS) return anchor
+  const { free, restingLevels } = cols.under(x, z, fx, fz)
+  for (const y of restingLevels(Math.max(0, anchor.y))) {
+    if (y + part.h > MAX_HEIGHT_PLATES) break
+    if (free(y, part.h)) return y === anchor.y ? anchor : { x, y, z }
+  }
+  return anchor
 }
 
 /**
  * Where a part dropped through the pointer ray of `hit` goes (the Workshop's ghost, tap, palette drop and
  * move all use this): lowered from above, under the pointer.
  *  1. A hit on a brick's underside keeps placing under it (`targetAnchor`) when `canPlace` accepts that.
- *  2. Otherwise, walking along the ray from the camera to the hit: the first brick-top level L (or the
- *     plate) where the footprint centred under the ray would rest at exactly L, on the plate and under the
- *     height limit. Aimed over a gap between two supports, the ray passes above the gap at the height of
- *     their tops, so the brick bridges them, although the ray itself goes on to hit the plate behind them.
- *  3. Failing that (or with no ray origin): `targetAnchor`'s x/z at the `settleAnchor` level.
- * Every level costs one footprint lookup in a column-top map built in one pass over the bricks.
+ *  2. Otherwise, walking along the ray from the camera to the hit: the first brick-top level L (or the plate)
+ *     where the footprint centred under the ray, lowered from L, lands at L: on the plate, under the height
+ *     limit, on studs at exactly L (bricks wholly above L, like a roof, do not count) and with room there.
+ *     Aimed over a gap between two supports, the ray passes above the gap at the height of their tops, so the
+ *     brick bridges them, although the ray itself goes on to hit the plate behind them. A floor hit inside a
+ *     roofed house, seen through a door, is accepted at y = 0.
+ *  3. Failing that (or with no ray origin): `targetAnchor`, settled up from its own level (`settleAnchor`).
+ * Each level costs one footprint lookup in column spans built in one pass over the bricks.
  */
 export function pointerAnchor(
   bricks: Brick[],
@@ -200,14 +241,14 @@ export function pointerAnchor(
     const under = { id: '', p: part.id, r, c: 0, ...target }
     if (canPlace(bricks, under, baseplate, excludeId) === null) return target
   }
-  const { fx, fz } = footprint(part, r)
-  const { levels, restOn } = columnTops(bricks, baseplate, excludeId)
+  const cols = columns(bricks, baseplate, excludeId)
   const o = hit.origin
   const [px, py, pz] = hit.point
-  if (o && py !== o[1]) {
+  if (o && py !== o[1] && !(excludeId === undefined && bricks.length >= MAX_BRICKS)) {
+    const { fx, fz } = footprint(part, r)
     // [t along the ray from origin (0) to hit (1), level] for the levels the ray crosses up to the hit.
     const crossings: Array<[number, number]> = []
-    for (const level of levels) {
+    for (const level of cols.levels) {
       if (level + part.h > MAX_HEIGHT_PLATES) continue
       const t = (platesToWorld(level) - o[1]) / (py - o[1])
       if (t > 0 && t <= 1 + RAY_EPS) crossings.push([t, level])
@@ -216,8 +257,8 @@ export function pointerAnchor(
     for (const [t, level] of crossings) {
       const at = centredOn(Math.floor(o[0] + (px - o[0]) * t), Math.floor(o[2] + (pz - o[2]) * t), part, r)
       if (at.x < 0 || at.z < 0 || at.x + fx > baseplate.w || at.z + fz > baseplate.d) continue
-      if (restOn(at.x, at.z, fx, fz) === level) return { x: at.x, y: level, z: at.z }
+      if (cols.under(at.x, at.z, fx, fz).landsAt(level, part.h)) return { x: at.x, y: level, z: at.z }
     }
   }
-  return { x: target.x, y: restOn(target.x, target.z, fx, fz), z: target.z }
+  return settleIn(cols, bricks, part, r, target, baseplate, excludeId)
 }
