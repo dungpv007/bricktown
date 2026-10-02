@@ -5,7 +5,7 @@ import { DEFAULT_COLOR } from '../core/colors'
 import { DEFAULT_FIG, figColor, figKey, figOf, isFigure, MINIFIG_PART } from '../core/figures'
 import { newId } from '../core/ids'
 import { duplicateSpot, type Spot } from '../core/duplicate'
-import { addBrick, moveBrick, paintBrick, removeBrick, restyleFigure, rotateBrick, type PlaceError, type PlaceResult } from '../core/model'
+import { addBrick, moveBrick, paintBrick, removeBrick, restyleFigure, rotateBrick, stepAnchor, type PlaceError, type PlaceResult } from '../core/model'
 import { nextRot } from '../core/rotation'
 import type { Baseplate, Brick, BlueprintKind, FigStyle, PartCategory, Rot } from '../core/types'
 import { createHistory } from './history'
@@ -64,6 +64,11 @@ export interface EditorState {
   deselect: () => void
   /** Turns the selected brick a quarter turn (undoable; rejected when it would not fit). */
   rotateSelected: () => void
+  /**
+   * Nudges the selected brick by (dx, dz) studs (the arrow keys), resting where a drop there would
+   * (see `stepAnchor`): one undo step, rejected when it does not fit (off the plate, no room).
+   */
+  stepSelected: (dx: number, dz: number) => void
   /** Removes the selected brick (undoable) and clears the selection. */
   deleteSelected: () => void
   /** Copies the selected brick to the first free spot (see `duplicateSpot`) and selects the copy. */
@@ -208,6 +213,14 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (!target) return
       const { bricks, baseplate } = workshop()
       commit(bricks, rotateBrick(bricks, target.id, baseplate), sfx.snap)
+    },
+
+    stepSelected: (dx, dz) => {
+      const target = selected()
+      if (!target) return
+      const { bricks, baseplate } = workshop()
+      // Same path as a drag-move: one undo step, the usual error when it does not fit.
+      get().moveBrick(target.id, stepAnchor(bricks, target, dx, dz, baseplate))
     },
 
     deleteSelected: () => {

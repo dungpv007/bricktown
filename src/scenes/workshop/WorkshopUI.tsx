@@ -14,6 +14,8 @@ import PartPalette from '../../ui/PartPalette'
 import SaveBlueprintDialog from '../../ui/SaveBlueprintDialog'
 import Toolbar from '../../ui/Toolbar'
 import TopRight from '../../ui/TopRight'
+import { arrowStep, isArrowKey } from './arrowKeys'
+import { cameraView } from './cameraView'
 import PlateColorButton from './PlateColorButton'
 
 interface ModelOption {
@@ -99,7 +101,10 @@ function NewModelPicker({ onClose }: { onClose: () => void }) {
 const typingIn = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
 
-/** Desktop keys for the selected brick: Delete / Backspace, R (rotate), Ctrl/Cmd+D (duplicate), Esc. */
+/**
+ * Desktop keys for the selected brick: the arrows (one stud, relative to the camera view), Space and R
+ * (rotate), Delete / Backspace, Ctrl/Cmd+D (duplicate), Esc.
+ */
 function useSelectionKeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -112,7 +117,14 @@ function useSelectionKeys() {
       const key = e.key.toLowerCase()
       if (mod && key === 'd') ed.duplicateSelected()
       else if (mod) return
-      else if (key === 'delete' || key === 'backspace') ed.deleteSelected()
+      else if (isArrowKey(e.key)) {
+        const { dx, dz } = arrowStep(cameraView.forward?.() ?? { x: 0, z: -1 }, e.key)
+        ed.stepSelected(dx, dz)
+      } else if (key === ' ') {
+        // A held Space turns the brick once, and must not also press the focused button on release.
+        if (!e.repeat) ed.rotateSelected()
+        if (e.target instanceof HTMLElement && e.target !== document.body) e.target.blur()
+      } else if (key === 'delete' || key === 'backspace') ed.deleteSelected()
       else if (key === 'r') ed.rotateSelected()
       else if (key === 'escape') ed.deselect()
       else return

@@ -230,6 +230,40 @@ test('workshop: keyboard acts on the selected brick', async ({ page }) => {
   await expect(page.getByTestId('action-bar')).toHaveCount(0)
 })
 
+test('workshop: arrow keys move the selected brick one stud, space turns it, each as one undo step', async ({ page }) => {
+  await openWorkshop(page)
+  await placeAt(page, 6, 0, 6)
+  const at = await screenOf(page, top2x4(6, 6))
+  await page.mouse.click(at.x, at.y)
+  await expect(page.getByTestId('action-bar')).toBeVisible()
+  // The default view looks along -z: the right arrow is +x.
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(async () => (await bricks(page))[0]).toMatchObject({ x: 8, y: 0, z: 6, r: 0 })
+  // Up is away from the viewer (-z), down towards them.
+  await page.keyboard.press('ArrowUp')
+  await expect.poll(async () => (await bricks(page))[0]).toMatchObject({ x: 8, z: 5 })
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Space')
+  await expect.poll(async () => (await bricks(page))[0]).toMatchObject({ x: 8, z: 6, r: 1 })
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+  // One undo step per key press, last first: the turn, the down, the up, then the second right.
+  await page.getByTestId('undo').click()
+  await expect.poll(async () => (await bricks(page))[0]).toMatchObject({ x: 8, z: 6, r: 0 })
+  await page.getByTestId('undo').click()
+  await expect.poll(async () => (await bricks(page))[0]).toMatchObject({ x: 8, z: 5 })
+  await page.getByTestId('undo').click()
+  await page.getByTestId('undo').click()
+  await expect.poll(async () => (await bricks(page))[0]).toMatchObject({ x: 7, z: 6 })
+  // Nothing selected: the keys do nothing.
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('action-bar')).toHaveCount(0)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()) // not a focused button's own Space
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('Space')
+  expect((await bricks(page))[0]).toMatchObject({ x: 7, z: 6, r: 0 })
+})
+
 test('workshop: dragging a brick (touch) moves it, as one undo step, without turning the camera', async ({ page }) => {
   await openWorkshop(page)
   await placeAt(page, 2, 0, 2)

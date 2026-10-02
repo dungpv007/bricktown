@@ -13,6 +13,7 @@ import SelectionHighlight from '../../render/SelectionHighlight'
 import { useEditor, type ViewShift } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
+import { cameraView } from './cameraView'
 import PlateEdgeButtons, { PlateEdgeTracker, type EdgeElements } from './PlateEdgeButtons'
 import { plateScreen } from './plateScreen'
 import { safeRect, toNdc } from './safeArea'
@@ -352,6 +353,17 @@ function WorkshopWorld() {
       plateScreen.project = null
     }
   }, [el, get])
+
+  // The arrow keys move a brick relative to the view: tell them which way the camera looks.
+  useEffect(() => {
+    cameraView.forward = () => {
+      const d = get().camera.getWorldDirection(new THREE.Vector3())
+      return { x: d.x, z: d.z }
+    }
+    return () => {
+      cameraView.forward = null
+    }
+  }, [get])
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const cancelGlide = useRef<(() => void) | null>(null)

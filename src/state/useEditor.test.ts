@@ -145,6 +145,40 @@ describe('useEditor selection', () => {
     expect(ed().selectedId).toBe('edge')
   })
 
+  it('stepSelected moves one stud per call as one undo step each; the plate edge rejects with an error', () => {
+    ed().select(id)
+    ed().stepSelected(1, 0)
+    ed().stepSelected(1, 0)
+    expect(bricks()[0]).toMatchObject({ x: 2, y: 0, z: 0 })
+    expect(ed().selectedId).toBe(id)
+    ed().undo()
+    expect(bricks()[0]).toMatchObject({ x: 1, z: 0 })
+    ed().undo()
+    expect(bricks()[0]).toMatchObject({ x: 0, z: 0 })
+    const before = bricks()
+    const seq = ed().errorSeq
+    ed().stepSelected(-1, 0)
+    expect(ed().lastError).toBe('out_of_bounds')
+    expect(ed().errorSeq).toBe(seq + 1)
+    expect(bricks()).toBe(before)
+  })
+
+  it('stepSelected climbs onto a neighbour and steps down again; without a selection it does nothing', () => {
+    ed().place(4, 0, 0)
+    const before = bricks()
+    ed().deselect()
+    ed().stepSelected(1, 0)
+    expect(bricks()).toBe(before)
+    ed().select(id) // the 2x4 at (0, 0, 0) spans x 0..2
+    ed().stepSelected(1, 0)
+    ed().stepSelected(1, 0)
+    expect(bricks().find((b) => b.id === id)).toMatchObject({ x: 2, y: 0 })
+    ed().stepSelected(1, 0) // x 3..5 now overlaps the 2x4 at x 4..6: on top of it
+    expect(bricks().find((b) => b.id === id)).toMatchObject({ x: 3, y: 3 })
+    ed().stepSelected(0, 4) // clear of it, over bare plate
+    expect(bricks().find((b) => b.id === id)).toMatchObject({ x: 3, y: 0, z: 4 })
+  })
+
   it('deleteSelected removes the brick and clears the selection; undo brings the brick back', () => {
     ed().select(id)
     ed().deleteSelected()

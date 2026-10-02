@@ -262,3 +262,29 @@ export function pointerAnchor(
   }
   return settleIn(cols, bricks, part, r, target, baseplate, excludeId)
 }
+
+/**
+ * Where `brick` goes when nudged by (dx, dz) studs (the arrow keys): x and z follow the step, y is where it
+ * rests there, not counting itself. Free at its own level, it is lowered from there onto the highest studs
+ * (or the plate) below its footprint, so it steps down off a brick and a roof overhead does not pull it up.
+ * Blocked at its own level, it climbs to the lowest free, supported level above, onto what is in the way.
+ * Off the plate, over the height limit or with nowhere to rest, the stepped spot comes back at its own
+ * height, so `canPlace` reports the usual error.
+ */
+export function stepAnchor(bricks: Brick[], brick: Brick, dx: number, dz: number, baseplate: Baseplate): Anchor {
+  const part = getPart(brick.p)
+  const { fx, fz } = footprint(part, brick.r)
+  const x = brick.x + dx
+  const z = brick.z + dz
+  const stepped = { x, y: brick.y, z }
+  if (x < 0 || z < 0 || x + fx > baseplate.w || z + fz > baseplate.d) return stepped
+  const cols = columns(bricks, baseplate, brick.id)
+  const { free, restingLevels } = cols.under(x, z, fx, fz)
+  if (free(brick.y, part.h)) {
+    // Nothing in the way at this level: lower it to the highest level at or below it. A brick top above
+    // belongs to a brick that starts above this one's own top, so the level below is always free.
+    const below = restingLevels(0).filter((y) => y <= brick.y)
+    return { x, y: below[below.length - 1], z }
+  }
+  return settleIn(cols, bricks, part, brick.r, stepped, baseplate, brick.id)
+}
