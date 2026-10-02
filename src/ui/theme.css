@@ -1683,6 +1683,181 @@ form.bt-dialog,
   color: var(--bt-white);
 }
 
+/* ---------- City picker: the kid's cities ---------- */
+.bt-city-picker-btn {
+  display: flex;
+  align-items: center;
+  gap: calc(8px * var(--bt-s));
+  background: var(--bt-green);
+  color: var(--bt-white);
+}
+
+.bt-dialog.bt-city-picker {
+  width: min(100%, 900px);
+  align-items: stretch;
+  overscroll-behavior: contain;
+}
+
+.bt-city-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bt-gap);
+}
+
+.bt-city-picker-title {
+  margin: 0;
+  font-size: calc(28px * var(--bt-s));
+  font-weight: 800;
+}
+
+.bt-city-count {
+  padding: calc(2px * var(--bt-s)) calc(10px * var(--bt-s));
+  border-radius: 999px;
+  background: var(--bt-sky);
+  font-size: calc(18px * var(--bt-s));
+  white-space: nowrap;
+}
+
+.bt-city-picker-close {
+  flex: none;
+  width: var(--bt-touch);
+  padding: 0;
+  font-size: calc(30px * var(--bt-s));
+}
+
+/* Tablets: three cards a row; phones held upright: one wide card a row. */
+.bt-city-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(250px * var(--bt-s)), 1fr));
+  gap: calc(16px * var(--bt-s));
+}
+
+.bt-city-new {
+  min-height: calc(200px * var(--bt-s));
+  background: var(--bt-yellow);
+  color: var(--bt-ink);
+}
+
+.bt-city-new .bt-card-icon {
+  font-size: calc(64px * var(--bt-s));
+}
+
+.bt-city-new-full {
+  opacity: 0.55;
+}
+
+.bt-city-card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--bt-s));
+  min-width: 0;
+  padding: calc(8px * var(--bt-s));
+  border: calc(5px * var(--bt-s)) solid transparent;
+  border-radius: var(--bt-radius);
+  background: var(--bt-blue);
+  box-shadow: var(--bt-shadow);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.bt-city-card[data-current='true'] {
+  border-color: var(--bt-yellow);
+  background: var(--bt-green);
+}
+
+.bt-city-open {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(6px * var(--bt-s));
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bt-white);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bt-city-card:active .bt-city-open {
+  transform: translateY(2px);
+}
+
+.bt-city-thumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: contain; /* the whole square map, on grass-coloured sides */
+  border-radius: calc(16px * var(--bt-s));
+  background: #7cc66b;
+  image-rendering: pixelated;
+}
+
+.bt-city-thumb.bt-thumb-fallback {
+  font-size: calc(48px * var(--bt-s));
+}
+
+.bt-city-badge {
+  position: absolute;
+  top: calc(6px * var(--bt-s));
+  left: calc(6px * var(--bt-s));
+  padding: calc(2px * var(--bt-s)) calc(10px * var(--bt-s));
+  border-radius: 999px;
+  background: var(--bt-yellow);
+  color: var(--bt-ink);
+  font-size: max(12px, calc(16px * var(--bt-s)));
+  font-weight: 800;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+}
+
+.bt-city-name {
+  overflow: hidden;
+  font-size: calc(20px * var(--bt-s));
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Four actions share the card's width (each at least a finger wide, a full touch target tall). */
+.bt-city-acts {
+  display: flex;
+  gap: calc(6px * var(--bt-s));
+}
+
+.bt-city-act {
+  flex: 1 1 0;
+  min-width: 44px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: calc(26px * var(--bt-s));
+}
+
+.bt-city-act:disabled {
+  opacity: 0.4;
+}
+
+.bt-city-new-empty,
+.bt-city-new-sample {
+  color: var(--bt-white);
+}
+
+.bt-city-new-empty {
+  background: var(--bt-green);
+}
+
+.bt-city-new-sample {
+  background: var(--bt-blue);
+}
+
+.bt-city-new-empty > span,
+.bt-city-new-sample > span {
+  font-size: calc(44px * var(--bt-s));
+  line-height: 1;
+}
+
 .bt-city-drawer {
   position: absolute;
   left: calc(var(--bt-edge) + var(--bt-touch) + 24px * var(--bt-s));
@@ -2587,14 +2762,16 @@ form.bt-dialog,
     top: var(--bt-top);
   }
 
-  /* City and maze editor: the drive button and the maze status show their icons only (labels stay for screen readers). */
-  .bt-city-drive {
+  /* City and maze editor: the drive and city buttons and the maze status show their icons only (labels stay for screen readers). */
+  .bt-city-drive,
+  .bt-city-picker-btn {
     justify-content: center;
     padding: 0 calc(10px * var(--bt-s));
     font-size: 0;
   }
 
-  .bt-city-drive > span {
+  .bt-city-drive > span,
+  .bt-city-picker-btn > span {
     font-size: calc(32px * var(--bt-s));
   }
 

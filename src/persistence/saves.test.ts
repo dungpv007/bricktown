@@ -96,8 +96,8 @@ describe('saves', () => {
   })
 
   it('load rejects records missing top-level keys', async () => {
-    const { city: _city, ...partial } = createEmptySave()
-    void _city
+    const { cities: _cities, ...partial } = createEmptySave()
+    void _cities
     await db.slots.put({ id: 1, name: 'x', updatedAt: 1, data: partial as unknown as SaveData })
     expect(await loadSlot(1)).toEqual({ status: 'unreadable' })
   })

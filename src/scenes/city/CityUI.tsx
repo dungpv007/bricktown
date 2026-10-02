@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TEMPLATES } from '../../content/templates'
+import { cityDisplayName, cityIsEmpty, currentCity, currentSavedCity } from '../../core/cities'
 import { MAX_SCALE, MIN_SCALE, scaleOf } from '../../core/city'
 import { buildCityPackage } from '../../core/share'
 import type { TerrainBrush } from '../../core/terrain'
@@ -19,6 +20,7 @@ import { useT, type TKey } from '../../ui/i18n'
 import ShareDialog from '../../ui/share/ShareDialog'
 import TopRight from '../../ui/TopRight'
 import { useThumbnail } from '../../ui/useThumbnail'
+import CityPickerButton from './CityPicker'
 
 const PAINT_TOOLS: Array<{ layer: PaintLayer; icon: string; labelKey: TKey; eraserKey?: TKey }> = [
   { layer: 'road', icon: '🛣️', labelKey: 'cityToolRoad', eraserKey: 'cityRoadEraser' },
@@ -293,17 +295,15 @@ function SourceDrawer() {
   )
 }
 
-/** Shares the whole city with the models it uses (an empty city has nothing to share). */
+/** Shares the city being played with the models it uses (an empty city has nothing to share). */
 function ShareCity() {
   const t = useT()
   const [open, setOpen] = useState(false)
-  const empty = useGame((s) => {
-    const { placements, roads, rails, terrain } = s.data.city
-    return placements.length === 0 && roads.length === 0 && !rails?.length && !terrain
-  })
+  const empty = useGame((s) => cityIsEmpty(currentCity(s.data)))
   const build = useCallback(() => {
-    const { city, blueprints } = useGame.getState().data
-    return buildCityPackage(city, blueprints, { name: t('shareCityName') })
+    const { data } = useGame.getState()
+    const saved = currentSavedCity(data)
+    return buildCityPackage(saved.city, data.blueprints, { name: cityDisplayName(saved, t('cityDefaultName')) })
   }, [t])
   return (
     <>
@@ -333,29 +333,6 @@ function NpcToggle() {
   )
 }
 
-/** 🏙️ Replaces the city with the sample town, after a yes. */
-function LoadSample() {
-  const t = useT()
-  const [asking, setAsking] = useState(false)
-  return (
-    <>
-      <button className="bt-btn bt-icon-btn" data-testid="city-load-sample" aria-label={t('cityLoadSample')} onClick={() => setAsking(true)}>
-        🏙️
-      </button>
-      {asking && (
-        <ConfirmDialog
-          messageKey="confirmLoadSample"
-          onYes={() => {
-            setAsking(false)
-            useCityEditor.getState().loadSampleCity()
-          }}
-          onNo={() => setAsking(false)}
-        />
-      )}
-    </>
-  )
-}
-
 /** HTML overlay on top of the city canvas. */
 export default function CityUI() {
   const t = useT()
@@ -364,7 +341,7 @@ export default function CityUI() {
   const loadBricks = useEditor((s) => s.loadBricks)
   const [pendingEdit, setPendingEdit] = useState<Blueprint | null>(null)
   const selectedPlacementId = useCityEditor((s) => s.selectedPlacementId)
-  const placements = useGame((s) => s.data.city.placements)
+  const placements = useGame((s) => currentCity(s.data).placements)
   const blueprints = useGame((s) => s.data.blueprints)
   const selected = useMemo(() => placements.find((q) => q.id === selectedPlacementId) ?? null, [placements, selectedPlacementId])
   // The blueprint behind the selected placement, if it is one of the kid's (templates are not editable here).
@@ -393,7 +370,7 @@ export default function CityUI() {
     <div className="bt-city-ui">
       <TopRight>
         <NpcToggle />
-        <LoadSample />
+        <CityPickerButton />
         <ShareCity />
         <button className="bt-btn bt-city-drive" data-testid="city-drive" aria-label={t('menuDrive')} onClick={() => setMode('drive')}>
           <span aria-hidden="true">🚗</span> {t('menuDrive')}

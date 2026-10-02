@@ -1,8 +1,9 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SAMPLE_CITY } from '../content/cities/sample'
+import { currentCity } from '../core/cities'
 import { createEmptySave } from '../core/serialize'
-import type { SaveData } from '../core/types'
+import type { CityState, SaveData } from '../core/types'
 import { useApp } from '../state/useApp'
 import { useGame } from '../state/useGame'
 import { flushAutosave } from './autosave'
@@ -34,8 +35,10 @@ beforeEach(async () => {
   applySave(createEmptySave())
 })
 
+const current = () => currentCity(useGame.getState().data)
+
 /** A city with the sample town's layout and models (placement ids are fresh in every copy). */
-const isSampleTown = (city: SaveData['city']) =>
+const isSampleTown = (city: CityState) =>
   city.roads.length === SAMPLE_CITY.roads.length &&
   city.placements.length === SAMPLE_CITY.placements.length &&
   city.placements.every((p, i) => p.source === SAMPLE_CITY.placements[i].source && p.cx === SAMPLE_CITY.placements[i].cx)
@@ -43,7 +46,7 @@ const isSampleTown = (city: SaveData['city']) =>
 describe('new saves start with the sample town', () => {
   it('an empty slot (fresh install) loads the sample town with fresh ids, and saves nothing until an edit', async () => {
     await loadCurrentSlot()
-    const { city } = useGame.getState().data
+    const city = current()
     expect(isSampleTown(city)).toBe(true)
     expect(city.placements.some((p) => SAMPLE_CITY.placements.some((q) => q.id === p.id))).toBe(false)
     expect(await flushAutosave()).toBe(true)
@@ -52,23 +55,23 @@ describe('new saves start with the sample town', () => {
 
   it('an existing save keeps its own city, even an empty one', async () => {
     const own = savedWithBrick()
-    own.city = { size: 48, roads: ['1,1', '2,1'], placements: [{ id: 'p1', source: 'tpl:tree', cx: 5, cz: 5, rot: 0 }] }
+    own.cities[0].city = { size: 48, roads: ['1,1', '2,1'], placements: [{ id: 'p1', source: 'tpl:tree', cx: 5, cz: 5, rot: 0 }] }
     await db.slots.put({ id: 1, name: 'Slot 1', updatedAt: 1, data: own })
     await db.slots.put({ id: 2, name: 'Slot 2', updatedAt: 1, data: createEmptySave() })
     await loadCurrentSlot()
-    expect(useGame.getState().data.city).toEqual(own.city)
+    expect(current()).toEqual(own.cities[0].city)
     expect(await switchSlot(2)).toBe(true)
-    expect(useGame.getState().data.city).toEqual(createEmptySave().city)
+    expect(current()).toEqual(createEmptySave().cities[0].city)
   })
 
   it('switching to a never-used slot, or deleting the current one, starts the sample town', async () => {
     expect(await switchSlot(3)).toBe(true)
-    expect(isSampleTown(useGame.getState().data.city)).toBe(true)
+    expect(isSampleTown(current())).toBe(true)
     await db.slots.put({ id: 3, name: 'Slot 3', updatedAt: 1, data: savedWithBrick() })
     await loadCurrentSlot()
-    expect(useGame.getState().data.city.placements).toHaveLength(0)
+    expect(current().placements).toHaveLength(0)
     expect(await deleteSlotById(3)).toBe(true)
-    expect(isSampleTown(useGame.getState().data.city)).toBe(true)
+    expect(isSampleTown(current())).toBe(true)
   })
 })
 

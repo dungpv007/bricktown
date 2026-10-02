@@ -1,14 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
+import { MAX_CITIES } from '../../core/cities'
 import type { AuthoringIssue } from '../../core/authoring'
 import type { ShareErrorCode, SharePackage } from '../../core/share'
 import type { ImportPlan } from '../../core/shareImport'
 import { getThumbnail } from '../../render/thumbnails'
 import { mazeThumbnail } from '../../scenes/maze/mazeThumbnail'
 import { useApp } from '../../state/useApp'
+import { useGame } from '../../state/useGame'
 import { useMazeEditor } from '../../state/useMazeEditor'
 import { useShareImport, type Incoming } from '../../state/useShareImport'
 import { KIND_ICON } from '../blueprintKinds'
-import ConfirmDialog from '../ConfirmDialog'
 import { useT, type TKey } from '../i18n'
 import { useThumbnail } from '../useThumbnail'
 import { issueText } from './authoringText'
@@ -116,17 +117,12 @@ function ErrorCard({ error, problems }: { error: ShareErrorCode; problems?: Auth
   )
 }
 
-/** The city replaces the kid's own as a whole, so a non-empty city asks a second time. */
-const replacesSomething = (plan: ImportPlan) => plan.kind === 'city' && plan.replaces.placements + plan.replaces.roads > 0
-
 function Preview({ pkg, plan, fixed }: { pkg: SharePackage; plan: ImportPlan; fixed?: number }) {
   const t = useT()
   const { confirm, dismiss } = useShareImport.getState()
-  const [asking, setAsking] = useState(false)
-  const add = () => {
-    confirm()
-  }
-  const onYes = () => (replacesSomething(plan) ? setAsking(true) : add())
+  // A city is added as one more of the kid's cities: none is lost, so no second question. At the
+  // cap the kid is asked to delete one of their cities first (in the City's 🏙️ picker).
+  const full = useGame((s) => plan.kind === 'city' && s.data.cities.length >= MAX_CITIES)
   return (
     <div className="bt-dialog bt-import" role="dialog" aria-label={pkg.name} data-testid="import-preview" data-kind={plan.kind}>
       <PreviewThumb plan={plan} />
@@ -144,15 +140,21 @@ function Preview({ pkg, plan, fixed }: { pkg: SharePackage; plan: ImportPlan; fi
         </p>
       ) : null}
       <Counts plan={plan} />
+      {full && (
+        <p className="bt-share-hint bt-import-full" data-testid="import-cities-full">
+          <span aria-hidden="true">🏙️🗑️</span> {t('importCitiesFull').replace('{n}', String(MAX_CITIES))}
+        </p>
+      )}
       <div className="bt-row">
         <button className="bt-btn bt-no" data-testid="import-cancel" aria-label={t('close')} onClick={dismiss}>
           ✗
         </button>
-        <button className="bt-btn bt-yes bt-import-yes" data-testid="import-confirm" onClick={onYes}>
-          ✓ {t(plan.kind === 'city' ? 'importReplaceCity' : 'importAdd')}
-        </button>
+        {!full && (
+          <button className="bt-btn bt-yes bt-import-yes" data-testid="import-confirm" onClick={() => confirm()}>
+            {plan.kind === 'city' ? `➕ ${t('importAddCity')}` : `✓ ${t('importAdd')}`}
+          </button>
+        )}
       </div>
-      {asking && <ConfirmDialog messageKey="confirmReplaceCity" onNo={() => setAsking(false)} onYes={add} />}
     </div>
   )
 }

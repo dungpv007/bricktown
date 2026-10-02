@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_CITIES, addCity, currentCity, emptyCity } from './cities'
 import { figPreset } from './figures'
 import { createEmptyMaze, setEntry, setExit, type Maze } from './maze'
 import { MAX_HEIGHT_PLATES } from './model'
@@ -360,7 +361,7 @@ describe('planImport / applyImport', () => {
   const existing = (): SaveData => {
     const data = createEmptySave()
     data.blueprints.push(blueprint([brick()], { id: 'bp_1', name: 'Mine' }))
-    data.city = { size: 48, roads: ['5,5'], placements: [{ id: 'old', source: 'bp_1', cx: 0, cz: 0, rot: 0 }] }
+    data.cities[0].city = { size: 48, roads: ['5,5'], placements: [{ id: 'old', source: 'bp_1', cx: 0, cz: 0, rot: 0 }] }
     return data
   }
   const decoded = (pkg: SharePackage): SharePackage => {
@@ -427,21 +428,34 @@ describe('planImport / applyImport', () => {
     expect(next.mazes).toHaveLength(1)
     expect(next.mazeChallenges ?? {}).toEqual({})
   })
-  it('replaces the city, adding its blueprints with new ids and remapped placements', () => {
+  it('adds the city as a new current city (the old one kept intact), with its blueprints under new ids and remapped placements', () => {
     const data = existing()
+    const before = structuredClone(data.cities[0])
     const plan = planImport(data, decoded(cityPkg()), 900)
-    expect(plan).toMatchObject({ kind: 'city', name: 'Phố', brickCount: 5, replaces: { placements: 1, roads: 1 } })
+    expect(plan).toMatchObject({ kind: 'city', name: 'Phố', brickCount: 5, full: false })
     if (plan.kind !== 'city') throw new Error()
-    const next = applyImport(data, plan)
+    const next = applyImport(data, plan, 950)
     expect(next.blueprints.map((b) => b.name)).toEqual(['Mine', 'A', 'B'])
     const [, a, b] = next.blueprints
     expect(a.id).not.toBe('bp_a')
-    expect(next.city.size).toBe(24)
-    expect(next.city.roads).toEqual(['0,0', '1,0'])
-    expect(next.city.placements.map((p) => p.source)).toEqual([a.id, 'tpl:tree', b.id, a.id])
-    expect(next.city.placements.map((p) => [p.cx, p.cz, p.rot])).toEqual([[2, 2, 0], [6, 2, 1], [10, 2, 0], [14, 2, 2]])
-    expect(new Set(next.city.placements.map((p) => p.id)).size).toBe(4)
-    expect(next.city.placements.map((p) => p.id)).not.toContain('pl0')
+    expect(next.cities).toHaveLength(2)
+    expect(next.cities[0]).toEqual(before)
+    expect(next.cities[1]).toMatchObject({ id: plan.cityId, name: 'Phố', createdAt: 950, updatedAt: 950 })
+    expect(next.currentCityId).toBe(plan.cityId)
+    const city = currentCity(next)
+    expect(city.size).toBe(24)
+    expect(city.roads).toEqual(['0,0', '1,0'])
+    expect(city.placements.map((p) => p.source)).toEqual([a.id, 'tpl:tree', b.id, a.id])
+    expect(city.placements.map((p) => [p.cx, p.cz, p.rot])).toEqual([[2, 2, 0], [6, 2, 1], [10, 2, 0], [14, 2, 2]])
+    expect(new Set(city.placements.map((p) => p.id)).size).toBe(4)
+    expect(city.placements.map((p) => p.id)).not.toContain('pl0')
+  })
+  it('adds nothing at the city cap (the preview says to delete a city first)', () => {
+    let data = existing()
+    for (let i = 1; i < MAX_CITIES; i++) data = addCity(data, emptyCity(), `c${i}`)!.data
+    const plan = planImport(data, decoded(cityPkg()), 900)
+    expect(plan).toMatchObject({ kind: 'city', full: true })
+    expect(applyImport(data, plan)).toBe(data)
   })
 })
 
@@ -478,7 +492,7 @@ describe('city terrain and rails (optional layers)', () => {
     if (plan.kind !== 'city') throw new Error()
     expect(plan.city.terrain).toEqual(layers.terrain)
     expect(plan.city.rails).toEqual(layers.rails)
-    expect(applyImport(createEmptySave(), plan).city.rails).toEqual(layers.rails)
+    expect(currentCity(applyImport(createEmptySave(), plan)).rails).toEqual(layers.rails)
   })
 
   it('rejects malformed, off-map or overlapping layers and water under roads or rails', () => {

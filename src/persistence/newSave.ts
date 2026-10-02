@@ -12,11 +12,11 @@ export const E2E_EMPTY_CITY_KEY = 'bricktown-e2e-empty-city'
 
 /**
  * What a slot with nothing saved in it starts as (a fresh install, a slot never used, a deleted
- * slot): an empty save whose City is a fresh copy of the sample town. Existing saves never go
+ * slot): an empty save whose first (and only) city is a fresh copy of the sample town. Existing saves never go
  * through here, so they keep their own city.
  */
 export function createNewSave(): SaveData {
   const save = createEmptySave()
-  if (!readFlag(E2E_EMPTY_CITY_KEY)) save.city = sampleCity()
+  if (!readFlag(E2E_EMPTY_CITY_KEY)) save.cities[0].city = sampleCity()
   return save
 }

@@ -15,6 +15,7 @@ vi.mock('../audio/sfx', () => ({
 
 import * as sfx from '../audio/sfx'
 import { getTemplate } from '../content/templates'
+import { currentCity } from '../core/cities'
 import { CELL } from '../core/city'
 import { createEmptySave } from '../core/serialize'
 import { nextPending } from '../core/template'
@@ -123,7 +124,7 @@ describe('guided sounds', () => {
 
 describe('city sounds', () => {
   const city = () => useCityEditor.getState()
-  const placements = () => useGame.getState().data.city.placements
+  const placements = () => currentCity(useGame.getState().data).placements
   beforeEach(() => {
     useCityEditor.setState({ selectedSource: null, errorSeq: 0 })
     city().reset()

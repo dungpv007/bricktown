@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import * as THREE from 'three'
+import { currentCity } from '../../core/cities'
 import { analyzeDrive, spawnPoint } from '../../core/drive'
 import { makeSizeOf, resolveSource } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
@@ -60,7 +61,7 @@ function ChaseCamera({ target, length }: { target: RefObject<THREE.Group | null>
 }
 
 function DriveWorld({ setup, spawn }: { setup: DrivableSetup; spawn: [number, number, number] }) {
-  const city = useGame((s) => s.data.city)
+  const city = useGame((s) => currentCity(s.data))
   const blueprints = useGame((s) => s.data.blueprints)
   const chassis = useRef<THREE.Group>(null)
   const length = setup.config.chassis.halfExtents[2] * 2
@@ -94,7 +95,7 @@ export default function DriveScene({ source, onChangeVehicle }: { source: string
   const setup = useMemo(() => (bricks ? analyzeDrive(bricks) : null), [bricks])
   const [spawn] = useState<[number, number, number]>(() => {
     const data = useGame.getState().data
-    const { x, z } = spawnPoint(data.city, makeSizeOf(data))
+    const { x, z } = spawnPoint(currentCity(data), makeSizeOf(data))
     return [x, SPAWN_DROP, z]
   })
 
