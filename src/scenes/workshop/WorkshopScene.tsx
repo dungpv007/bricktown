@@ -7,6 +7,7 @@ import { getPart } from '../../core/parts/catalog'
 import { rotateNormalY, type PickHit, type Vec3 } from '../../core/pick'
 import type { Baseplate as BaseplateSize, Brick, PartDef, Rot } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
+import { useTwoFingerCamera } from '../../input/useTwoFingerCamera'
 import BtCanvas from '../../render/BtCanvas'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks, { brickOfInstance } from '../../render/InstancedBricks'
@@ -128,6 +129,7 @@ function CameraRig({
   const camera = useRef<THREE.PerspectiveCamera>(null)
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
   const glide = useRef<Glide | null>(null)
+  useTwoFingerCamera(canvas, controls)
   const invalidate = useThree((s) => s.invalidate)
   const seenShift = useRef(shift?.seq)
   useLayoutEffect(() => {
@@ -182,6 +184,23 @@ function CameraRig({
     }
   }, [size, model, canvas, view, invalidate])
 
+  // One finger / the left mouse button pans, so the view must stay over the plate: the target is
+  // kept within a margin around it (the camera moves with it, so the angle is unchanged).
+  const reach = span / 2 + 4
+  const keepOverPlate = useCallback(() => {
+    const c = controls.current
+    const cam = camera.current
+    if (!c || !cam) return
+    const t = c.target
+    const x = Math.max(-reach, Math.min(size.w + reach, t.x))
+    const z = Math.max(-reach, Math.min(size.d + reach, t.z))
+    if (x === t.x && z === t.z) return
+    cam.position.x += x - t.x
+    cam.position.z += z - t.z
+    t.x = x
+    t.z = z
+  }, [reach, size.w, size.d])
+
   // Any camera drag by the player cancels a glide. Passed as a prop so it follows the controls
   // instance drei recreates (e.g. when the default camera changes), not just the first one.
   const cancelGlide = useCallback(() => {
@@ -224,8 +243,13 @@ function CameraRig({
         maxDistance={span * 4 + 20 + modelTop(model) * 2}
         minPolarAngle={0.15}
         maxPolarAngle={Math.PI / 2 - 0.1}
-        touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
-        mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
+        onChange={keepOverPlate}
+        screenSpacePanning={false}
+        // One finger / the left button pans the view over the plate, two fingers pinch and pan
+        // (a twist turns and a side-by-side push tilts: useTwoFingerCamera); the right button (or
+        // Ctrl + left) turns the camera and the wheel zooms.
+        touches={{ ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }}
+        mouseButtons={{ LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }}
       />
     </>
   )
@@ -352,12 +376,19 @@ function WorkshopWorld() {
   )
 
   useEffect(() => {
+    plateScreen.cameraPose = () => {
+      const { camera, controls } = get()
+      const target = (controls as ComponentRef<typeof OrbitControls> | null)?.target ?? new THREE.Vector3()
+      const s = new THREE.Spherical().setFromVector3(camera.position.clone().sub(target))
+      return { target: target.toArray(), distance: s.radius, azimuth: s.theta, polar: s.phi }
+    }
     plateScreen.project = ([x, y, z]) => {
       const v = new THREE.Vector3(x, y, z).project(get().camera)
       const r = el.getBoundingClientRect()
       return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }
     }
     return () => {
+      plateScreen.cameraPose = null
       plateScreen.project = null
     }
   }, [el, get])
@@ -381,7 +412,11 @@ function WorkshopWorld() {
     pressBrick: () => cancelGlide.current?.(),
     setOrbit: (on) => {
       const controls = get().controls as ComponentRef<typeof OrbitControls> | null
-      if (controls) controls.enableRotate = on
+      // A brick under the finger / left button is being moved: the view must not pan or turn.
+      if (controls) {
+        controls.enableRotate = on
+        controls.enablePan = on
+      }
     },
     // Touching the model (selecting, placing, dragging) or the sky leaves resize mode.
     tapBrick: (brick) => {

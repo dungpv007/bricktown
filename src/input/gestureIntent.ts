@@ -20,7 +20,7 @@ export interface GestureFacts {
  * - `drag-brick`: one finger moving from a brick moves that brick.
  * - `hold-brick`: a press on a brick that has not moved (yet): nothing happens, the camera stays.
  *   Released without having moved, however long it was held, it selects the brick (`tap-select`).
- * - `orbit`: one finger (or the mouse) anywhere else turns the camera; `pinch`: two fingers.
+ * - `orbit`: one finger (or the mouse) anywhere else moves the camera (the controls decide how); `pinch`: two fingers.
  */
 export type GestureIntent = 'tap-select' | 'tap-place' | 'tap-deselect' | 'drag-brick' | 'hold-brick' | 'orbit' | 'pinch'
 

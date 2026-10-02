@@ -1,19 +1,20 @@
 import { useEffect, type RefObject } from 'react'
 import * as THREE from 'three'
-import type { MapControls as MapControlsImpl } from 'three-stdlib'
-import { classifyTwoFinger, shove, TILT_PER_PX, TURN_START, twist, type TouchPair, type TwoFingerMode } from '../../input/twoFingerCamera'
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
+import { classifyTwoFinger, shove, TILT_PER_PX, TURN_START, twist, type TouchPair, type TwoFingerMode } from './twoFingerCamera'
 
 const UP = new THREE.Vector3(0, 1, 0)
 const offset = new THREE.Vector3()
 const spherical = new THREE.Spherical()
 
 /**
- * Lets touch screens turn and tilt the city camera (see input/twoFingerCamera): the map controls
- * only pinch-zoom and pan with two fingers, so without this a phone or tablet could never change
- * the view's angle (the mouse turns it with the right button). Turns move the camera directly
- * (no glide); a tilt holds the controls' own pinch / pan while it lasts.
+ * Lets touch screens turn and tilt the camera of a map-style view (the City and the Workshop; see
+ * twoFingerCamera): the controls only pinch-zoom and pan with two fingers, so without this a phone
+ * or tablet could never change the view's angle (the mouse turns it with the right button). Turns
+ * and tilts keep the controls' polar limits and move the camera directly (no glide); a tilt holds
+ * the controls' own pinch / pan while it lasts.
  */
-export function useTwoFingerCamera(el: HTMLElement, controls: RefObject<MapControlsImpl | null>): void {
+export function useTwoFingerCamera(el: HTMLElement, controls: RefObject<OrbitControlsImpl | null>): void {
   useEffect(() => {
     const touches = new Map<number, { x: number; y: number }>()
     let start: TouchPair | null = null

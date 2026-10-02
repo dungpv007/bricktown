@@ -42,7 +42,7 @@ interface Gesture {
  * The workshop's canvas gestures (see `gestureIntent`): a tap selects a brick, quick-places on the
  * empty plate or deselects on the sky; one finger dragging from a brick moves it while the camera
  * stays still (a long still press on a brick selects it, like a tap); any other one-finger drag
- * orbits and two fingers pinch / pan (OrbitControls). Leaving the app or losing the pointer
+ * pans the view and two fingers pinch / pan / turn / tilt (OrbitControls + useTwoFingerCamera). Leaving the app or losing the pointer
  * cancels a brick drag (the brick stays where it was). The
  * scene is picked with its own raycast at pointerdown, so every decision is made here, before or
  * regardless of R3F's own pointer events.

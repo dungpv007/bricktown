@@ -169,7 +169,7 @@ export const onboardingPending = (): boolean => !closedThisSession && !readFlag(
 
 /**
  * First-launch picture tour: tap a brick to choose it, drag it to move it, drag one up from the
- * palette to add it, drag empty space to look around, pinch to zoom. Skippable.
+ * palette to add it, drag empty space to slide the view, pinch to zoom. Skippable.
  */
 export default function Onboarding({ onDone }: { onDone?: () => void }) {
   const t = useT()
