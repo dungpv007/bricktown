@@ -1,14 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { getTemplate } from '../../content/templates'
 import { bakeBricks, bakedGeometries, bakeShadowBricks } from '../../core/bake'
 import { CAR_TEMPLATE_IDS, pedestrianStyles, TRAIN_CARRIAGE_IDS, TRAIN_ENGINE_IDS } from '../../core/npc/looks'
-import { buildNetwork, MAX_CARS, MAX_PEDS, MAX_TRAINS, RAIL_Y, ROAD_Y } from '../../core/npc/network'
+import { buildNetwork, MAX_CARS, MAX_PEDS, MAX_TRAINS, RAIL_Y, ROAD_Y, type NpcNetwork } from '../../core/npc/network'
 import { NpcSim } from '../../core/npc/sim'
 import { getFigureGeometry } from '../../core/parts/figureGeometry'
 import type { Blueprint, CityState } from '../../core/types'
 import { installLiveFigureKeys } from '../../render/liveFigures'
+import { useFrameRequest } from '../../render/frameDriver'
 import { bakedMaterials, castsShadow } from '../../render/materials'
 import { bakedModelBox } from '../../render/placementTransform'
 import { isShadowProxy, registerShadowProxy } from '../../render/shadowProxies'
@@ -97,7 +98,7 @@ function templateModel(id: string, fit: { width: number; length: number; scale: 
 
 const firstTrainModel = (ids: readonly string[]) => {
   for (const id of ids) {
-    const m = templateModel(id, id.startsWith('train_') ? TRAIN_FIT : STAND_IN_FIT, true)
+    const m = templateModel(id, id.startsWith('train_') ? TRAIN_FIT : STAND_IN_FIT)
     if (m) return m
   }
   return null
@@ -138,16 +139,16 @@ function npcLooks(): Looks {
   installLiveFigureKeys()
   const cars = CAR_TEMPLATE_IDS.map((id) => templateModel(id, CAR_FIT))
     .filter((m): m is NpcModel => m !== null)
-    // Only trains cast shadows: 14 cars would add ~85k triangles to every shadow pass, and they read
-    // fine on the asphalt without one; pedestrians are too small to need one.
+    // No city life casts a shadow: the shadow map stays static (redrawn only when the city changes,
+    // see render/staticShadows) while cars, trains and people move; they read fine without one.
     .map((model) => ({ model, capacity: MAX_CARS, shadow: false }))
   const engineModel = firstTrainModel(TRAIN_ENGINE_IDS)
   const carriageModel = firstTrainModel(TRAIN_CARRIAGE_IDS)
   const peds = pedestrianStyles().map((_, i) => ({ model: figureModel(i), capacity: MAX_PEDS, shadow: false }))
   return {
     cars,
-    engine: engineModel && { model: engineModel, capacity: MAX_TRAINS, shadow: true },
-    carriage: carriageModel && { model: carriageModel, capacity: MAX_TRAINS * 2, shadow: true },
+    engine: engineModel && { model: engineModel, capacity: MAX_TRAINS, shadow: false },
+    carriage: carriageModel && { model: carriageModel, capacity: MAX_TRAINS * 2, shadow: false },
     peds,
     trainLength: Math.max(engineModel?.length ?? 0, carriageModel?.length ?? 0) || 9,
   }
@@ -204,7 +205,14 @@ function SlotMeshes({ slot, register }: { slot: Slot; register: (part: number, m
   )
 }
 
-export default function NpcLife({ city, blueprints }: { city: CityState; blueprints: Blueprint[] }) {
+/** Fewer cars and people (graphics "ít"): the network's targets times `density`, at least one of each kind there is room for. */
+export function thinNetwork(net: NpcNetwork, density: number): NpcNetwork {
+  if (density >= 1) return net
+  const thin = (n: number) => (n === 0 ? 0 : Math.max(1, Math.round(n * density)))
+  return { ...net, carTarget: thin(net.carTarget), pedTarget: thin(net.pedTarget) }
+}
+
+export default function NpcLife({ city, blueprints, density = 1 }: { city: CityState; blueprints: Blueprint[]; density?: number }) {
   const looks = useMemo(() => npcLooks(), [])
   // Slots in a fixed order: the cars, the engine, the carriage, the pedestrians.
   const slots = useMemo(
@@ -215,6 +223,9 @@ export default function NpcLife({ city, blueprints }: { city: CityState; bluepri
   const sim = useRef<NpcSim | null>(null)
   const hidden = useRef(false)
   const counts = useRef(new Int32Array(0))
+  // Render on demand: keep frames coming (at the graphics frame cap) while anyone lives in this city.
+  const [alive, setAlive] = useState(false)
+  useFrameRequest(alive, 'motion')
 
   useEffect(() => {
     const s =
@@ -225,14 +236,18 @@ export default function NpcLife({ city, blueprints }: { city: CityState; bluepri
         trainLength: looks.trainLength,
         pedStyles: looks.peds.length,
       }))
-    const build = () => s.setNetwork(buildNetwork(city, makeSizeOf({ blueprints })))
+    const build = () => {
+      const net = thinNetwork(buildNetwork(city, makeSizeOf({ blueprints })), density)
+      s.setNetwork(net)
+      setAlive(net.carTarget + net.pedTarget + net.trains.length > 0)
+    }
     if (!s.net) {
       build()
       return
     }
     const id = window.setTimeout(build, REBUILD_DELAY)
     return () => window.clearTimeout(id)
-  }, [city, blueprints, looks])
+  }, [city, blueprints, looks, density])
 
   // Paused while the app is hidden (no catching up on return).
   useEffect(() => {

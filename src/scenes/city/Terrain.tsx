@@ -5,7 +5,9 @@ import { CELL } from '../../core/city'
 import { parseKey } from '../../core/cellGraph'
 import type { TerrainKind } from '../../core/terrain'
 import type { CityTerrain } from '../../core/types'
+import { useFrameRequest } from '../../render/frameDriver'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
+import { useGraphics } from '../../state/useGraphics'
 import { floorStudTexture } from '../maze/mazeGeometry'
 
 /**
@@ -111,9 +113,15 @@ function CellPlates({ keys, y, material, shadow }: { keys: string[]; y: number; 
   return <instancedMesh key={capacity} ref={ref} args={[cellGeometry(), material, capacity]} receiveShadow={shadow} />
 }
 
-/** Advances the shared water shimmer (one per scene that draws water). */
+/**
+ * Advances the shared water shimmer (one per scene that draws water), unless motion is unwelcome or
+ * the graphics settings keep the water still; while it shimmers it keeps frames coming (render on demand).
+ */
 function WaterClock() {
-  const [still] = useState(reducedMotion)
+  const [reduced] = useState(reducedMotion)
+  const animated = useGraphics().water
+  const still = reduced || !animated
+  useFrameRequest(!still, 'motion')
   useFrame((_, dt) => {
     if (!still) waterTime.value = (waterTime.value + Math.min(dt, 0.1)) % 10_000
   })

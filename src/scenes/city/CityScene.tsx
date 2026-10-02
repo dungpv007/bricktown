@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { useThree } from '@react-three/fiber'
 import { MapControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
@@ -12,16 +12,18 @@ import { paintTerrain, type TerrainBrush } from '../../core/terrain'
 import type { Baseplate, Blueprint, CityPlacement, CityState } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import BakedMeshes from '../../render/BakedMeshes'
+import BtCanvas from '../../render/BtCanvas'
 import { createGhostMaterial } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
 import { installShadowProxies } from '../../render/shadowProxies'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
+import { useSunShadow } from '../../render/useSunShadow'
 import { useApp } from '../../state/useApp'
 import { onCityReplaced } from '../../state/cityReplaced'
 import { useCityEditor } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
-import DevStats from '../../ui/DevStats'
+import { useGraphics } from '../../state/useGraphics'
 import CityGround from './CityGround'
 import { fitCityFrame } from './cityFraming'
 import { cityScreen } from './cityScreen'
@@ -60,6 +62,7 @@ function Lights({ size }: { size: number }) {
   const span = size * CELL
   const mid = span / 2
   const target = useMemo(() => new THREE.Object3D(), [])
+  const { castShadow, mapSize } = useSunShadow(SHADOW_MAP_SIZE)
 
   useLayoutEffect(() => {
     const cam = light.current?.shadow.camera
@@ -85,8 +88,8 @@ function Lights({ size }: { size: number }) {
         target={target}
         position={[mid + span * 0.3, span * 0.6, mid + span * 0.2]}
         intensity={2.2}
-        castShadow
-        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+        castShadow={castShadow}
+        shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.05}
       />
@@ -372,6 +375,7 @@ function CityWorld() {
   const selectedPlacementId = useCityEditor((s) => s.selectedPlacementId)
   const errorSeq = useCityEditor((s) => s.errorSeq)
   const npcOn = useApp((s) => s.npcOn)
+  const npcFactor = useGraphics().npcFactor
   const el = useThree((s) => s.gl.domElement)
   const getThree = useThree((s) => s.get)
 
@@ -629,7 +633,7 @@ function CityWorld() {
       {display.rails && <Rails rails={display.rails} roads={display.roads} shadows={false} />}
       <Placements placements={shown} blueprints={blueprints} shadowProxies />
       {/* Ambient life follows the saved city (not a stroke in progress); picking ignores it (see `pick`). */}
-      {npcOn && <NpcLife city={city} blueprints={blueprints} />}
+      {npcOn && npcFactor > 0 && <NpcLife city={city} blueprints={blueprints} density={npcFactor} />}
       {selected && selectedCells && (
         <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selectedCells.cw} cd={selectedCells.cd} color={SELECTED} opacity={0.55} />
       )}
@@ -639,14 +643,20 @@ function CityWorld() {
   )
 }
 
+/** Read imperatively (gestures, layout effects): a change asks for a frame. */
+const WATCH = [useGame, useCityEditor, useApp]
+
+/**
+ * The City renders on demand: frames come from input, edits and the camera; it only runs a loop (at
+ * the graphics frame cap) while something in it moves on its own (city life, water).
+ */
 export default function CityScene() {
   useEvictStaleBakesOnUnmount()
   return (
-    <Canvas shadows="percentage" dpr={[1, 1.5]} data-testid="city-canvas">
+    <BtCanvas testId="city-canvas" watch={WATCH}>
       <color attach="background" args={[SKY]} />
       <fog attach="fog" args={[SKY, 450, 900]} />
       <CityWorld />
-      <DevStats />
-    </Canvas>
+    </BtCanvas>
   )
 }

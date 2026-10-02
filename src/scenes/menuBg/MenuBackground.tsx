@@ -6,6 +6,7 @@ import { CELL } from '../../core/city'
 import type { Brick } from '../../core/types'
 import BakedMeshes from '../../render/BakedMeshes'
 import { resolveRenderable, templateSource } from '../../render/sources'
+import { useGraphics } from '../../state/useGraphics'
 import Placements from '../city/Placements'
 import Roads from '../city/Roads'
 import { CAR_SPEED, CARS, CENTER, CLOUD, CLOUD_SPAN, CLOUDS, FIGURES, LANE, PATCH, PLACEMENTS, ROADS } from './diorama'
@@ -297,12 +298,14 @@ function usePageVisible(): boolean {
 
 export default function MenuBackground({ still, paused, onReady, onContextLost }: MenuBackgroundProps) {
   const running = usePageVisible() && paused !== true
+  // The graphics settings cap it too (shadows off, a lower pixel ratio).
+  const config = useGraphics()
   return (
     <Canvas
       className="bt-menu-bg-canvas"
       data-testid="menu-bg-canvas"
-      shadows="percentage"
-      dpr={[1, 1.25]}
+      shadows={config.shadows ? 'percentage' : false}
+      dpr={[1, Math.max(1, Math.min(1.25, config.maxDpr))]}
       frameloop={running ? 'demand' : 'never'}
       camera={{ fov: FOV, near: 1, far: 800 }}
       gl={{ alpha: true, powerPreference: 'low-power' }}

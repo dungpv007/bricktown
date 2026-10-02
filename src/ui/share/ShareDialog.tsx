@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { fitsQr, shareFileName, shareFileText, shareLink, type SharePackage } from '../../core/share'
+import { useCoverScene } from '../../state/sceneCover'
 import { useT } from '../i18n'
 import QrCode from './QrCode'
 import { canShareNative, copyText, downloadText, shareNative } from './shareActions'
@@ -24,6 +25,7 @@ type CopyState = 'idle' | 'copied' | 'failed'
  */
 export default function ShareDialog({ build, offerSteps = false, icon, onClose }: Props) {
   const t = useT()
+  useCoverScene()
   const [withSteps, setWithSteps] = useState(true)
   const [copy, setCopy] = useState<CopyState>('idle')
   const base = shareBase()

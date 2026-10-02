@@ -37,7 +37,7 @@ export default function SelectionHighlight({ brick, shakeKey = 0 }: Props) {
   }, [geometry])
 
   const center = brick ? brickCenter(brick) : null
-  const groupRef = useHighlightPulse(shakeKey, SHAKE_AMPLITUDE, center?.[0] ?? 0)
+  const groupRef = useHighlightPulse(shakeKey, SHAKE_AMPLITUDE, center?.[0] ?? 0, brick !== null)
 
   if (!brick || !geometry || !center) return null
   return (
