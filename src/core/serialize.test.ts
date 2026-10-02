@@ -155,6 +155,27 @@ describe('serialize', () => {
     expect(out.workshop.bricks).toEqual([brick])
   })
 
+  describe('placement sizes (CityPlacement.s)', () => {
+    const pl = (extra: Record<string, unknown> = {}) => ({ id: 'p', source: 'tpl:tree', cx: 1, cz: 2, rot: 0, ...extra })
+    const load = (...placements: unknown[]) =>
+      migrate({ schemaVersion: SCHEMA_VERSION, blueprints: [], city: { size: 48, roads: [], placements }, workshop: {} }).city.placements
+
+    it('loads an old save without sizes unchanged', () => {
+      expect(load(pl(), pl({ id: 'q', rot: 3 }))).toEqual([pl(), pl({ id: 'q', rot: 3 })])
+    })
+    it('round-trips a scaled placement', () => {
+      const save = createEmptySave()
+      save.city.placements = [pl({ s: 4 }) as never, pl({ id: 'q', cx: 9 }) as never]
+      expect(importSave(exportSave(save))).toEqual(save)
+    })
+    it('rounds and clamps sizes into 1..10, garbage becomes x1 (the field is dropped)', () => {
+      expect(load(pl({ s: 2.6 }), pl({ s: 0 }), pl({ s: -3 }), pl({ s: 99 }), pl({ s: 10 }), pl({ s: 1 }))).toEqual([
+        pl({ s: 3 }), pl(), pl(), pl({ s: 10 }), pl({ s: 10 }), pl(),
+      ])
+      expect(load(pl({ s: 'big' }), pl({ s: NaN }), pl({ s: null }), pl({ s: Infinity }), pl({ s: [3] }))).toEqual([pl(), pl(), pl(), pl(), pl()])
+    })
+  })
+
   describe('sharing fields', () => {
     const base = { schemaVersion: SCHEMA_VERSION, blueprints: [], city: {}, workshop: {} }
     const template = {

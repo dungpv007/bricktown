@@ -4,6 +4,7 @@ import { createEmptyMaze, setEntry, setExit, type Maze } from './maze'
 import { MAX_HEIGHT_PLATES } from './model'
 import { createEmptySave } from './serialize'
 import { buildCityPackage, buildMazePackage, buildModelPackage, decodeShare, encodeShare, type SharePackage } from './share'
+import { packShare } from './shareCodec'
 import { DEFAULT_SHARE_NAMES, SHARE_LIMITS, applyImport, planImport, sanitizeName, validatePackage } from './shareImport'
 import { validateTemplate } from './template'
 import type { Blueprint, Brick, CityState, SaveData } from './types'
@@ -316,6 +317,42 @@ describe('decodeShare with crafted payloads', () => {
       { ...pkg, model: { blueprint: { ...pkg.model!.blueprint, baseplate: { w: 1e6, d: 1e6 } } } },
     ]
     for (const e of evil) expect(decodeShare(encodeShare(e))).toHaveProperty('error')
+  })
+})
+
+describe('scaled city placements (CityPlacement.s)', () => {
+  const scaledPkg = (s: unknown): SharePackage => {
+    const pkg = cityPkg()
+    const [p1, ...rest] = pkg.city!.city.placements
+    return { ...pkg, city: { ...pkg.city!, city: { ...pkg.city!.city, placements: [{ ...p1, s } as never, ...rest] } } }
+  }
+
+  it('round-trips a scaled placement through a link, compactly (x1 stays a 4-item tuple)', () => {
+    const payload = encodeShare(scaledPkg(2)) // bp_a x2: 16x32 studs, 2 x 4 cells at (2, 2)
+    const out = decodeShare(payload) as SharePackage
+    expect(out).not.toHaveProperty('error')
+    expect(out.city!.city.placements.map((p) => p.s)).toEqual([2, undefined, undefined, undefined])
+    expect(out.city!.city.placements.every((p) => 's' in p === (p.s !== undefined))).toBe(true)
+    const p = (JSON.parse(JSON.stringify(packShare(scaledPkg(2)))) as { c: { p: unknown[][] } }).c.p
+    expect(p.map((t) => t.length)).toEqual([5, 4, 4, 4])
+    expect(packShare(scaledPkg(1)).c!.p.map((t) => t.length)).toEqual([4, 4, 4, 4])
+  })
+
+  it('old links without sizes still work', () => {
+    expect(decodeShare(encodeShare(cityPkg()))).not.toHaveProperty('error')
+    expect(validatePackage(scaledPkg(undefined))).not.toHaveProperty('error')
+  })
+
+  it('rejects a size that is not an integer from 1 to 10, or a scaled model that no longer fits', () => {
+    for (const bad of [0, 11, -2, 2.5, 1e9, NaN, '3', null, [2], { valueOf: 3 }]) {
+      expect(validatePackage(scaledPkg(bad)), String(bad)).toEqual({ error: 'invalid' })
+      expect(decodeShare(encodeShare(scaledPkg(bad))), String(bad)).toHaveProperty('error')
+    }
+    // x10: 80x160 studs, 10 x 20 cells from (2, 2) cover the other placements and leave a 24-cell map.
+    expect(validatePackage(scaledPkg(10))).toEqual({ error: 'invalid' })
+    // x3 (3 x 6 cells, x 2..4) stays clear of the tree at (6, 2); x5 (5 x 10 cells, x 2..6) covers it.
+    expect(validatePackage(scaledPkg(3))).not.toHaveProperty('error')
+    expect(validatePackage(scaledPkg(5))).toEqual({ error: 'invalid' })
   })
 })
 

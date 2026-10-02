@@ -6,9 +6,13 @@ import {
   canPlaceInCity,
   footprintCells,
   movePlacement,
+  normalizeScale,
+  placementCells,
   removePlacement,
   rotatePlacement,
+  scalePlacement,
 } from './city'
+import { duplicateCell, planMove } from './cityPlan'
 import type { Baseplate, CityPlacement, CityState } from './types'
 
 const SIZES: Record<string, Baseplate> = {
@@ -177,5 +181,68 @@ describe('addRoads', () => {
   it('rejects cells outside the grid', () => {
     const next = addRoads(emptyCity(), ['0,0', '6,0', '-1,2', '0,6'], sizeOf)
     expect(next.roads).toEqual(['0,0'])
+  })
+})
+
+describe('scaled placements', () => {
+  const big = (id: string, source: string, cx: number, cz: number, s: number, rot: 0 | 1 | 2 | 3 = 0): CityPlacement => ({
+    ...place(id, source, cx, cz, rot),
+    s,
+  })
+
+  it('a scaled footprint is the plate studs x s, in cells, rotated', () => {
+    expect(placementCells({ rot: 0 }, SIZES.odd)).toEqual({ cw: 2, cd: 2 }) // 10x9
+    expect(placementCells({ rot: 0, s: 2 }, SIZES.odd)).toEqual({ cw: 3, cd: 3 }) // 20x18 studs
+    expect(placementCells({ rot: 1, s: 3 }, SIZES.wide)).toEqual({ cw: 6, cd: 3 }) // 24x48 turned
+    expect(placementCells({ rot: 0, s: 10 }, SIZES.small)).toEqual({ cw: 20, cd: 20 })
+  })
+
+  it('normalizeScale rounds and clamps into 1..10; anything else is 1', () => {
+    expect([2.4, 2.5, 0, -1, 11, 10, 7].map(normalizeScale)).toEqual([2, 3, 1, 1, 10, 10, 7])
+    expect([undefined, null, '3', NaN, Infinity].map(normalizeScale)).toEqual([1, 1, 1, 1, 1])
+  })
+
+  it('collides, leaves the city and meets roads with its scaled footprint', () => {
+    const city: CityState = { size: 10, roads: ['7,1'], placements: [big('a', 'small', 0, 0, 2)] } // 4x4 cells
+    expect(canPlaceInCity(city, place('b', 'small', 3, 3), sizeOf)).toBe('overlap')
+    expect(canPlaceInCity(city, place('b', 'small', 4, 0), sizeOf)).toBeNull()
+    expect(canPlaceInCity(city, big('b', 'small', 4, 0, 2), sizeOf)).toBe('road') // cells 4..7 x 0..3
+    expect(canPlaceInCity(city, big('b', 'small', 4, 4, 4), sizeOf)).toBe('out_of_bounds') // 8x8 cells
+    expect(addRoads(city, ['3,3', '4,4'], sizeOf).roads).toEqual(['7,1', '4,4'])
+  })
+
+  it('grows in place around its centre and shrinks back exactly (one undo-able step)', () => {
+    const city: CityState = { ...emptyCity(20), placements: [place('a', 'small', 8, 8)] } // 2x2 cells 8..9
+    const x2 = scalePlacement(city, 'a', 2, sizeOf).city!
+    expect(x2.placements[0]).toEqual(big('a', 'small', 7, 7, 2)) // 4x4 cells 7..10: same centre
+    const x3 = scalePlacement(x2, 'a', 3, sizeOf).city!
+    expect(x3.placements[0]).toEqual(big('a', 'small', 6, 6, 3)) // 6x6 cells 6..11
+    const back = scalePlacement(scalePlacement(x3, 'a', 2, sizeOf).city!, 'a', 1, sizeOf).city!
+    expect(back.placements[0]).toEqual(place('a', 'small', 8, 8)) // x1 drops the field
+    expect(scalePlacement(city, 'a', 25, sizeOf).city!.placements[0].s).toBe(10) // clamped
+  })
+
+  it('slides back inside the grid when growing at an edge', () => {
+    const city: CityState = { ...emptyCity(20), placements: [place('a', 'small', 0, 18)] }
+    expect(scalePlacement(city, 'a', 3, sizeOf).city!.placements[0]).toMatchObject({ cx: 0, cz: 14, s: 3 })
+  })
+
+  it('a scale-up that would cover another model, a road or not fit the city is refused, nothing changes', () => {
+    const city: CityState = { size: 10, roads: ['0,9'], placements: [place('a', 'small', 4, 4), place('b', 'small', 6, 4)] }
+    expect(scalePlacement(city, 'a', 2, sizeOf)).toEqual({ city: null, error: 'overlap' })
+    const roads: CityState = { size: 10, roads: ['2,4'], placements: [place('a', 'small', 4, 4)] }
+    expect(scalePlacement(roads, 'a', 3, sizeOf)).toEqual({ city: null, error: 'road' })
+    expect(scalePlacement(emptyCity(10), 'x', 2, sizeOf).city).toBeNull()
+    const solo: CityState = { ...emptyCity(10), placements: [place('a', 'small', 4, 4)] }
+    expect(scalePlacement(solo, 'a', 6, sizeOf)).toEqual({ city: null, error: 'out_of_bounds' }) // 12x12 cells
+    expect(city.placements).toEqual([place('a', 'small', 4, 4), place('b', 'small', 6, 4)])
+  })
+
+  it('moving, rotating and duplicating keep the size and use the scaled footprint', () => {
+    const city: CityState = { ...emptyCity(20), placements: [big('a', 'wide', 2, 2, 2)] } // 2x4 cells
+    expect(movePlacement(city, 'a', 10, 10, sizeOf)!.placements[0]).toEqual(big('a', 'wide', 10, 10, 2))
+    expect(rotatePlacement(city, 'a', sizeOf)!.placements[0]).toEqual(big('a', 'wide', 2, 2, 2, 1))
+    expect(duplicateCell(city, city.placements[0], sizeOf)).toEqual({ cx: 4, cz: 2 })
+    expect(planMove(city, city.placements[0], 160, 160, sizeOf)).toMatchObject({ cx: 18, cz: 16, s: 2, error: null })
   })
 })

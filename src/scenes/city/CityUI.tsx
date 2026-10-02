@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TEMPLATES } from '../../content/templates'
+import { MAX_SCALE, MIN_SCALE, scaleOf } from '../../core/city'
 import { buildCityPackage } from '../../core/share'
 import type { Blueprint, Template } from '../../core/types'
 import { usePaletteDrag } from '../../input/paletteDrag'
@@ -73,12 +74,50 @@ const ACTIONS: Array<{ action: CityAction; icon: string; labelKey: TKey }> = [
 ]
 
 /**
- * What can be done to the selected placement, in the Workshop action bar's look. ✏️ shows only for
- * the kid's own blueprints (templates are not editable), 📋 only for models that can be drawn (a grey
- * placeholder is never copied).
+ * Size of the selected model, x1..x10: − (smaller), the "×N" label, + (bigger), each tap one undo
+ * step. Its own panel beside the action bar (tablets: a second column, + on top; phones: a row, next
+ * to the actions or under them when they do not fit), so the bar's ✕ never scrolls away.
  */
-function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; onEdit: (bp: Blueprint) => void }) {
-  const { editable, drawable, onEdit } = props
+function CityScaleControl({ scale }: { scale: number }) {
+  const t = useT()
+  const scaleBy = (delta: 1 | -1) => useCityEditor.getState().scaleSelected(delta)
+  return (
+    <div className="bt-actionbar bt-hud-panel bt-city-scale" role="group" aria-label={t('cityScale')} data-testid="city-scale">
+      <button
+        className="bt-btn bt-icon-btn"
+        data-testid="city-scale-down"
+        aria-label={t('cityScaleDown')}
+        disabled={scale <= MIN_SCALE}
+        onClick={() => scaleBy(-1)}
+      >
+        −
+      </button>
+      <div className="bt-city-scale-value">
+        <span aria-hidden="true">📏</span>
+        <span data-testid="city-scale-label" aria-live="polite">
+          ×{scale}
+        </span>
+      </div>
+      <button
+        className="bt-btn bt-icon-btn"
+        data-testid="city-scale-up"
+        aria-label={t('cityScaleUp')}
+        disabled={scale >= MAX_SCALE}
+        onClick={() => scaleBy(1)}
+      >
+        +
+      </button>
+    </div>
+  )
+}
+
+/**
+ * What can be done to the selected placement, in the Workshop action bar's look, and its size. ✏️
+ * shows only for the kid's own blueprints (templates are not editable), 📋 only for models that can
+ * be drawn (a grey placeholder is never copied).
+ */
+function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; scale: number; onEdit: (bp: Blueprint) => void }) {
+  const { editable, drawable, scale, onEdit } = props
   const t = useT()
   const phone = useDeviceClass() !== 'tablet' // a row under the tools on phones (theme.css)
   const run = (action: CityAction) => {
@@ -92,18 +131,21 @@ function CityActionBar(props: { editable: Blueprint | null; drawable: boolean; o
     }
   }
   return (
-    <div className="bt-actionbar bt-hud-panel" role="toolbar" aria-orientation={phone ? 'horizontal' : 'vertical'} data-testid="city-action-bar">
-      {ACTIONS.filter(({ action }) => (action !== 'edit' || editable) && (action !== 'duplicate' || drawable)).map(({ action, icon, labelKey }) => (
-        <button
-          key={action}
-          className={`bt-btn bt-icon-btn bt-act-${action}`}
-          data-testid={`city-act-${action}`}
-          aria-label={t(labelKey)}
-          onClick={() => run(action)}
-        >
-          {icon}
-        </button>
-      ))}
+    <div className="bt-city-actions" role="toolbar" aria-orientation={phone ? 'horizontal' : 'vertical'} data-testid="city-action-bar">
+      <div className="bt-actionbar bt-hud-panel">
+        {ACTIONS.filter(({ action }) => (action !== 'edit' || editable) && (action !== 'duplicate' || drawable)).map(({ action, icon, labelKey }) => (
+          <button
+            key={action}
+            className={`bt-btn bt-icon-btn bt-act-${action}`}
+            data-testid={`city-act-${action}`}
+            aria-label={t(labelKey)}
+            onClick={() => run(action)}
+          >
+            {icon}
+          </button>
+        ))}
+      </div>
+      <CityScaleControl scale={scale} />
     </div>
   )
 }
@@ -281,7 +323,7 @@ export default function CityUI() {
       </TopRight>
       <div className="bt-city-left">
         <CityToolbar />
-        {selected && <CityActionBar editable={editable} drawable={drawable} onEdit={onEdit} />}
+        {selected && <CityActionBar editable={editable} drawable={drawable} scale={scaleOf(selected)} onEdit={onEdit} />}
       </div>
       <SourceDrawer />
       <ErrorBadge errorSeq={errorSeq} testId="city-error" />

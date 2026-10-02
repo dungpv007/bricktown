@@ -4,7 +4,7 @@ interface BtWindow {
   __bt: {
     useEditor: { getState(): { place(x: number, y: number, z: number): void } }
     useApp: { getState(): { setDifficulty(d: 'easy' | 'normal'): void } }
-    useGame: { getState(): { setCity(city: unknown): void } }
+    useGame: { getState(): { setCity(city: unknown): void; upsertBlueprint(bp: unknown): void } }
     useCityEditor: { getState(): { selectPlacement(id: string | null): void } }
   }
 }
@@ -160,6 +160,47 @@ async function expectAudioDialogFits(page: Page) {
   }
 }
 
+/**
+ * The City selection: every action and the size control (− ×N +) show in full (neither panel
+ * scrolls, so the ✕ is never pushed out of view), on screen, as big touch targets, none overlapping.
+ */
+async function expectCityActionsFit(page: Page) {
+  const r = await page.evaluate(() => {
+    const bar = document.querySelector('[data-testid="city-action-bar"]')
+    if (!bar) return null
+    const panels = [...bar.querySelectorAll('.bt-actionbar')].map((p) => ({
+      overflows: p.scrollWidth > p.clientWidth + 1 || p.scrollHeight > p.clientHeight + 1,
+    }))
+    const parts = [...bar.querySelectorAll('button, [data-testid="city-scale-label"]')].map((e) => {
+      const b = e.getBoundingClientRect()
+      return { name: e.getAttribute('data-testid') ?? e.tagName, x: b.x, y: b.y, w: b.width, h: b.height, button: e.tagName === 'BUTTON' }
+    })
+    return { panels, parts, vw: innerWidth, vh: innerHeight }
+  })
+  expect(r, 'city action bar is open').not.toBeNull()
+  if (!r) return
+  expect(r.panels).toHaveLength(2)
+  for (const p of r.panels) expect(p.overflows, 'a city action panel scrolls').toBe(false)
+  const names = r.parts.map((p) => p.name)
+  for (const id of ['city-act-deselect', 'city-scale-down', 'city-scale-label', 'city-scale-up']) expect(names).toContain(id)
+  for (const a of r.parts) {
+    expect(a.x, `${a.name} on screen`).toBeGreaterThanOrEqual(-1)
+    expect(a.y, `${a.name} on screen`).toBeGreaterThanOrEqual(-1)
+    expect(a.x + a.w, `${a.name} on screen`).toBeLessThanOrEqual(r.vw + 1)
+    expect(a.y + a.h, `${a.name} on screen`).toBeLessThanOrEqual(r.vh + 1)
+    if (a.button) expect(Math.min(a.w, a.h), `${a.name} is a big touch target`).toBeGreaterThanOrEqual(44)
+  }
+  for (let i = 0; i < r.parts.length; i++) {
+    for (let j = i + 1; j < r.parts.length; j++) {
+      const a = r.parts[i]
+      const b = r.parts[j]
+      const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+      const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+      expect(ix > 1 && iy > 1, `${a.name} overlaps ${b.name}`).toBe(false)
+    }
+  }
+}
+
 /** Opens the Sound dialog on the menu, checks it, and closes it with a backdrop tap. */
 async function checkAudioDialog(page: Page) {
   await page.getByTestId('audio-settings').click()
@@ -207,17 +248,37 @@ for (const [width, height] of [
     await page.getByTestId('back').click()
 
     // City: a building (so 🔗 is enabled), then selected (its action bar), then road mode (its eraser).
-    await page.evaluate(() =>
-      (window as unknown as BtWindow).__bt.useGame
-        .getState()
-        .setCity({ size: 48, roads: ['3,3'], placements: [{ id: 'pl-r', source: 'tpl:house_small', cx: 20, cz: 20, rot: 0 }] }),
-    )
+    await page.evaluate(() => {
+      const game = (window as unknown as BtWindow).__bt.useGame.getState()
+      game.upsertBlueprint({
+        id: 'bp-r', name: 'Nhà', kind: 'building', tags: [], baseplate: { w: 8, d: 8 },
+        bricks: [{ id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0, c: 2 }], createdAt: 1, updatedAt: 1,
+      })
+      game.setCity({
+        size: 48,
+        roads: ['3,3'],
+        placements: [
+          { id: 'pl-r', source: 'tpl:house_small', cx: 20, cz: 20, rot: 0 },
+          { id: 'pl-bp', source: 'bp-r', cx: 26, cz: 20, rot: 0 },
+        ],
+      })
+    })
     await page.getByTestId('menu-city').click()
     await expect(page.getByTestId('city-drawer')).toBeVisible()
     await expectTidy(page, 'city')
     await page.evaluate(() => (window as unknown as BtWindow).__bt.useCityEditor.getState().selectPlacement('pl-r'))
     await expect(page.getByTestId('city-action-bar')).toBeVisible()
     await expectTidy(page, 'city, building selected')
+    await expectCityActionsFit(page)
+    // The size control works from here and still fits at x2.
+    await page.getByTestId('city-scale-up').click()
+    await expect(page.getByTestId('city-scale-label')).toHaveText('×2')
+    await expectCityActionsFit(page)
+    // The kid's own model: ✏️ too, the longest action bar.
+    await page.evaluate(() => (window as unknown as BtWindow).__bt.useCityEditor.getState().selectPlacement('pl-bp'))
+    await expect(page.getByTestId('city-act-edit')).toBeVisible()
+    await expectTidy(page, 'city, own model selected')
+    await expectCityActionsFit(page)
     await page.getByTestId('city-road-mode').click()
     await expect(page.getByTestId('city-road-eraser')).toBeVisible()
     await expectTidy(page, 'city, road mode')
@@ -248,4 +309,21 @@ test('tablet 1080×810: the menu row stays on one line and the Sound dialog fits
   await expectTidy(page, 'menu')
   await expectMenuRowOneLine(page)
   await checkAudioDialog(page)
+
+  // City: the action bar column and the size control column beside it, ✕ in view.
+  await devHandle(page)
+  await page.evaluate(() => {
+    const game = (window as unknown as BtWindow).__bt.useGame.getState()
+    game.upsertBlueprint({
+      id: 'bp-t', name: 'Nhà', kind: 'building', tags: [], baseplate: { w: 8, d: 8 },
+      bricks: [{ id: 'a', p: 'brick_2x4', x: 0, y: 0, z: 0, r: 0, c: 2 }], createdAt: 1, updatedAt: 1,
+    })
+    game.setCity({ size: 48, roads: [], placements: [{ id: 'pl-t', source: 'bp-t', cx: 20, cz: 20, rot: 0 }] })
+  })
+  await page.getByTestId('menu-city').click()
+  await expect(page.getByTestId('city-drawer')).toBeVisible()
+  await page.evaluate(() => (window as unknown as BtWindow).__bt.useCityEditor.getState().selectPlacement('pl-t'))
+  await expect(page.getByTestId('city-act-edit')).toBeVisible()
+  await expectTidy(page, 'city, own model selected')
+  await expectCityActionsFit(page)
 })

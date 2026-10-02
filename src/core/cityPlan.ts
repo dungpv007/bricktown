@@ -1,4 +1,4 @@
-import { CELL, canPlaceInCity, footprintCells, type PlaceError } from './city'
+import { CELL, canPlaceInCity, footprintCells, placementCells, type PlaceError } from './city'
 import { roadKey } from './roads'
 import type { Baseplate, CityPlacement, CityState, Rot } from './types'
 
@@ -46,6 +46,8 @@ export interface PlacementPlan {
   cx: number
   cz: number
   rot: Rot
+  /** Size multiplier of the model being placed (absent = 1, as on a placement). */
+  s?: number
   error: PlaceError | null
 }
 
@@ -77,9 +79,9 @@ export function planPlacement(city: CityState, source: string, x: number, z: num
   return best?.plan ?? (fallback as PlacementPlan)
 }
 
-/** World-space centre (studs) of a placement's rotated footprint. */
-export function placementCenter(p: Pick<CityPlacement, 'cx' | 'cz' | 'rot'>, baseplate: Baseplate): { x: number; z: number } {
-  const { cw, cd } = footprintCells(baseplate, p.rot)
+/** World-space centre (studs) of a placement's rotated (and scaled) footprint. */
+export function placementCenter(p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's'>, baseplate: Baseplate): { x: number; z: number } {
+  const { cw, cd } = placementCells(p, baseplate)
   return { x: (p.cx + cw / 2) * CELL, z: (p.cz + cd / 2) * CELL }
 }
 
@@ -115,25 +117,26 @@ export function removeRoads(city: CityState, keys: Iterable<string>): CityState 
 }
 
 /**
- * Where moving `placement` so its footprint is centred on world point (x, z) puts it: same rotation,
- * slid inside the grid; `error` says why it cannot go there (the placement itself is not in the way).
+ * Where moving `placement` so its footprint is centred on world point (x, z) puts it: same rotation
+ * and size, slid inside the grid; `error` says why it cannot go there (the placement itself is not
+ * in the way).
  */
 export function planMove(city: CityState, placement: CityPlacement, x: number, z: number, sizeOf: SizeOf): PlacementPlan {
-  const { cw, cd } = footprintCells(sizeOf(placement.source), placement.rot)
+  const { cw, cd } = placementCells(placement, sizeOf(placement.source))
   const o = footprintOrigin(x, z, cw, cd)
   const cx = Math.max(0, Math.min(city.size - cw, o.cx))
   const cz = Math.max(0, Math.min(city.size - cd, o.cz))
   const error = canPlaceInCity(city, { ...placement, cx, cz }, sizeOf, placement.id)
-  return { cx, cz, rot: placement.rot, error }
+  return { cx, cz, rot: placement.rot, ...(placement.s === undefined ? {} : { s: placement.s }), error }
 }
 
 /**
- * Where a copy of `placement` (same source and rotation) goes: the first free spot right next to it,
+ * Where a copy of `placement` (same source, rotation and size) goes: the first free spot right next to it,
  * trying +X, -X, +Z, -Z, then the four corners, then one footprint further out (+X, -X, +Z, -Z).
  * Null when none of them fits.
  */
 export function duplicateCell(city: CityState, placement: CityPlacement, sizeOf: SizeOf): Cell | null {
-  const { cw, cd } = footprintCells(sizeOf(placement.source), placement.rot)
+  const { cw, cd } = placementCells(placement, sizeOf(placement.source))
   const steps: Array<[number, number]> = [
     [1, 0], [-1, 0], [0, 1], [0, -1],
     [1, 1], [-1, 1], [1, -1], [-1, -1],

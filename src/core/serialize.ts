@@ -1,10 +1,11 @@
 import { PLATE_MAX } from './baseplate'
+import { MIN_SCALE, normalizeScale } from './city'
 import { COLORS } from './colors'
 import { newId } from './ids'
 import { MINIFIG_PART, parseFig } from './figures'
 import { DEFAULT_MAZE_WALL_COLOR, MAZE_MAX_SIZE, MAZE_MIN_SIZE, cellKey, inBounds, isBorder, isCorner, type Cell, type Maze } from './maze'
 import { validateTemplate } from './template'
-import type { Baseplate, Blueprint, Brick, MazeChallenge, MazeRecord, SaveData, Template } from './types'
+import type { Baseplate, Blueprint, Brick, CityPlacement, MazeChallenge, MazeRecord, SaveData, Template } from './types'
 
 export const SCHEMA_VERSION = 3
 
@@ -49,6 +50,9 @@ export const MIGRATIONS: Record<number, Migration> = {
     mazeChallenges: isRecord(data.mazeChallenges) ? data.mazeChallenges : {},
   }),
 }
+// `CityPlacement.s` (a model drawn x2..x10) was added during v3 without a bump: it is optional, an
+// absent one means x1, and `normalize` rounds / clamps it into 1..10 (garbage becomes x1). An older
+// client simply ignores it and draws the model at its normal size.
 // `Brick.fig` (minifigure styles) was added during v2 without its own bump: it is optional and purely
 // additive, older saves simply have no figures, and `normalize` drops any style it cannot read.
 // Adding a value to a FigStyle option list (FIG_FACES, FIG_HATS, FIG_PRINTS, FIG_ACCESSORIES) or a
@@ -102,7 +106,7 @@ function normalize(data: Record<string, unknown>, city: Record<string, unknown>,
     city: {
       size: isPositiveInt(city.size) ? city.size : empty.city.size,
       roads: arrayOr<string>(city.roads, []).filter((r) => typeof r === 'string'),
-      placements: arrayOr(city.placements, []),
+      placements: arrayOr<unknown>(city.placements, []).map(normalizePlacement),
     },
     workshop: {
       kind: typeof workshop.kind === 'string' && KINDS.includes(workshop.kind) ? (workshop.kind as SaveData['workshop']['kind']) : empty.workshop.kind,
@@ -236,6 +240,14 @@ function normalizeMazeRecords(raw: unknown): Record<string, MazeRecord> {
     out[key] = { timeMs, stars, coins }
   }
   return out
+}
+
+/** A placement as stored, with its size multiplier made safe (see `normalizeScale`); x1 drops it. */
+function normalizePlacement(p: unknown): CityPlacement {
+  if (!isRecord(p) || !('s' in p)) return p as unknown as CityPlacement
+  const { s, ...rest } = p
+  const scale = normalizeScale(s)
+  return (scale === MIN_SCALE ? rest : { ...rest, s: scale }) as unknown as CityPlacement
 }
 
 /**

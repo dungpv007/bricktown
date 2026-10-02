@@ -4,7 +4,7 @@ import { flushAutosave, savedSlotData } from './support'
 interface CityData {
   size: number
   roads: string[]
-  placements: Array<{ id: string; source: string; cx: number; cz: number; rot: number }>
+  placements: Array<{ id: string; source: string; cx: number; cz: number; rot: number; s?: number }>
 }
 interface BtWindow {
   __bt: {
@@ -286,4 +286,56 @@ test('city: a finger whose release got lost does not block later taps', async ({
   const city = await cityData(page)
   expect(city.placements).toHaveLength(1)
   expect(city.placements[0].source).toBe('tpl:tree')
+})
+
+test('city: the size control scales the selected model (one undo step each) and the size persists', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByTestId('main-menu').waitFor()
+  // The camera starts centred on what is built: one rocket in the middle of the view.
+  await page.evaluate(() => {
+    const game = (window as unknown as BtWindow).__bt.useGame.getState()
+    game.setCity({ size: 48, roads: [], placements: [{ id: 'rocket', source: 'tpl:rocket', cx: 20, cz: 20, rot: 0 }] })
+  })
+  await page.getByTestId('menu-city').click()
+  const canvas = page.getByTestId('mode-city').locator('canvas')
+  await expect(canvas).toBeVisible()
+  const box = (await canvas.boundingBox())!
+  await expect.poll(async () => {
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2) // the canvas may still be sizing itself
+    return page.getByTestId('city-action-bar').count()
+  }).toBe(1)
+  const label = page.getByTestId('city-scale-label')
+  const rocketSize = async () => (await cityData(page)).placements.find((p) => p.id === 'rocket')?.s
+  await expect(label).toHaveText('×1')
+  await expect(page.getByTestId('city-scale-down')).toBeDisabled()
+
+  await page.getByTestId('city-scale-up').click()
+  await page.getByTestId('city-scale-up').click()
+  await expect(label).toHaveText('×3')
+  expect(await rocketSize()).toBe(3)
+
+  // Undo takes one size step back and keeps the model selected; redo puts it back.
+  await page.getByTestId('city-undo').click()
+  await expect(label).toHaveText('×2')
+  expect(await rocketSize()).toBe(2)
+  await page.getByTestId('city-redo').click()
+  await expect(label).toHaveText('×3')
+
+  // The size is saved: after a reload the rocket is still x3 (undo history is per visit, so the
+  // undo after the reload takes back a step made after it).
+  await flushAutosave(page)
+  await expect.poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.placements[0]?.s).toBe(3)
+  await page.reload()
+  await page.getByTestId('menu-city').click()
+  await expect(canvas).toBeVisible()
+  expect(await rocketSize()).toBe(3)
+  await page.evaluate(() => (window as unknown as EditBt).__bt.useCityEditor.getState().selectPlacement('rocket'))
+  await expect(label).toHaveText('×3')
+  await page.getByTestId('city-scale-down').click()
+  await expect(label).toHaveText('×2')
+  await page.getByTestId('city-undo').click()
+  await expect(label).toHaveText('×3')
+  expect(errors).toEqual([])
 })

@@ -60,7 +60,10 @@ export interface CompactPackage {
   m?: { b: CompactBlueprint; s?: number[]; S?: number[][] }
   /** Maze and best run `[timeMs, stars]`. */
   z?: { m: CompactMaze; b?: number[] }
-  /** City: size, roads as flat `[cx, cz, ...]`, placements `[blueprintIdx | 'tpl:<id>', cx, cz, rot]`. */
+  /**
+   * City: size, roads as flat `[cx, cz, ...]`, placements `[blueprintIdx | 'tpl:<id>', cx, cz, rot]`,
+   * plus a fifth item, the size multiplier, only for a scaled (x2..x10) placement.
+   */
   c?: { s: number; r: number[]; p: Array<Array<number | string>>; b: CompactBlueprint[] }
 }
 
@@ -238,7 +241,10 @@ export function packShare(pkg: SharePackage): CompactPackage {
         const { cx, cz } = parseCellKey(k)
         return [cx, cz]
       }),
-      p: city.placements.map((p) => [indexOf.get(p.source) ?? p.source, p.cx, p.cz, p.rot]),
+      p: city.placements.map((p) => {
+        const tuple = [indexOf.get(p.source) ?? p.source, p.cx, p.cz, p.rot]
+        return p.s === undefined || p.s === 1 ? tuple : [...tuple, p.s]
+      }),
       b: blueprints.map((b) => packBlueprint(b, parts, figs)),
     }
   }
@@ -347,12 +353,14 @@ function unpackMaze(raw: unknown, time: unknown): unknown {
 }
 
 function unpackPlacement(raw: unknown, i: number): unknown {
-  if (!Array.isArray(raw) || raw.length !== 4) return null
-  const [src, cx, cz, rot] = raw
+  if (!Array.isArray(raw) || (raw.length !== 4 && raw.length !== 5)) return null
+  const [src, cx, cz, rot, s] = raw
+  // `s` is checked with everything else by the import (absent = x1).
   return {
     id: `pl${i}`,
     source: typeof src === 'number' ? `bp${src}` : src,
     cx, cz, rot,
+    s: raw.length === 5 ? s : undefined,
   } satisfies Record<keyof CityPlacement, unknown>
 }
 
