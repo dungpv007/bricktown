@@ -11,6 +11,7 @@ import {
   scalePlacement,
   type PlaceError,
 } from '../core/city'
+import { brushLine, type RoadBrush } from '../core/avenues'
 import { currentCity } from '../core/cities'
 import { clampCell, duplicateCell, planPlacement, type Cell } from '../core/cityPlan'
 import { newId } from '../core/ids'
@@ -65,8 +66,11 @@ export interface CityEditorState {
   selectSource: (source: string | null) => void
   selectPlacement: (id: string | null) => void
   setDraggedSource: (source: string | null) => void
-  /** Paints an L-shaped road from one cell to another (both clamped into the grid). */
-  paintRoad: (from: Cell, to: Cell) => void
+  /**
+   * Paints an L-shaped road from one cell to another (both clamped into the grid): a 1-wide street,
+   * or with the avenue brush a 2-wide avenue (see `brushLine`).
+   */
+  paintRoad: (from: Cell, to: Cell, brush?: RoadBrush) => void
   /** Removes the road cells `keys` (one undo step); rejected when none of them is a road. */
   eraseRoads: (keys: string[]) => void
   /** Paints an L-shaped railway from one cell to another; refused like roads (water, a bad level crossing). */
@@ -195,9 +199,9 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
     selectPlacement: (id) => set({ selectedPlacementId: id }),
     setDraggedSource: (draggedSource) => set({ draggedSource }),
 
-    paintRoad: (from, to) => {
+    paintRoad: (from, to, brush = 'street') => {
       const before = city()
-      const keys = paintRoadLine([], clampCell(from, before.size), clampCell(to, before.size))
+      const keys = brushLine(clampCell(from, before.size), clampCell(to, before.size), brush, before.size)
       // Nothing changed (every cell a road already, under a building or water) or a bad level
       // crossing: refused, history kept clean.
       commitPaint(before, paintRoads(before, keys, sizeOf()))

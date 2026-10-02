@@ -125,6 +125,8 @@ export const en: Record<keyof typeof vi, string> = {
   deleteFailed: 'Could not delete',
   cityToolRoad: 'Roads',
   cityRoadEraser: 'Erase roads',
+  cityBrushAvenue: '4-lane avenue',
+  cityBrushStreet: 'Street',
   cityToolRail: 'Rails',
   cityRailEraser: 'Erase rails',
   cityToolTerrain: 'Terrain',

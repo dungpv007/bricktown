@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { flushAutosave, savedCity, savedSlotData, sizedBox, type SavedCities } from './support'
+import { cityCanvasBox, flushAutosave, savedCity, savedSlotData, sizedBox, type SavedCities } from './support'
 
 interface CityData {
   size: number
@@ -89,6 +89,52 @@ test('city: in road mode one finger paints roads (two fingers do not) and the er
   for (let i = 1; i <= 5; i++) await touch('touchMove', [[x - 50 - i * 10, y + 100], [x + 50 + i * 10, y + 100]])
   await touch('touchEnd', [])
   expect((await cityData(page)).roads.length).toBe(painted)
+})
+
+test('city: the avenue brush (the default) paints a road 2 cells wide that persists across a reload', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  await page.goto('/')
+  await page.getByTestId('menu-city').click()
+  await expect(page.getByTestId('mode-city').locator('canvas')).toBeVisible()
+  const box = await cityCanvasBox(page)
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.getByTestId('city-road-mode').click()
+  await expect(page.getByTestId('city-road-brush-avenue')).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('city-road-brush-street')).toHaveAttribute('aria-pressed', 'false')
+
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<[number, number]>) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([px, py], id) => ({ x: px, y: py, id })) })
+  await touch('touchStart', [[x - 100, y]])
+  for (let i = 1; i <= 10; i++) await touch('touchMove', [[x - 100 + i * 20, y]])
+  await touch('touchEnd', [])
+
+  // Two neighbouring rows of the same cells.
+  const rowsOf = (roads: string[]) => {
+    const rows = new Map<number, number[]>()
+    for (const k of roads) {
+      const [cx, cz] = k.split(',').map(Number)
+      rows.set(cz, [...(rows.get(cz) ?? []), cx].sort((a, b) => a - b))
+    }
+    return [...rows].sort((a, b) => a[0] - b[0])
+  }
+  const roads = (await cityData(page)).roads
+  const rows = rowsOf(roads)
+  expect(rows).toHaveLength(2)
+  expect(rows[1][0] - rows[0][0]).toBe(1)
+  expect(rows[0][1]).toEqual(rows[1][1])
+  expect(rows[0][1].length).toBeGreaterThan(3)
+
+  await flushAutosave(page)
+  await expect.poll(async () => (await savedCityData(page))?.roads.length).toBe(roads.length)
+  await page.reload()
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+  await page.getByTestId('menu-city').click()
+  await expect(page.getByTestId('mode-city').locator('canvas')).toBeVisible()
+  expect(new Set((await cityData(page)).roads)).toEqual(new Set(roads))
+  expect(errors).toEqual([])
 })
 
 test('city: tap selects (rotate, delete), a placement drags to a new cell, a Kho card drags onto the map', async ({ page }) => {

@@ -92,8 +92,22 @@ describe('level crossings', () => {
   it('refuses widening a road next to a crossing (the crossing would become a junction)', () => {
     const crossed = paintRoads(rail, line([4, 2], [4, 8]), sizeOf).city!
     expect(paintRoads(crossed, ['3,5'], sizeOf).error).toBe('crossing') // would also lie on the rail
-    expect(paintRoads(crossed, line([3, 4], [3, 6]), sizeOf).error).toBe('crossing')
     expect(paintRails(crossed, line([4, 4], [4, 4]), sizeOf).error).toBe('crossing')
+  })
+
+  it('an avenue crosses a straight rail at right angles with both halves; never along it, at its end or at a box', () => {
+    const r = city({ rails: line([0, 5], [9, 5]) })
+    const both = (x0: number, z0: number, x1: number, z1: number) => [...line([x0, z0], [x1, z1]), ...line([x0 + 1, z0], [x1 + 1, z1])]
+    const crossed = paintRoads(r, both(4, 0, 4, 9), sizeOf)
+    expect(crossed.error).toBeNull()
+    expect(sorted(levelCrossings(crossed.city!))).toEqual(['4,5', '5,5'])
+    // Widening a street crossing into an avenue keeps it a valid crossing.
+    const street = paintRoads(r, line([4, 0], [4, 9]), sizeOf).city!
+    expect(paintRoads(street, line([5, 0], [5, 9]), sizeOf).error).toBeNull()
+    expect(paintRoads(r, [...line([0, 5], [6, 5]), ...line([0, 6], [6, 6])], sizeOf).error).toBe('crossing') // along
+    expect(paintRoads(r, both(4, 0, 4, 5), sizeOf).error).toBe('crossing') // the avenue ends on the rail
+    const box = [...both(4, 0, 4, 9), ...line([0, 4], [9, 4]), ...line([0, 5], [9, 5])]
+    expect(paintRoads(r, box, sizeOf).error).toBe('crossing')
   })
 
   it('erasing next to a crossing takes away the half-crossing it would leave', () => {

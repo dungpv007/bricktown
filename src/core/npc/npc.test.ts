@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CELL } from '../city'
 import { roadKey } from '../roads'
 import type { CityState } from '../types'
-import { cellCenter, DX, DZ, HALF, LANE, laneCurve, newPose, polylinePose, rightOf, type Dir } from './geometry'
+import { AVENUE_LANES, cellCenter, DX, DZ, HALF, LANE, laneCurve, newPose, polylinePose, rightOf, type Dir } from './geometry'
 import { buildNetwork, MAX_CARS } from './network'
 import { NpcSim } from './sim'
 
@@ -146,6 +146,126 @@ describe('npc cars', () => {
     expect(waits).toBeGreaterThan(0)
     // A car is ~6 studs long, a train vehicle ~9: centres this far apart never overlap side by side.
     expect(closest).toBeGreaterThan(5)
+  })
+})
+
+describe('npc on avenues', () => {
+  // An E-W avenue (rows 4-5) crossed by a N-S avenue (columns 8-9): a box at (8..9, 4..5). A side
+  // street (column 3) meets the E-W avenue from the south, another (row 12) the N-S avenue from the west.
+  const roads = [
+    ...new Set([
+      ...row(4, 0, 15), ...row(5, 0, 15), ...col(8, 0, 15), ...col(9, 0, 15),
+      ...col(3, 6, 12), ...row(12, 3, 7),
+    ]),
+  ]
+  const pavement = [...row(6, 0, 2), ...row(6, 4, 7), ...row(3, 0, 7), ...row(3, 10, 15), ...col(10, 6, 15)]
+  const aveCity = city({ roads, terrain: { water: [], pavement, sand: [] } })
+
+  it('gives each avenue half one heading (right-hand traffic); boxes take both avenues; junctions are claimed', () => {
+    const net = buildNetwork(aveCity, sizeOf).roads
+    const at = (cx: number, cz: number) => net.index.get(roadKey(cx, cz))!
+    const bit = (d: number) => 1 << d
+    expect(net.accept[at(2, 4)]).toBe(bit(3)) // north half heads W
+    expect(net.accept[at(2, 5)]).toBe(bit(1)) // south half heads E
+    expect(net.accept[at(8, 2)]).toBe(bit(2)) // west half heads S
+    expect(net.accept[at(9, 2)]).toBe(bit(0)) // east half heads N
+    expect(net.accept[at(8, 4)]).toBe(bit(3) | bit(2)) // NW box quarter: westbound row, southbound column
+    expect(net.avenue[at(2, 4)]).toBe(bit(3))
+    expect(net.avenue[at(3, 12)]).toBe(0) // a street
+    expect(net.junction[at(2, 4)]).toBe(0)
+    expect(net.junction[at(3, 5)]).toBe(1) // the side street joins here
+    expect(net.junction[at(3, 4)]).toBe(1) // ...and cross traffic uses its partner
+    expect(net.junction[at(8, 4)]).toBe(1)
+    // Cross traffic may drive across a junction pair, never against its heading.
+    expect(net.accept[at(3, 5)] & bit(3)).toBe(0)
+    expect(net.accept[at(3, 5)] & bit(0)).toBe(bit(0))
+  })
+
+  it('a right turn onto an avenue ends in its outer lane, a left turn in its inner lane', () => {
+    const pose = newPose()
+    const right = laneCurve(0, 1, 0, 2) // street heading N, right onto an E-bound avenue half
+    polylinePose(right, right.length, pose)
+    expect(pose.x).toBeCloseTo(HALF, 9)
+    expect(pose.z).toBeCloseTo(AVENUE_LANES[1], 9)
+    const left = laneCurve(0, 3, 0, 1)
+    polylinePose(left, left.length, pose)
+    expect(pose.z).toBeCloseTo(-AVENUE_LANES[0], 9) // the driver's right of W is N (-Z)
+    // The two lanes sit inside one half of the avenue, clear of the centre line and the kerb.
+    expect(AVENUE_LANES[0]).toBeLessThan(-HALF + 2)
+    expect(AVENUE_LANES[1]).toBeGreaterThan(0)
+    expect(AVENUE_LANES[1]).toBeLessThan(HALF - 1.25 - 1.2)
+  })
+
+  it('cars keep to their heading and lanes on avenues, turn in the box and at side streets, and use both lanes', () => {
+    const net = buildNetwork(aveCity, sizeOf)
+    const sim = new NpcSim({ seed: 21 })
+    sim.setNetwork(net)
+    expect(sim.cars.length).toBeGreaterThan(5)
+    const r = net.roads
+    const boxTurns = new Set<string>()
+    const lanes = new Set<number>()
+    const visited = new Set<number>()
+    run(sim, 240, () => {
+      for (const car of sim.cars) {
+        visited.add(car.cell)
+        // Never against an avenue's heading.
+        expect(r.accept[car.cell] & (1 << car.din), `cell ${r.keys[car.cell]} heading ${car.din}`).not.toBe(0)
+        if (r.avenue[car.cell] && !r.junction[car.cell]) {
+          // A plain stretch: straight on, centred in a lane.
+          expect(car.dout).toBe(car.din)
+          if (car.oi === car.oo && car.oi > 0 && car.s > 2 && car.s < 6) {
+            const right = rightOf(car.din)
+            const off = (car.x - cellCenter(r.cx[car.cell])) * DX[right] + (car.z - cellCenter(r.cz[car.cell])) * DZ[right]
+            expect(off).toBeCloseTo(AVENUE_LANES[car.oi - 1], 5)
+            lanes.add(car.oi)
+          }
+        }
+        const k = r.keys[car.cell]
+        if (['8,4', '9,4', '8,5', '9,5'].includes(k) && car.dout !== car.din) boxTurns.add(`${car.din}>${car.dout}`)
+      }
+    })
+    expect(lanes).toEqual(new Set([1, 2]))
+    expect(boxTurns.size).toBeGreaterThanOrEqual(3)
+    expect(visited.has(r.index.get(roadKey(3, 10))!)).toBe(true) // into the side streets
+    expect(visited.has(r.index.get(roadKey(5, 12))!)).toBe(true)
+  })
+
+  it('people walk the outer sidewalks of avenues and cross only on zebras at junctions and boxes', () => {
+    const net = buildNetwork(aveCity, sizeOf)
+    const sim = new NpcSim({ seed: 4 })
+    sim.setNetwork(net)
+    expect(sim.peds.length).toBeGreaterThan(3)
+    const road = net.roads
+    let zebra = 0
+    run(sim, 200, () => {
+      for (const p of sim.peds) {
+        const cx = cellOf(p.x)
+        const cz = cellOf(p.z)
+        const r = road.index.get(roadKey(cx, cz))
+        if (r === undefined) continue
+        const lx = p.x - cellCenter(cx)
+        const lz = p.z - cellCenter(cz)
+        const band = HALF - 1.25 - 0.05
+        let onWalk = false
+        for (let d = 0; d < 4; d++) {
+          const along = lx * DX[d] + lz * DZ[d]
+          if (road.nb[r * 4 + d] < 0 && along >= band) onWalk = true
+        }
+        const h = [1, 2, 4, 8].indexOf(road.avenue[r])
+        if (h >= 0 && !p.onRoad && !onWalk) {
+          // On an avenue half, off the kerbs (an end's kerb runs right across): never out by the centre line.
+          const partner = (h + 3) & 3
+          expect(lx * DX[partner] + lz * DZ[partner]).toBeLessThan(0)
+        }
+        if (Math.abs(lx) >= band && Math.abs(lz) >= band) onWalk = true // a corner between two open sides
+        if (!onWalk || p.onRoad) {
+          expect(p.onRoad, `${p.x},${p.z}`).toBe(true)
+          expect(road.junction[r]).toBe(1)
+          zebra++
+        }
+      }
+    })
+    expect(zebra).toBeGreaterThan(0)
   })
 })
 
