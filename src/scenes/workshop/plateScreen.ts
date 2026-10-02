@@ -11,4 +11,6 @@ export const plateScreen: {
   bounds: PxRect | null
   pose: { frame: number; camera: number[] } | null
   project: ((p: [number, number, number]) => { x: number; y: number }) | null
-} = { bounds: null, pose: null, project: null }
+  /** The camera now: what it looks at, how far, turned (about the vertical) and tilted (from straight down). */
+  cameraPose: (() => { target: number[]; distance: number; azimuth: number; polar: number }) | null
+} = { bounds: null, pose: null, project: null, cameraPose: null }

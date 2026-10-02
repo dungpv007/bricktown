@@ -19,7 +19,11 @@ interface BtWindow {
       }
     }
     useGame: { getState(): { data: { workshop: { bricks: Brick[] } } } }
-    plateScreen: { bounds: PxRect | null; project: ((p: Vec3) => { x: number; y: number }) | null }
+    plateScreen: {
+      bounds: PxRect | null
+      project: ((p: Vec3) => { x: number; y: number }) | null
+      cameraPose: (() => { target: number[]; distance: number; azimuth: number; polar: number }) | null
+    }
   }
 }
 
@@ -59,6 +63,9 @@ const top2x4 = (x: number, z: number): Vec3 => [x + 1, 1.2, z + 2]
 
 const plateBounds = (page: Page) =>
   page.evaluate(() => (window as unknown as BtWindow).__bt.plateScreen.bounds)
+
+const cameraPose = (page: Page) =>
+  page.evaluate(() => (window as unknown as BtWindow).__bt.plateScreen.cameraPose!())
 
 /** One finger pressing at `from`, sliding to `to` in small steps, then lifting (CDP touch events). */
 async function touchDrag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }, steps = 10) {
@@ -384,16 +391,21 @@ test('workshop: an invalid drop keeps the brick where it was', async ({ page }) 
   expect(await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().canUndo)).toBe(undoBefore)
 })
 
-test('workshop: dragging on empty space turns the camera and leaves the bricks alone', async ({ page }) => {
+test('workshop: dragging on empty space slides the view (same angle) and leaves the bricks alone', async ({ page }) => {
   await openWorkshop(page)
   await placeAt(page, 2, 0, 2)
   const before = await bricks(page)
   const bounds = await plateBounds(page)
+  const pose0 = await cameraPose(page)
   const from = await screenOf(page, [12.5, 0, 12.5])
   await touchDrag(page, from, { x: from.x - 200, y: from.y - 40 })
   await waitForCameraStill(page)
   expect(await bricks(page)).toEqual(before)
   expect(await plateBounds(page)).not.toEqual(bounds)
+  const pose1 = await cameraPose(page)
+  expect(Math.hypot(pose1.target[0] - pose0.target[0], pose1.target[2] - pose0.target[2])).toBeGreaterThan(2)
+  expect(pose1.azimuth).toBeCloseTo(pose0.azimuth, 2)
+  expect(pose1.polar).toBeCloseTo(pose0.polar, 2)
   expect(await selectedId(page)).toBeNull()
 })
 
@@ -573,4 +585,65 @@ test('workshop: a 1x6 dragged from the palette over the gap between two supports
   await expect(page.getByTestId('place-error')).toHaveCount(0)
   // Centred on cell x 6: spans x 4..9 and rests on the tall support's top (y = 6), bridging the gap.
   expect((await bricks(page))[3]).toMatchObject({ p: 'brick_1x6', r: 1, x: 4, y: 6, z: 6 })
+})
+
+test.describe('workshop on a touch phone', () => {
+  test.use({ viewport: { width: 412, height: 891 }, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
+
+  test('workshop: one finger pans, a pinch zooms, a twist turns and a side-by-side push tilts the camera', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    await openWorkshop(page)
+    const centre = await screenOf(page, [12.5, 0, 12.5])
+    const x = 206
+    const y = Math.min(Math.max(centre.y, 300), 500)
+    const cdp = await page.context().newCDPSession(page)
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<[number, number]>) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([px, py], id) => ({ x: px, y: py, id })) })
+    const settled = async () => {
+      await waitForCameraStill(page)
+      return cameraPose(page)
+    }
+
+    // One finger on the empty plate pans: the target moves, the angle stays.
+    const start = await settled()
+    await touch('touchStart', [[x, y]])
+    for (let i = 1; i <= 10; i++) await touch('touchMove', [[x + i * 8, y + i * 6]])
+    await touch('touchEnd', [])
+    const panned = await settled()
+    expect(Math.hypot(panned.target[0] - start.target[0], panned.target[2] - start.target[2])).toBeGreaterThan(1)
+    expect(panned.azimuth).toBeCloseTo(start.azimuth, 2)
+    expect(panned.polar).toBeCloseTo(start.polar, 2)
+    expect(panned.distance).toBeCloseTo(start.distance, 1)
+
+    // Two fingers spreading zoom in.
+    await touch('touchStart', [[x - 40, y]])
+    await touch('touchStart', [[x - 40, y], [x + 40, y]])
+    for (let i = 1; i <= 8; i++) await touch('touchMove', [[x - 40 - i * 10, y], [x + 40 + i * 10, y]])
+    await touch('touchEnd', [])
+    const zoomed = await settled()
+    expect(zoomed.distance).toBeLessThan(panned.distance - 1)
+
+    // Two fingers twisting turn the view about the vertical.
+    const r = 80
+    await touch('touchStart', [[x - r, y]])
+    await touch('touchStart', [[x - r, y], [x + r, y]])
+    for (let i = 1; i <= 12; i++) {
+      const a = (i / 12) * (Math.PI / 3)
+      await touch('touchMove', [[x - r * Math.cos(a), y - r * Math.sin(a)], [x + r * Math.cos(a), y + r * Math.sin(a)]])
+    }
+    await touch('touchEnd', [])
+    const turned = await settled()
+    expect(Math.abs(turned.azimuth - zoomed.azimuth)).toBeGreaterThan(0.5)
+
+    // Two fingers side by side pushed up tilt the view (no zoom).
+    await touch('touchStart', [[x - 60, y + 100]])
+    await touch('touchStart', [[x - 60, y + 100], [x + 60, y + 100]])
+    for (let i = 1; i <= 10; i++) await touch('touchMove', [[x - 60, y + 100 - i * 8], [x + 60, y + 100 - i * 8]])
+    await touch('touchEnd', [])
+    const tilted = await settled()
+    expect(tilted.polar).toBeGreaterThan(turned.polar + 0.1)
+    expect(tilted.distance).toBeCloseTo(turned.distance, 0)
+    expect(errors).toEqual([])
+  })
 })

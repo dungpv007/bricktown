@@ -112,7 +112,7 @@ export const vi = {
   onboardSelect: 'Chạm vào gạch để chọn',
   onboardMove: 'Kéo gạch để di chuyển',
   onboardAdd: 'Kéo gạch từ dưới lên để thêm',
-  onboardLook: 'Kéo chỗ trống để nhìn quanh',
+  onboardLook: 'Kéo chỗ trống để dịch chuyển khung nhìn; hai ngón kéo lên xuống để nghiêng',
   onboardPinch: 'Chụm hai ngón để phóng to',
   onboardSkip: 'Bỏ qua',
   onboardNext: 'Tiếp',

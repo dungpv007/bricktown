@@ -114,7 +114,7 @@ export const en: Record<keyof typeof vi, string> = {
   onboardSelect: 'Tap a brick to choose it',
   onboardMove: 'Drag a brick to move it',
   onboardAdd: 'Drag a brick up from the bottom to add it',
-  onboardLook: 'Drag empty space to look around',
+  onboardLook: 'Drag empty space to slide the view; two fingers up or down to tilt it',
   onboardPinch: 'Pinch to zoom',
   onboardSkip: 'Skip',
   onboardNext: 'Next',

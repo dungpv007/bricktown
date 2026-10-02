@@ -12,6 +12,7 @@ import { paintRoadLine, roadKey } from '../../core/roads'
 import { paintTerrain, type TerrainBrush } from '../../core/terrain'
 import type { Baseplate, Blueprint, CityPlacement, CityState } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
+import { useTwoFingerCamera } from '../../input/useTwoFingerCamera'
 import BakedMeshes from '../../render/BakedMeshes'
 import BtCanvas from '../../render/BtCanvas'
 import { createGhostMaterial } from '../../render/materials'
@@ -39,7 +40,6 @@ import Rails from './Rails'
 import Roads from './Roads'
 import Terrain from './Terrain'
 import { useCityGestures, type CityPick, type GroundPoint } from './useCityGestures'
-import { useTwoFingerCamera } from './useTwoFingerCamera'
 
 const VALID = new THREE.Color('#3cd35a')
 const INVALID = new THREE.Color('#ff3b30')
@@ -145,7 +145,7 @@ function startDistance(city: CityState, blueprints: Blueprint[]): number {
 
 // Two fingers always pinch-zoom and pan (in both modes), so the map can still be moved when the
 // screen is full of buildings, where every one-finger drag starts on a building and moves it. Their
-// twist turns the view and a side-by-side push tilts it (useTwoFingerCamera).
+// twist turns the view and a side-by-side push tilts it (input/useTwoFingerCamera).
 const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
 const PAN_MOUSE = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
 // Road mode: one finger / the left button paints (no mapping = controls ignore it), so the camera
