@@ -431,3 +431,52 @@ test('workshop: new model asks before wiping a build', async ({ page }) => {
   await page.getByTestId('new-model-vehicle').click()
   await expect(page.getByTestId('new-model-confirm-step')).toHaveCount(0)
 })
+
+/** A step-up in the middle of the model: a 2x4 at (6,0,6), a 2x2 at (8,0,6) with a plate on top of it (4 plates tall). */
+const stepUp = async (page: Page) => {
+  await placeAt(page, 6, 0, 6)
+  await placeAt(page, 8, 0, 6, 'brick_2x2')
+  await placeAt(page, 8, 3, 6, 'plate_2x2')
+}
+
+test('workshop: a part dragged from the palette onto occupied studs climbs on top instead of failing', async ({ page }) => {
+  await openWorkshop(page)
+  await stepUp(page)
+  const button = await page.getByTestId('part-brick_2x2').boundingBox()
+  if (!button) throw new Error('no part button')
+  const from = { x: button.x + button.width / 2, y: button.y + button.height / 2 }
+  // The right edge of the 2x4's top: a 2x2 centred on cell (7, 7) at y = 3 would cut into the plate (x 8).
+  const to = await screenOf(page, [7.5, 1.2, 7.5])
+
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<{ x: number; y: number }>) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map((p) => ({ ...p, id: 1 })) })
+  await touch('touchStart', [from])
+  for (let i = 1; i <= 12; i++) {
+    await touch('touchMove', [{ x: from.x + ((to.x - from.x) * i) / 12, y: from.y + ((to.y - from.y) * i) / 12 }])
+    await page.waitForTimeout(16)
+  }
+  await touch('touchEnd', [])
+  await cdp.detach()
+
+  await expect.poll(() => brickCount(page)).toBe(4)
+  await expect(page.getByTestId('place-error')).toHaveCount(0)
+  const added = (await bricks(page))[3]
+  // Same x/z, one level above the plate it first collided with.
+  expect(added).toMatchObject({ p: 'brick_2x2', x: 7, y: 4, z: 7 })
+})
+
+test('workshop: a brick moved onto occupied studs climbs on top instead of failing', async ({ page }) => {
+  await openWorkshop(page)
+  await stepUp(page)
+  await placeAt(page, 2, 0, 2, 'brick_2x2')
+  const mover = (await bricks(page))[3]
+  const from = await screenOf(page, [3, 1.2, 3])
+  const to = await screenOf(page, [7.5, 1.2, 7.5])
+  await touchDrag(page, from, to)
+
+  await expect.poll(async () => (await bricks(page)).find((b) => b.id === mover.id)?.y).toBe(4)
+  await expect(page.getByTestId('place-error')).toHaveCount(0)
+  expect((await bricks(page)).find((b) => b.id === mover.id)).toMatchObject({ x: 7, y: 4, z: 7 })
+  expect(await brickCount(page)).toBe(4)
+})

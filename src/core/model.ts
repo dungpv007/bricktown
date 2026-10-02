@@ -2,7 +2,7 @@ import { figOf, isFigure, withTorso } from './figures'
 import { Occupancy } from './occupancy'
 import { getPart } from './parts/catalog'
 import { footprint, nextRot } from './rotation'
-import type { Baseplate, Brick, FigStyle } from './types'
+import type { Baseplate, Brick, FigStyle, PartDef, Rot } from './types'
 
 /** Build height limit: 48 bricks, so towers like the skyscraper template fit. */
 export const MAX_HEIGHT_PLATES = 144
@@ -114,4 +114,58 @@ export function bounds(bricks: Brick[]): Bounds | null {
     out.maxZ = Math.max(out.maxZ, b.z + fz)
   }
   return out
+}
+
+/**
+ * Where a dropped `part` really goes: the pointer's `anchor`, moved straight up (x and z never change)
+ * to the lowest level where `canPlace` would accept it. Dropping onto studs that are already taken
+ * therefore stacks on top of what is there. Climbing starts at max(0, anchor.y); an accepted anchor is
+ * returned as it is. When nothing fits (off the plate, over the height limit, nothing to rest on,
+ * brick limit reached) the original anchor comes back, so the caller reports the usual error.
+ * `excludeId` is a brick being moved, which does not count as an obstacle.
+ *
+ * Works from the bricks that share a column with the footprint instead of a whole occupancy grid
+ * (the Workshop calls this on every pointer move): a supported level is the ground or the top of one
+ * of those bricks, so only those few levels are tried.
+ */
+export function settleAnchor(
+  bricks: Brick[],
+  part: PartDef,
+  r: Rot,
+  anchor: { x: number; y: number; z: number },
+  baseplate: Baseplate,
+  excludeId?: string,
+): { x: number; y: number; z: number } {
+  const { fx, fz } = footprint(part, r)
+  const { x, z } = anchor
+  if (x < 0 || z < 0 || x + fx > baseplate.w || z + fz > baseplate.d) return anchor
+  if (excludeId === undefined && bricks.length >= MAX_BRICKS) return anchor
+
+  // Height spans (bottom, top) of the bricks sharing a column with the footprint.
+  const bottoms: number[] = []
+  const tops: number[] = []
+  for (const b of bricks) {
+    if (b.id === excludeId) continue
+    const bp = getPart(b.p)
+    const f = footprint(bp, b.r)
+    if (b.x < x + fx && x < b.x + f.fx && b.z < z + fz && z < b.z + f.fz) {
+      bottoms.push(b.y)
+      tops.push(b.y + bp.h)
+    }
+  }
+
+  const from = Math.max(0, anchor.y)
+  const levels = [0, ...tops].filter((y) => y >= from).sort((a, b) => a - b)
+  for (const y of levels) {
+    if (y + part.h > MAX_HEIGHT_PLATES) break
+    let free = true
+    for (let i = 0; i < bottoms.length; i++) {
+      if (bottoms[i] < y + part.h && y < tops[i]) {
+        free = false
+        break
+      }
+    }
+    if (free) return y === anchor.y ? anchor : { x, y, z }
+  }
+  return anchor
 }

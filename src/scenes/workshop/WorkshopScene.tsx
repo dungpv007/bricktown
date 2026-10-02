@@ -2,10 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
-import { bounds, canPlace, type Bounds } from '../../core/model'
+import { bounds, canPlace, settleAnchor, type Bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
 import { rotateNormalY, targetAnchor, type PickHit, type Vec3 } from '../../core/pick'
-import type { Baseplate as BaseplateSize, Brick, Rot } from '../../core/types'
+import type { Baseplate as BaseplateSize, Brick, PartDef, Rot } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks, { brickOfInstance } from '../../render/InstancedBricks'
@@ -238,11 +238,21 @@ export function Ground({ size }: { size: BaseplateSize }) {
  */
 type Preview = { kind: 'part'; hit: PickHit } | { kind: 'move'; brick: Brick; hit: PickHit | null }
 
+/**
+ * Where a part dropped on `hit` goes: the pointer's target, climbed to the lowest free level when
+ * those studs are already taken (so it stacks on top instead of failing). `movingId` is the brick
+ * being moved, which is not an obstacle to itself.
+ */
+function dropAnchor(hit: PickHit, part: PartDef, r: Rot, movingId?: string): Anchor {
+  const { bricks, baseplate } = useGame.getState().data.workshop
+  return settleAnchor(bricks, part, r, targetAnchor(hit, part, r), baseplate, movingId)
+}
+
 /** Where the preview's part would go, for the editor's current part and rotation. */
 function previewAnchor(p: Preview | null, partId: string, rot: Rot): Anchor | null {
   if (!p) return null
-  if (p.kind === 'move') return p.hit ? targetAnchor(p.hit, getPart(p.brick.p), p.brick.r) : null
-  return targetAnchor(p.hit, getPart(partId), rot)
+  if (p.kind === 'move') return p.hit ? dropAnchor(p.hit, getPart(p.brick.p), p.brick.r, p.brick.id) : null
+  return dropAnchor(p.hit, getPart(partId), rot)
 }
 
 const samePreview = (a: Preview | null, b: Preview | null): boolean => {
@@ -355,7 +365,7 @@ function WorkshopWorld() {
     tapPlate: (hit) => {
       const ed = useEditor.getState()
       ed.setPlateResize(false)
-      const a = targetAnchor(hit, getPart(ed.partId), ed.rot)
+      const a = dropAnchor(hit, getPart(ed.partId), ed.rot)
       ed.place(a.x, a.y, a.z)
       if (useEditor.getState().lastError === null) {
         setPreview(null)
@@ -381,7 +391,7 @@ function WorkshopWorld() {
     dragEnd: (drop) => {
       const p = previewRef.current
       setDraggingId(null)
-      const to = drop && p?.kind === 'move' && p.hit ? targetAnchor(p.hit, getPart(p.brick.p), p.brick.r) : null
+      const to = drop && p?.kind === 'move' && p.hit ? dropAnchor(p.hit, getPart(p.brick.p), p.brick.r, p.brick.id) : null
       if (p?.kind !== 'move' || !to) {
         setPreview(null)
         return
@@ -415,7 +425,7 @@ function WorkshopWorld() {
           return
         }
         const ed = useEditor.getState()
-        const a = targetAnchor(hit, getPart(ed.partId), ed.rot)
+        const a = dropAnchor(hit, getPart(ed.partId), ed.rot)
         ed.place(a.x, a.y, a.z)
         if (useEditor.getState().lastError === null) {
           setPreview(null)
@@ -428,7 +438,9 @@ function WorkshopWorld() {
   }, [el, pick, setPreview, flashPreview])
 
   const moving = preview?.kind === 'move' ? preview.brick : null
-  const anchor = useMemo(() => previewAnchor(preview, partId, rot), [preview, partId, rot])
+  // `bricks` is not read inside, but a drop settles differently once the model changes (see `dropAnchor`).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const anchor = useMemo(() => previewAnchor(preview, partId, rot), [preview, partId, rot, bricks])
   const ghostPart = moving ? moving.p : partId
   const ghostRot = moving ? moving.r : rot
   const ghostFig = moving ? moving.fig : fig
