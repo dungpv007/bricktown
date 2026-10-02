@@ -231,7 +231,7 @@ export const vi = {
   shareCityEmpty: 'Thành phố còn trống',
   importShared: 'Nhập',
   importPickFile: 'Chọn file',
-  importPasteLink: 'Dán link vào đây',
+  importPasteLink: 'Dán link hoặc JSON vào đây',
   importAdd: 'Thêm',
   importReplaceCity: 'Thay thành phố',
   confirmReplaceCity: 'Thay cả thành phố của bé? Thành phố cũ sẽ mất.',

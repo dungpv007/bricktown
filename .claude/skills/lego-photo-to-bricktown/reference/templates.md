@@ -7,22 +7,37 @@ Templates tagged `water` must sit on (or across) water; all others on dry land.
 
 | id | name (en) | tên (vi) | kind | baseplate | cells | bricks | tags |
 |---|---|---|---|---|---|---|---|
+| `tpl:apartment` | Apartment block | Chung cư | building | 16 x 16 | 2 x 2 | 324 | house, tower, apartment |
+| `tpl:bakery` | Bakery | Tiệm bánh | building | 16 x 16 | 2 x 2 | 127 | shop, bakery |
 | `tpl:bench` | Park bench | Ghế dài | prop | 8 x 8 | 1 x 1 | 6 | street, furniture |
+| `tpl:bus` | Bus | Xe buýt | vehicle | 8 x 16 | 1 x 2 | 64 | vehicle, bus |
 | `tpl:bush_flowers` | Bush and flowers | Bụi cây và hoa | prop | 8 x 8 | 1 x 1 | 7 | nature |
 | `tpl:car` | Car | Xe hơi | vehicle | 8 x 16 | 1 x 2 | 17 | vehicle |
 | `tpl:fire_station` | Fire station | Trạm cứu hỏa | building | 32 x 32 | 4 x 4 | 121 | fire_station |
 | `tpl:fire_truck` | Fire truck | Xe cứu hỏa | vehicle | 8 x 16 | 1 x 2 | 35 | fire |
+| `tpl:flower_bed` | Flower bed | Bồn hoa | prop | 8 x 8 | 1 x 1 | 25 | park, nature |
+| `tpl:fountain` | Fountain | Đài phun nước | prop | 8 x 8 | 1 x 1 | 22 | park, nature |
 | `tpl:garage` | Garage | Nhà để xe | building | 32 x 32 | 4 x 4 | 103 | garage |
+| `tpl:grocery` | Grocery | Cửa hàng tạp hóa | building | 16 x 16 | 2 x 2 | 132 | shop, grocery |
 | `tpl:house_blue` | Blue house | Nhà xanh | building | 16 x 16 | 2 x 2 | 78 | house |
 | `tpl:house_small` | Small house | Nhà nhỏ | building | 16 x 16 | 2 x 2 | 67 | house |
 | `tpl:house_tall` | Two-storey house | Nhà hai tầng | building | 16 x 16 | 2 x 2 | 106 | house |
 | `tpl:lamp` | Street lamp | Đèn đường | prop | 8 x 8 | 1 x 1 | 6 | street |
+| `tpl:office_tower` | Office tower | Tòa nhà văn phòng | building | 16 x 16 | 2 x 2 | 347 | tower, office |
+| `tpl:pine_tree` | Pine tree | Cây thông | prop | 8 x 8 | 1 x 1 | 14 | park, nature |
+| `tpl:playground` | Playground | Sân chơi | prop | 8 x 8 | 1 x 1 | 23 | park |
 | `tpl:police_car` | Police car | Xe cảnh sát | vehicle | 8 x 16 | 1 x 2 | 21 | police |
 | `tpl:police_hq` | Police headquarters | Sở cảnh sát | building | 32 x 24 | 4 x 3 | 116 | police |
 | `tpl:police_station` | Police station | Đồn cảnh sát | building | 32 x 32 | 4 x 4 | 112 | police |
 | `tpl:restaurant` | Restaurant | Nhà hàng | building | 32 x 32 | 4 x 4 | 177 | restaurant |
 | `tpl:robot` | Robot | Rô-bốt | prop | 8 x 8 | 1 x 1 | 37 | robot |
 | `tpl:rocket` | Rocket | Tên lửa | prop | 16 x 16 | 2 x 2 | 53 | space |
+| `tpl:round_tree` | Round tree | Cây tán tròn | prop | 8 x 8 | 1 x 1 | 14 | park, nature |
 | `tpl:skyscraper` | Skyscraper | Tòa nhà chọc trời | building | 16 x 16 | 2 x 2 | 274 | tower |
+| `tpl:sushi_restaurant` | Sushi restaurant | Nhà hàng sushi | building | 16 x 16 | 2 x 2 | 131 | restaurant, shop, sushi |
+| `tpl:taxi` | Taxi | Xe taxi | vehicle | 8 x 16 | 1 x 2 | 20 | vehicle, taxi |
+| `tpl:toy_shop` | Toy shop | Cửa hàng đồ chơi | building | 16 x 16 | 2 x 2 | 126 | shop, toys |
+| `tpl:train_carriage` | Train carriage | Toa tàu hỏa | vehicle | 8 x 16 | 1 x 2 | 71 | train |
+| `tpl:train_engine` | Train engine | Đầu tàu hỏa | vehicle | 8 x 16 | 1 x 2 | 63 | train |
 | `tpl:tree` | Tree | Cây xanh | prop | 8 x 8 | 1 x 1 | 6 | nature |
 | `tpl:truck` | Truck | Xe tải | vehicle | 8 x 16 | 1 x 2 | 27 | vehicle |

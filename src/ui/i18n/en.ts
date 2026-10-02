@@ -233,7 +233,7 @@ export const en: Record<keyof typeof vi, string> = {
   shareCityEmpty: 'The city is still empty',
   importShared: 'Import',
   importPickFile: 'Pick a file',
-  importPasteLink: 'Paste a link here',
+  importPasteLink: 'Paste a link or JSON here',
   importAdd: 'Add',
   importReplaceCity: 'Replace city',
   confirmReplaceCity: 'Replace your whole city? The old one will be gone.',

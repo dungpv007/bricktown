@@ -9,15 +9,19 @@ import { dirname, resolve } from 'node:path'
 import process from 'node:process'
 import { DEFAULT_BASE, pack } from './lib/pack'
 
+/** Share-link base: $VITE_SHARE_BASE_URL (the one the game itself uses) when set, else localhost. */
+const ENV_BASE = process.env.VITE_SHARE_BASE_URL?.trim() || undefined
+
 const USAGE = `usage: npm run bt:pack -- <in.json> [options]
 
   --out <path>   output path without extension (default: next to the input)
                  writes <path>.bricktown and <path>.link.txt
-  --fix          safe repairs: drop duplicate / overlapping bricks, move a sunk or
+  --fix          safe repairs: drop duplicate / overlapping bricks, nudge a brick sticking out of the plate (<=3 studs) back inside, move a sunk or
                  floating brick up/down onto the nearest support when unambiguous;
                  the repaired input is saved as <path>.fixed.json
   --layers       print an ASCII top-down map per layer (y in plates)
-  --base <url>   base of the share link (default ${DEFAULT_BASE})
+  --base <url>   base of the share link (default $VITE_SHARE_BASE_URL, else ${DEFAULT_BASE}, which only
+                 opens on this computer: pass the public URL, e.g. https://bricktown.pages.dev, for other devices)
   --json         print the result as JSON (errors, warnings, fixes, link, files)
 `
 
@@ -29,7 +33,7 @@ function fail(message: string): never {
 const args = process.argv.slice(2)
 let input: string | undefined
 let out: string | undefined
-let base = DEFAULT_BASE
+let base = ENV_BASE ?? DEFAULT_BASE
 let fix = false
 let layers = false
 let json = false

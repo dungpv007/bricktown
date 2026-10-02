@@ -12,7 +12,8 @@ Write **authoring JSON**, check it with the game's rules, deliver a file the gam
 - 1 stud = 1 unit (x, z). **y counts plates**: plate/tile = 1, brick = 3, so bricks stack at y = 0, 3, 6...
 - `x, z` = min corner, integers >= 0; `y` = bottom plate level (0 = on the baseplate).
 - Part `w x d` at r=0 (w along x). `r` = quarter turns counter-clockwise from above; odd r swaps to `d x w`.
-- Fronts (slopes' low edge, windows, doors, figures) face +z at r=0, +x at r=1, -z at r=2, -x at r=3.
+- **At r=0, 1xN bricks and plates run along z** (`brick_1x6` = 1 along x, 6 along z); windows, doors, fences, bars, counters run along x. For a 1xN brick along x use r=1.
+- **Bounds check for every part:** `fx, fz = w, d` (even r) or `d, w` (odd r); need `x + fx <= baseplate.w` and `z + fz <= baseplate.d`. A `brick_1x6` at r=0, z=12 on a 16-deep plate ends at z=17: wrong (z <= 10).- Fronts (slopes' low edge, windows, doors, figures) face +z at r=0, +x at r=1, -z at r=2, -x at r=3.
 - Photo: **front = +z** (toward the camera), **x to the right**, y up; z=0 is the back. Vehicles drive toward -z.
 - Baseplate `{w, d, c}`: 1..48 studs, multiples of 8 recommended; c = colour id.
 - City: cell = 8 studs; placements `{source, cx, cz, rot, s}` by min-corner cell, s = 1..10; roads, rails, terrain are `"cx,cz"` keys. `source` = a blueprint id in the file or `tpl:<id>`.
@@ -21,14 +22,24 @@ Write **authoring JSON**, check it with the game's rules, deliver a file the gam
 
 1. Identify the objects; pick the model (or the city layout).
 2. Measure in studs: count studs on visible tops. A brick is 1 stud wide, 1.2 studs tall; a plate is 1/3 brick.
+   Perspective photo: count studs along the nearest straight edge (far edges look shorter), use the baseplate's stud rows as a grid for everything else, and round sizes to common ones (16, 24, 32, 48).
 3. Choose the baseplate (a little larger than the model).
 4. Build bottom-up, layer by layer; colours by id from `reference/colors.md`.
 5. Write `in.json` (marker `"format": "bricktown-authoring", "version": 1`).
 6. `npm run bt:pack -- in.json --layers` — compare each layer map with the photo.
-7. Fix every error (or `--fix` for safe repairs; it writes `in.fixed.json`).
-8. Preview: `npm run bt:preview -- in.bricktown --url http://localhost:5199` (start a server with `npx vite --port 5199 --strictPort` if none runs). Read the PNGs.
+7. Fix every error (or `--fix` for safe repairs, incl. nudging a part that sticks out <= 3 studs back inside; it writes `in.fixed.json`).
+8. Preview: `npm run bt:preview -- in.bricktown --url http://localhost:5199` with a server running (below). Read the PNGs.
 9. Compare with the photo and iterate — at least one comparison pass.
 10. Deliver `in.bricktown` + the link. Tell the user: **📥 Nhập → Chọn file**, or open the link.
+
+**Preview server.** If `node_modules` is shared or symlinked (worktrees), Vite must not write its cache there; give it its own `cacheDir` (the file stays untracked; delete `.ref-tmp/` afterwards):
+
+```sh
+mkdir -p .ref-tmp && printf "import base from '../vite.config.ts'\nexport default { ...base, cacheDir: 'vite-cache' }\n" > .ref-tmp/vite.config.mjs
+npx vite --config .ref-tmp/vite.config.mjs --port 5199 --strictPort
+```
+
+**Share link base.** `bt:pack` links to `http://localhost:5173` unless `VITE_SHARE_BASE_URL` is set: fine on this computer only. For other devices pass `--base https://bricktown.pages.dev` (the production URL, or the user's own domain).
 
 Without the CLI: the game's 📥 import also takes the plain authoring JSON (paste it or pick the `.json`), checks it, auto-repairs small mistakes and lists problems. `docs/prompts/lego-photo-to-bricktown.md` is a self-contained prompt for web assistants.
 
@@ -59,6 +70,8 @@ Without the CLI: the game's 📥 import also takes the plain authoring JSON (pas
 }
 ```
 
+Bounds check (8x8 plate): `brick_2x4` at r=0 has fx=2, fz=4, so 2+2 <= 8 and 2+4 <= 8; at r=1 it would be fx=4, fz=2.
+
 `npm run bt:pack -- tower.json --layers` → `tower.bricktown`, `tower.link.txt`.
 
 ## Common mistakes
@@ -69,6 +82,6 @@ Without the CLI: the game's 📥 import also takes the plain authoring JSON (pas
 | y in bricks (0, 1, 2) | y in plates (0, 3, 6); `--fix` lifts sunk bricks |
 | Floating bricks | something must end exactly at y under at least one stud |
 | Colour by name (`"red"`) | colour ids only (`2`) |
-| Forgetting the baseplate size | x + fx <= w and z + fz <= d; grow the plate |
+| Part sticks out of the plate | x + fx <= w and z + fz <= d after rotation; a 1x6 at r=0 is 6 along z. Move it or grow the plate |
 | City placement on a road | footprint = ceil(w·s/8) cells; keep it off road, rail and water cells |
 | Ids like `slope_2x4` read as 2 wide | trust w x d in `reference/parts.md` (it is 4 x 2) |

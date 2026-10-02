@@ -18,3 +18,9 @@ Use them for signs, faces of robots, clocks on towers, badges on police / fire b
 | `print_number_1x2` | 2 x 1 | `number_112` | emergency number 112 on a white plate with a red border |
 | `print_heart_1x1` | 1 x 1 | `heart` | red heart |
 | `print_star_1x1` | 1 x 1 | `star` | yellow star |
+| `print_fish_1x1` | 1 x 1 | `fish` | fish |
+| `board_sushi_1x6` | 6 x 1 | `sushi` | sushi |
+| `board_bakery_1x6` | 6 x 1 | `bakery` | bakery |
+| `board_toys_1x6` | 6 x 1 | `toys` | toys |
+| `board_grocery_1x6` | 6 x 1 | `grocery` | grocery |
+| `board_taxi_1x2` | 2 x 1 | `taxi` | taxi |

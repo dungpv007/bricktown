@@ -1,5 +1,5 @@
 import { TEMPLATES } from '../../src/content/templates'
-import { AUTHORING_FORMAT, AUTHORING_VERSION, FIX_MAX_SHIFT, MAX_STEP_SIZE } from '../../src/core/authoring'
+import { AUTHORING_FORMAT, AUTHORING_VERSION, FIX_MAX_NUDGE, FIX_MAX_SHIFT, MAX_STEP_SIZE } from '../../src/core/authoring'
 import { BASEPLATE_COLORS, PLATE_MAX } from '../../src/core/baseplate'
 import { CELL, MAX_SCALE, WATER_TAG } from '../../src/core/city'
 import { COLORS } from '../../src/core/colors'
@@ -118,6 +118,11 @@ const LEGO_NAMES: Record<number, string> = {
   25: 'Dark Tan (Sand Yellow)', 26: 'Sand Green', 27: 'Lavender', 28: 'Flat Silver / Pearl Light Gray', 29: 'Pearl Gold',
 }
 
+const COLOUR_NOTES: string[] = [
+  '- `c` recolours **every** part, furniture, doors and windows included: one colour per part (a window is one colour for frame and pane together). Windows: 0 white or 7 / 8 grey for a framed look, **15 Glass** (trans-clear) for see-through; other trans colours are lights (16 red, 17 blue, 18 yellow). Doors: 9 brown, 2 red, 3 blue, 0 white.',
+  '- Baseplate `c` (not a brick): 5 green = grass, **7 light bluish grey** = a grey LEGO baseplate in the photo, 24 very light grey = the game\'s default grey (use only for near-white grey), 10 tan = sand, 3 blue = water, 8 dark grey = road, 0 white. A light bluish grey baseplate in the photo is 7, not 24.',
+]
+
 export function colorsMd(): string {
   const lines = [
     GENERATED_NOTE,
@@ -134,9 +139,13 @@ export function colorsMd(): string {
     'Matching a photo: lighting shifts colours. Judge by the brightest clean face, then pick the nearest hex;',
     'prefer the common LEGO colours (white, black, red, blue, yellow, green, light/dark grey, tan, brown, orange).',
     '',
+    ...COLOUR_NOTES,
+    '',
   ]
   return lines.join('\n')
 }
+
+const FIG_ROTATE = 'Rotate a figure with `r` to face a direction: r=0 faces +z (front, the camera), r=1 faces +x (right), r=2 faces -z (back), r=3 faces -x (left). The footprint is 2x1 at even r and 1x2 at odd r: do the bounds check.'
 
 export function figuresMd(): string {
   const style = (s: object) => `\`${JSON.stringify(s)}\``
@@ -147,6 +156,7 @@ export function figuresMd(): string {
     'Part `minifig`: footprint 2 x 1 studs (w along x), 12 plates (4 bricks) tall, faces +z at r=0.',
     'In authoring JSON give `"fig"` as a preset id (`"fig": "chef"`) or a style object. `c` is ignored: a figure\'s',
     'colour is its torso colour. Put figures where the photo shows people, standing on the plate or on a floor.',
+    FIG_ROTATE,
     '',
     '## Style fields',
     '',
@@ -233,6 +243,8 @@ export function coordinatesMd(level = '##'): string {
     '- Real proportions: a brick is 1 stud wide and 1.2 studs tall; a plate is 1/3 of a brick.',
     '- `x`, `z` = the **min corner**: the smallest x and z the part covers (integers >= 0).',
     '- Footprint: a part is `w x d` at r=0 (w along x, d along z). `r` = quarter turns counter-clockwise seen from above (0..3); r=1 or 3 swaps it to `d x w`. The part covers x..x+fx-1, z..z+fz-1, y..y+h-1.',
+    '- **Orientation at r=0: 1xN bricks and plates run along z** (`brick_1x6` is 1 along x and 6 along z); windows, doors, fences, bars and counters run along x (`window_1x4x3` is 4 along x, 1 along z). To lay a 1xN brick along x use r=1. Always read w x d from the parts table.',
+    '- **Bounds check (every part, after rotation):** `fx, fz = w, d` at even r and `d, w` at odd r; it needs `x + fx <= baseplate.w` and `z + fz <= baseplate.d`. Example: `brick_1x6` at r=0, z=12 on a 16-deep plate covers z 12..17 (2 studs outside): use z <= 10; at r=1 it is 6 along x, 1 along z.',
     '- Facing: parts with a front (slopes, windows, doors, figures, chairs...) face **+z at r=0**, +x at r=1, -z at r=2, -x at r=3. A slope\'s low edge is its front.',
     '- Photo mapping: **front = +z** (the side facing the camera), **x grows to the right**, y up; z=0 is the back row. The game\'s camera looks from the front-right.',
     `- Baseplate \`{w, d, c}\`: studs, 1..${PLATE_MAX}; use multiples of 8 (8, 16, 24, 32, 40, 48), leaving a stud or two of margin. \`c\` = colour id (defaults: building 5 green, vehicle 8 dark grey, prop 10 tan).`,
@@ -326,6 +338,8 @@ export function schemaMd(level = '##'): string {
     exampleJson(),
     '```',
     '',
+    'Bounds check (8x8 plate): `brick_2x4` at r=0 has fx=2, fz=4: 2+2 <= 8 and 2+4 <= 8. The same brick at r=1 would have fx=4, fz=2.',
+    '',
   ].join('\n')
 }
 
@@ -342,7 +356,7 @@ export function authoringMd(): string {
     approximationMd(),
     '## Repairs',
     '',
-    `\`--fix\` (and the in-game import) drops exact duplicates and parts that overlap another at their own level, lifts a part sunk into the part below onto the nearest free support, and lowers / lifts a floating part onto the nearest support within ${FIX_MAX_SHIFT} plates when there is exactly one nearest choice. Every change is reported.`,
+    `\`--fix\` (and the in-game import) drops exact duplicates and parts that overlap another at their own level, lifts a part sunk into the part below onto the nearest free support, and lowers / lifts a floating part onto the nearest support within ${FIX_MAX_SHIFT} plates when there is exactly one nearest choice, and shifts a part that sticks out of the baseplate by at most ${FIX_MAX_NUDGE} studs back inside when the new spot is free and still supported. Every change is reported.`,
     '',
   ].join('\n')
 }
@@ -370,7 +384,7 @@ export function promptMd(): string {
     GENERATED_NOTE,
     '',
     '> **Cách dùng (cho bố mẹ):** Mở ChatGPT, Claude.ai hoặc Gemini. Dán toàn bộ nội dung dưới đường kẻ vào ô chat, đính kèm ảnh chụp mô hình LEGO và gửi.',
-    '> Bot sẽ trả lời bằng một khối ```json. Sao chép khối đó (hoặc lưu thành file `.json`). Trong BrickTown bấm **📥 Nhập**, rồi dán vào ô "Dán link vào đây" và bấm ✓, hoặc bấm "Chọn file" và chọn file `.json`. Game tự kiểm tra, tự sửa lỗi nhỏ và cho xem trước rồi mới thêm. Nếu game báo lỗi, gửi lại dòng lỗi cho bot để nó sửa.',
+    '> Bot sẽ trả lời bằng một khối ```json. Sao chép khối đó (hoặc lưu thành file `.json`). Trong BrickTown bấm **📥 Nhập**, rồi dán vào ô "Dán link hoặc JSON vào đây" và bấm ✓, hoặc bấm "Chọn file" và chọn file `.json`. Game tự kiểm tra, tự sửa lỗi nhỏ và cho xem trước rồi mới thêm. Nếu game báo lỗi, gửi lại dòng lỗi cho bot để nó sửa.',
     '> Muốn có hướng dẫn lắp từng bước thì nhắn thêm "có hướng dẫn lắp". Muốn cả thành phố thì nói "làm thành phố".',
     '',
     '---',
@@ -392,6 +406,7 @@ export function promptMd(): string {
     '3. Choose the baseplate (multiple of 8, a little bigger than the model) and centre the model on it.',
     '4. Build bottom-up, one course at a time (y = 0, 3, 6... for bricks; +1 per plate), walls first, then roof and details.',
     '5. Pick colour ids from the table by matching the photo\'s colours.',
+    '6. Budget: a scene is usually 40-150 parts (the hard limit is 1500). Skip loose tiny items (single 1x1 bits, cables, text); big blocks first.',
     '',
     '## Parts (w x d at r=0, h in plates)',
     '',
@@ -405,10 +420,15 @@ export function promptMd(): string {
     compactColors(),
     '```',
     '',
+    '## Colour notes',
+    '',
+    ...COLOUR_NOTES,
+    '',
     '## Minifigures',
     '',
     `Part \`minifig\` (2x1, 12 plates, faces +z). \`"fig"\`: a preset id - ${presets} - or a style object`,
     `\`{ "torso": colour, "legs": colour, "arms"?: colour, "face": ${FIG_FACES.join('|')}, "hat": ${FIG_HATS.join('|')}, "hatColor"?: colour, "print": ${FIG_PRINTS.join('|')}, "accessory"?: ${FIG_ACCESSORIES.join('|')} }\` (no trans colours).`,
+    FIG_ROTATE,
     '',
     '## Templates for cities (`"source": "tpl:<id>"`)',
     '',
@@ -419,6 +439,7 @@ export function promptMd(): string {
     '## Self-check before answering (do it, silently)',
     '',
     '- Count the studs again: does the footprint (w x d, after rotation) match the photo? Is the height in plates (3 per brick)?',
+    '- **For every part: `x + fx <= W` and `z + fz <= D`** (W x D = the baseplate; fx, fz = w, d at even r and d, w at odd r; 1xN parts run along z at r=0).',
     '- Go layer by layer from y=0: every part above 0 has a part ending exactly at its y under at least one of its studs; no two parts overlap.',
     '- Every part stays inside the baseplate, every `p` is in the parts table, every `c` is a number from the colours table, `r` is 0..3.',
     '- Placements in a city do not cover roads, rails, water or each other; template ids exist.',
@@ -426,7 +447,7 @@ export function promptMd(): string {
     '',
     '## Output contract',
     '',
-    'Reply with **exactly one** ```json code block containing the authoring JSON (one brick per line is fine), then a summary of **3 lines**:',
+    'Reply with **exactly one** ```json code block containing the authoring JSON (one brick per line is fine), then a summary of **3 lines, in the user\'s language** (the language they wrote in; Vietnamese if they wrote nothing):',
     'what it is and its size in studs; how many parts and the main colours; what you simplified or guessed.',
     'Nothing else: no extra code blocks, no explanations before the JSON.',
     '',

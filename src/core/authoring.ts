@@ -38,6 +38,8 @@ export const MAX_AUTHORING_CHARS = MAX_DECOMPRESSED_BYTES
 export const MAX_STEP_SIZE = 6
 /** How far (plates) `fix` may move a brick up or down to find a free, supported spot. */
 export const FIX_MAX_SHIFT = 6
+/** How many studs a brick may stick out of the baseplate for `fix` to nudge it back inside. */
+export const FIX_MAX_NUDGE = 3
 
 export type IssueCode =
   | 'json' | 'format' | 'version' | 'kind' | 'field' | 'too_big'
@@ -364,6 +366,23 @@ function topBelow(occ: Occupancy, b: Brick): number | null {
   return null
 }
 
+/**
+ * `b` shifted along x and / or z so that it lies inside the plate, when it sticks out by at most
+ * FIX_MAX_NUDGE studs on each axis it sticks out on (and the height is fine); null otherwise.
+ */
+function nudgeInside(b: Brick, plate: Baseplate): Brick | null {
+  const part = PART_BY_ID[b.p]
+  const { fx, fz } = footprint(part, b.r)
+  if (b.y < 0 || b.y + part.h > MAX_HEIGHT_PLATES) return null
+  const pull = (at: number, size: number, limit: number) => (at < 0 ? -at : at + size > limit ? limit - size - at : 0)
+  const dx = pull(b.x, fx, plate.w)
+  const dz = pull(b.z, fz, plate.d)
+  if (dx === 0 && dz === 0) return null
+  if (Math.abs(dx) > FIX_MAX_NUDGE || Math.abs(dz) > FIX_MAX_NUDGE) return null
+  const moved = { ...b, x: b.x + dx, z: b.z + dz }
+  return moved.x >= 0 && moved.z >= 0 && moved.x + fx <= plate.w && moved.z + fz <= plate.d ? moved : null
+}
+
 /** The free, supported level nearest to `b.y` within FIX_MAX_SHIFT plates; null when there is none or two tie. */
 function nearestLevel(placed: Brick[], occ: Occupancy, b: Brick, plate: Baseplate): number | null {
   for (let d = 1; d <= FIX_MAX_SHIFT; d++) {
@@ -381,8 +400,8 @@ const sameBrick = (a: Brick, b: Brick) =>
  * The bricks of one model checked like the game builds them: bottom-up, each brick must fit the
  * plate and the height limit, not overlap a brick placed before it and rest on the plate or on a
  * brick (the game's `canPlace`). With `fix`, colliding bricks are dropped (or moved up/down onto
- * the nearest free support when that is unambiguous) and floating ones moved onto the nearest
- * support when unambiguous; every change is reported. Returns the kept bricks, in input order.
+ * the nearest free support when that is unambiguous), floating ones moved onto the nearest
+ * support when unambiguous and bricks sticking out of the plate by a few studs nudged inside; every change is reported. Returns the kept bricks, in input order.
  */
 function checkPlacement(bricks: Brick[], plate: Baseplate, where: string, fix: boolean, rep: Report, bp?: string): Brick[] {
   const errorsBefore = rep.errors.length
@@ -409,6 +428,17 @@ function checkPlacement(bricks: Brick[], plate: Baseplate, where: string, fix: b
     const base = { where: brickWhere(i), brick: i, part: b.p, at: posOf(b), blueprint: bp }
     const error = canPlace(placed, b, plate, undefined, occ)
     if (error === 'out_of_bounds') {
+      if (fix) {
+        const moved = nudgeInside(b, plate)
+        if (moved && canPlace(placed, moved, plate, undefined, occ) === null) {
+          place(moved)
+          rep.fixes.push({
+            blueprint: bp, where: brickWhere(i), brick: i, part: b.p, from: posOf(b), to: posOf(moved),
+            message: `${label(i, b)} stuck out of the ${plate.w}x${plate.d} baseplate: moved to x=${moved.x}, z=${moved.z}`,
+          })
+          continue
+        }
+      }
       rep.error({ ...base, ...outOfBoundsMessage(i, b, plate) })
       continue
     }

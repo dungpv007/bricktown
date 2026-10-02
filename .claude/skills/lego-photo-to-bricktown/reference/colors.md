@@ -40,3 +40,6 @@ Baseplate colours offered in the game: 24, 5, 3, 10, 0, 8 (any id is accepted).
 
 Matching a photo: lighting shifts colours. Judge by the brightest clean face, then pick the nearest hex;
 prefer the common LEGO colours (white, black, red, blue, yellow, green, light/dark grey, tan, brown, orange).
+
+- `c` recolours **every** part, furniture, doors and windows included: one colour per part (a window is one colour for frame and pane together). Windows: 0 white or 7 / 8 grey for a framed look, **15 Glass** (trans-clear) for see-through; other trans colours are lights (16 red, 17 blue, 18 yellow). Doors: 9 brown, 2 red, 3 blue, 0 white.
+- Baseplate `c` (not a brick): 5 green = grass, **7 light bluish grey** = a grey LEGO baseplate in the photo, 24 very light grey = the game's default grey (use only for near-white grey), 10 tan = sand, 3 blue = water, 8 dark grey = road, 0 white. A light bluish grey baseplate in the photo is 7, not 24.

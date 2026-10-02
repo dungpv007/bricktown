@@ -200,6 +200,30 @@ describe('authoring: --fix safe repairs', () => {
     expect(r.pkg.model!.blueprint.bricks.map((b) => b.y)).toEqual([0, 3, 6])
     expect(r.fixes).toHaveLength(2)
   })
+
+  it('nudges a brick that sticks out of the plate back inside (a 1x6 along z at z=12 on a 16-deep plate)', () => {
+    const ok = authoringToPackage({
+      ...tower(), withSteps: false, baseplate: { w: 16, d: 16, c: 5 },
+      bricks: [{ p: 'brick_1x6', x: 4, y: 0, z: 12, c: 2 }, { p: 'brick_2x4', x: 14, y: 0, z: 4, r: 1, c: 3 }],
+    }, { ...opts, fix: true })
+    if (!ok.ok) throw new Error(JSON.stringify(ok.errors))
+    expect(ok.fixes.map((f) => [f.brick, f.from.x, f.from.z, f.to?.x, f.to?.z])).toEqual([[0, 4, 12, 4, 10], [1, 14, 4, 12, 4]])
+    expect(ok.fixes[0].message).toContain('moved to x=4, z=10')
+    expect(ok.pkg.model!.blueprint.bricks.map((b) => [b.x, b.z]).sort((a, b) => a[0] - b[0])).toEqual([[4, 10], [12, 4]])
+  })
+
+  it('does not nudge when the shifted spot is taken, or when it sticks out by more than 3 studs', () => {
+    const base = { ...tower(), withSteps: false, baseplate: { w: 16, d: 16, c: 5 } }
+    const taken = authoringToPackage({ ...base, bricks: [{ p: 'brick_1x6', x: 4, y: 0, z: 10, c: 2 }, { p: 'brick_1x6', x: 4, y: 0, z: 12, c: 4 }] }, { ...opts, fix: true })
+    expect(errorsOf(taken)[0]).toMatchObject({ code: 'out_of_bounds', brick: 1 })
+    // the shifted spot (z=10) would float: nothing under it
+    const floating = authoringToPackage({ ...base, bricks: [{ p: 'brick_2x4', x: 4, y: 0, z: 0, c: 2 }, { p: 'brick_1x6', x: 4, y: 3, z: 13, c: 4 }] }, { ...opts, fix: true })
+    expect(errorsOf(floating)[0]).toMatchObject({ code: 'out_of_bounds', brick: 1 })
+    const far = authoringToPackage({ ...base, bricks: [{ p: 'brick_1x6', x: 4, y: 0, z: 14, c: 2 }] }, { ...opts, fix: true })
+    expect(errorsOf(far)[0]).toMatchObject({ code: 'out_of_bounds', brick: 0 })
+    const plain = authoringToPackage({ ...base, bricks: [{ p: 'brick_1x6', x: 4, y: 0, z: 12, c: 2 }] }, opts)
+    expect(errorsOf(plain)[0]).toMatchObject({ code: 'out_of_bounds', brick: 0 })
+  })
 })
 
 describe('authoring: cities', () => {

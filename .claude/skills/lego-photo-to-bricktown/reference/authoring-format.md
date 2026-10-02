@@ -9,6 +9,8 @@ What you write for `npm run bt:pack` (or paste into the game's 📥 import).
 - Real proportions: a brick is 1 stud wide and 1.2 studs tall; a plate is 1/3 of a brick.
 - `x`, `z` = the **min corner**: the smallest x and z the part covers (integers >= 0).
 - Footprint: a part is `w x d` at r=0 (w along x, d along z). `r` = quarter turns counter-clockwise seen from above (0..3); r=1 or 3 swaps it to `d x w`. The part covers x..x+fx-1, z..z+fz-1, y..y+h-1.
+- **Orientation at r=0: 1xN bricks and plates run along z** (`brick_1x6` is 1 along x and 6 along z); windows, doors, fences, bars and counters run along x (`window_1x4x3` is 4 along x, 1 along z). To lay a 1xN brick along x use r=1. Always read w x d from the parts table.
+- **Bounds check (every part, after rotation):** `fx, fz = w, d` at even r and `d, w` at odd r; it needs `x + fx <= baseplate.w` and `z + fz <= baseplate.d`. Example: `brick_1x6` at r=0, z=12 on a 16-deep plate covers z 12..17 (2 studs outside): use z <= 10; at r=1 it is 6 along x, 1 along z.
 - Facing: parts with a front (slopes, windows, doors, figures, chairs...) face **+z at r=0**, +x at r=1, -z at r=2, -x at r=3. A slope's low edge is its front.
 - Photo mapping: **front = +z** (the side facing the camera), **x grows to the right**, y up; z=0 is the back row. The game's camera looks from the front-right.
 - Baseplate `{w, d, c}`: studs, 1..48; use multiples of 8 (8, 16, 24, 32, 40, 48), leaving a stud or two of margin. `c` = colour id (defaults: building 5 green, vehicle 8 dark grey, prop 10 tan).
@@ -56,6 +58,8 @@ Example (4 parts):
 }
 ```
 
+Bounds check (8x8 plate): `brick_2x4` at r=0 has fx=2, fz=4: 2+2 <= 8 and 2+4 <= 8. The same brick at r=1 would have fx=4, fz=2.
+
 ## Build rules (checked; the import refuses a model that breaks them)
 
 - Every part id and colour id must exist (see the tables).
@@ -80,4 +84,4 @@ Example (4 parts):
 
 ## Repairs
 
-`--fix` (and the in-game import) drops exact duplicates and parts that overlap another at their own level, lifts a part sunk into the part below onto the nearest free support, and lowers / lifts a floating part onto the nearest support within 6 plates when there is exactly one nearest choice. Every change is reported.
+`--fix` (and the in-game import) drops exact duplicates and parts that overlap another at their own level, lifts a part sunk into the part below onto the nearest free support, and lowers / lifts a floating part onto the nearest support within 6 plates when there is exactly one nearest choice, and shifts a part that sticks out of the baseplate by at most 3 studs back inside when the new spot is free and still supported. Every change is reported.

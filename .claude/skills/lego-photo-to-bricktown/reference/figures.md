@@ -4,6 +4,7 @@
 Part `minifig`: footprint 2 x 1 studs (w along x), 12 plates (4 bricks) tall, faces +z at r=0.
 In authoring JSON give `"fig"` as a preset id (`"fig": "chef"`) or a style object. `c` is ignored: a figure's
 colour is its torso colour. Put figures where the photo shows people, standing on the plate or on a floor.
+Rotate a figure with `r` to face a direction: r=0 faces +z (front, the camera), r=1 faces +x (right), r=2 faces -z (back), r=3 faces -x (left). The footprint is 2x1 at even r and 1x2 at odd r: do the bounds check.
 
 ## Style fields
 
@@ -36,3 +37,4 @@ No other fields are allowed.
 | `construction` | Construction worker | Công nhân xây dựng | `{"torso":6,"legs":3,"face":"grin","hat":"construction","print":"vest","accessory":"tool"}` |
 | `doctor` | Doctor | Bác sĩ | `{"torso":0,"legs":24,"face":"glasses","hat":"hair_short","print":"suit"}` |
 | `kid` | Kid | Em bé | `{"torso":11,"legs":3,"face":"grin","hat":"hair_ponytail","hatColor":6,"print":"plain"}` |
+| `sushi_chef` | Sushi chef | Đầu bếp sushi | `{"torso":0,"legs":1,"arms":0,"face":"smile","hat":"chef","print":"apron"}` |
