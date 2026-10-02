@@ -23,8 +23,8 @@ export interface ViewShift { seq: number; dx: number; dz: number }
 export interface FigEditorTarget { brickId: string | null }
 
 export interface EditorState {
-  /** The part placed by a tap on the empty plate (or dragged from the palette). */
-  partId: string
+  /** The part placed by a tap on the empty plate (or dragged from the palette); null = none (taps on the plate place nothing). */
+  partId: string | null
   color: number
   /** The look of the next minifigure placed (when `partId` is the minifig part). */
   fig: FigStyle
@@ -47,7 +47,9 @@ export interface EditorState {
   /** The baseplate ➕/➖ edge buttons are shown (📐 toggles them; touching the model hides them). */
   plateResize: boolean
   setPlateResize: (on: boolean) => void
-  setPart: (partId: string) => void
+  setPart: (partId: string | null) => void
+  /** A tap on a palette chip: selects `partId`, or clears the selection when it already is the current part. */
+  togglePart: (partId: string) => void
   setColor: (color: number) => void
   setFig: (fig: FigStyle) => void
   /** Gives placed figure `id` a new look (undoable; no-op when it already looks like that). */
@@ -181,6 +183,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       if (get().plateResize !== on) set({ plateResize: on })
     },
     setPart: (partId) => set({ partId }),
+    togglePart: (partId) => set((s) => ({ partId: s.partId === partId ? null : partId })),
     setColor: (color) => set({ color }),
     setFig: (fig) => set({ fig: { ...fig } }),
     restyleFigure: (id, fig) => {
@@ -196,6 +199,7 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     place: (x, y, z) => {
       const { partId, color, rot, fig } = get()
+      if (partId === null) return
       add(
         partId === MINIFIG_PART
           ? { id: newId(), p: partId, x, y, z, r: rot, c: fig.torso, fig: { ...fig } }

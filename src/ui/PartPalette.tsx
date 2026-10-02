@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { COLORS } from '../core/colors'
 import { FIG_PRESETS, MINIFIG_PART, figKey } from '../core/figures'
 import { PART_CATEGORIES, PARTS } from '../core/parts/catalog'
@@ -130,21 +130,41 @@ function ColoredPartImage({ part, color, hex }: { part: PartDef; color: number; 
 const sizeLabel = (p: PartDef) => `${p.w}×${p.d}`
 
 type PaletteButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'onPointerDown'> & {
-  /** Makes this button's part the current one (on a tap, and when a drag begins). */
+  /** Makes this button's part the current one (when a drag begins, and on a tap unless `toggle` is given). */
   select: () => void
+  /** A tap instead of `select`: e.g. clears the selection when this part is already the current one. */
+  toggle?: () => void
   /** The part can be dragged out onto the 3D view (Workshop). */
   dragToPlace: boolean
 }
 
 /** A palette button that selects its part on a tap and, when `dragToPlace`, can be dragged onto the view. */
-function PaletteButton({ select, dragToPlace, className, ...rest }: PaletteButtonProps) {
-  const startDrag = usePaletteDrag(select)
+function PaletteButton({ select, toggle, dragToPlace, className, ...rest }: PaletteButtonProps) {
+  // A drag is not a tap: the click that may follow its release must not toggle the part off again.
+  const dragged = useRef(false)
+  const startDrag = usePaletteDrag(() => {
+    dragged.current = true
+    select()
+  })
   return (
     <button
       {...rest}
       className={dragToPlace ? `${className} bt-part-drag` : className}
-      onPointerDown={dragToPlace ? startDrag : undefined}
-      onClick={select}
+      onPointerDown={
+        dragToPlace
+          ? (e) => {
+              dragged.current = false
+              startDrag(e)
+            }
+          : undefined
+      }
+      onClick={() => {
+        if (dragged.current) {
+          dragged.current = false
+          return
+        }
+        ;(toggle ?? select)()
+      }}
     />
   )
 }
@@ -183,6 +203,12 @@ function FigureButtons({ dragToPlace }: { dragToPlace: boolean }) {
             useEditor.getState().setFig(p.style)
             select()
           }}
+          toggle={() => {
+            const ed = useEditor.getState()
+            if (current === figKey(p.style)) return ed.setPart(null)
+            ed.setFig(p.style)
+            select()
+          }}
         >
           <FigureImage fig={p.style} />
         </PaletteButton>
@@ -207,9 +233,10 @@ export default function PartPalette({ allowedParts, dragToPlace = false }: Props
   const rot = useEditor((s) => s.rot)
   const setCategory = useEditor((s) => s.setCategory)
   const setPart = useEditor((s) => s.setPart)
+  const togglePart = useEditor((s) => s.togglePart)
   const rotateCurrent = useEditor((s) => s.rotateCurrent)
   const hex = COLORS[color]?.hex ?? '#ffffff'
-  const current = PARTS.find((p) => p.id === partId)
+  const current = partId === null ? undefined : PARTS.find((p) => p.id === partId)
   const parts = allowedParts
     ? PARTS.filter((p) => allowedParts.includes(p.id))
     : PARTS.filter((p) => p.category === category)
@@ -258,6 +285,7 @@ export default function PartPalette({ allowedParts, dragToPlace = false }: Props
             aria-pressed={partId === p.id}
             dragToPlace={dragToPlace}
             select={() => setPart(p.id)}
+            toggle={() => togglePart(p.id)}
           >
             <PartButtonImage part={p} color={color} hex={hex} />
             <span className="bt-part-label">{sizeLabel(p)}</span>

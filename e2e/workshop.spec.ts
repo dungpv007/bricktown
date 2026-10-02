@@ -11,6 +11,7 @@ interface BtWindow {
       getState(): {
         place(x: number, y: number, z: number): void
         setPart(id: string): void
+        partId: string | null
         deselect(): void
         selectedId: string | null
         color: number
@@ -101,6 +102,30 @@ test('workshop: tapping the baseplate places the current part and selects it', a
   await expect.poll(() => brickCount(page)).toBe(1)
   expect(await selectedId(page)).toBe((await bricks(page))[0].id)
   await expect(page.getByTestId('action-bar')).toBeVisible()
+})
+
+test('workshop: tap the selected part again to deselect; the plate then places nothing; a drag still places', async ({ page }) => {
+  await openWorkshop(page)
+  const view = page.viewportSize()
+  if (!view) throw new Error('no viewport')
+  const chip = page.getByTestId('part-brick_2x2')
+  const partId = () => page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().partId)
+  await chip.click()
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
+  await chip.click()
+  await expect(chip).toHaveAttribute('aria-pressed', 'false')
+  expect(await partId()).toBeNull()
+  await page.touchscreen.tap(view.width / 2, view.height / 2)
+  await page.waitForTimeout(300)
+  expect(await brickCount(page)).toBe(0)
+  // A drag from the chip still places it (and selects the part again).
+  const button = await chip.boundingBox()
+  if (!button) throw new Error('no part button')
+  const from = { x: button.x + button.width / 2, y: button.y + button.height / 2 }
+  await touchDrag(page, from, { x: view.width / 2, y: view.height / 2 }, 10)
+  await expect.poll(() => brickCount(page)).toBe(1)
+  expect(await partId()).toBe('brick_2x2')
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
 })
 
 test('workshop: a press that starts on the UI and ends over the plate never places', async ({ page }) => {
