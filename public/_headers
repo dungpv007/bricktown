@@ -1,0 +1,28 @@
+# Cloudflare Pages response headers (copied to dist/ by Vite).
+# Rules are additive: a path that matches several blocks gets all of their headers.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# The service worker, the app shell and the manifest must always be revalidated, or an update
+# would not be noticed. (The names inside /assets/ are hashed and never change.)
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+# workbox-<hash>.js is imported by sw.js; revalidating it is cheap and always safe.
+/workbox-*.js
+  Cache-Control: no-cache
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/audio/*
+  Cache-Control: public, max-age=604800
+/menu-bg.webp
+  Cache-Control: public, max-age=604800
