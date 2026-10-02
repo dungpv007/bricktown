@@ -23,6 +23,7 @@ import { useGame } from '../../state/useGame'
 import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
 import { fitCityFrame } from './cityFraming'
+import { cityScreen } from './cityScreen'
 import NpcLife from './NpcLife'
 import PlacementHighlight from './PlacementHighlight'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
@@ -358,6 +359,7 @@ interface HitBox {
 }
 
 const rayHit = new THREE.Vector3()
+const projected = new THREE.Vector3()
 
 function CityWorld() {
   const city = useGame((s) => s.data.city)
@@ -567,6 +569,18 @@ function CityWorld() {
     },
     hover: updateHover,
   })
+
+  // For e2e specs (dev handle): the scene is live once this is set; cells project through the real camera.
+  useEffect(() => {
+    cityScreen.cellToClient = (cx, cz) => {
+      projected.set((cx + 0.5) * CELL, 0, (cz + 0.5) * CELL).project(getThree().camera)
+      const rect = el.getBoundingClientRect()
+      return { x: rect.left + ((projected.x + 1) / 2) * rect.width, y: rect.top + ((1 - projected.y) / 2) * rect.height }
+    }
+    return () => {
+      cityScreen.cellToClient = null
+    }
+  }, [el, getThree])
 
   // Kho cards dragged onto the map: a ghost under the finger, placed (and selected) on release.
   useEffect(() => {

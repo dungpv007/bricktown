@@ -89,3 +89,43 @@ export const waitForMazeCameraStill = (page: Page) =>
       { message: 'the maze camera comes to rest' },
     )
     .toBe(true)
+
+interface CityScreenWindow {
+  __bt: { cityScreen: { cellToClient: ((cx: number, cz: number) => { x: number; y: number }) | null } }
+}
+
+/**
+ * Waits until the City view is live and still, then returns the canvas box to aim at. Right after
+ * the City opens, its `<canvas>` is visible at the browser's default 300 x 150 before the scene has
+ * measured, sized and mounted (no camera, no gesture listeners yet): a box measured then puts every
+ * "centre of the canvas" tap in the top-left corner of the real view. Live = the scene set its dev
+ * handle; still = two cells project to the same pixels over two rendered frames (no resize, no glide).
+ */
+export const cityCanvasBox = async (page: Page) => {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const screen = (window as unknown as CityScreenWindow).__bt.cityScreen
+          const probe = () => {
+            const at = screen.cellToClient
+            if (!at) return null
+            return JSON.stringify([at(0, 0), at(10, 10)].map((p) => [Math.round(p.x), Math.round(p.y)]))
+          }
+          const start = probe()
+          if (!start) return false
+          return new Promise<boolean>((resolve) => {
+            let frames = 0
+            const check = () => {
+              if (probe() !== start) resolve(false)
+              else if (++frames >= 2) resolve(true)
+              else requestAnimationFrame(check)
+            }
+            requestAnimationFrame(check)
+          })
+        }),
+      { message: 'the city view is live and its camera at rest' },
+    )
+    .toBe(true)
+  return (await page.getByTestId('mode-city').locator('canvas').boundingBox())!
+}
