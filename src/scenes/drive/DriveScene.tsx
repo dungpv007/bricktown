@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import * as THREE from 'three'
 import { analyzeDrive, spawnPoint } from '../../core/drive'
+import BtCanvas from '../../render/BtCanvas'
 import { makeSizeOf, resolveSource } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
 import { useGame } from '../../state/useGame'
@@ -21,6 +22,8 @@ const SKY = '#87ceeb'
 const SPAWN_DROP = 0.4
 /** Camera follow rate (1 / s): higher = tighter. */
 const FOLLOW_RATE = 4
+
+const CAMERA = { fov: 55, near: 0.5, far: 1500 }
 
 const tmpPos = new THREE.Vector3()
 const tmpQuat = new THREE.Quaternion()
@@ -106,11 +109,11 @@ export default function DriveScene({ source, onChangeVehicle }: { source: string
 
   return (
     <>
-      <Canvas shadows="percentage" dpr={[1, 1.5]} camera={{ fov: 55, near: 0.5, far: 1500 }} data-testid="drive-canvas">
+      <BtCanvas testId="drive-canvas" animated camera={CAMERA}>
         <color attach="background" args={[SKY]} />
         <fog attach="fog" args={[SKY, 250, 700]} />
         <DriveWorld setup={setup} spawn={spawn} />
-      </Canvas>
+      </BtCanvas>
       <DriveUI source={source} onChangeVehicle={onChangeVehicle} />
     </>
   )

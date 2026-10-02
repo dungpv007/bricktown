@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { composeBlueprint } from '../core/blueprint'
 import { newId } from '../core/ids'
+import { useCoverScene } from '../state/sceneCover'
 import { useGame } from '../state/useGame'
 import { DEFAULT_NAME_KEY, KIND_ICON } from './blueprintKinds'
 import { useT } from './i18n'
@@ -8,6 +9,7 @@ import { useT } from './i18n'
 /** Names the workshop model and saves it; updates the blueprint it was opened from, if any. */
 export default function SaveBlueprintDialog({ onClose }: { onClose: () => void }) {
   const t = useT()
+  useCoverScene()
   const workshop = useGame((s) => s.data.workshop)
   const blueprints = useGame((s) => s.data.blueprints)
   const upsertBlueprint = useGame((s) => s.upsertBlueprint)

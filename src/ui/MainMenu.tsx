@@ -40,7 +40,7 @@ export default function MainMenu() {
 
   return (
     <div className="bt-screen bt-menu" data-testid="main-menu">
-      <MenuBackdrop paused={slotsOpen || touring || importing} />
+      <MenuBackdrop paused={slotsOpen || audioOpen || touring || importing} />
       <h1 className="bt-title">{t('appTitle')}</h1>
       <div className="bt-cards bt-menu-cards">
         {CARDS.map((c) => (
@@ -109,7 +109,7 @@ export default function MainMenu() {
         <button
           className="bt-btn"
           data-testid="audio-settings"
-          aria-label={t('soundSettings')}
+          aria-label={t('soundGraphicsSettings')}
           onClick={() => setAudioOpen(true)}
         >
           🎚️

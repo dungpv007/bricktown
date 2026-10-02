@@ -42,6 +42,7 @@ export default function GuidedCamera({
   const camera = useRef<THREE.PerspectiveCamera>(null)
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
   const glide = useRef<Glide | null>(null)
+  const invalidate = useThree((s) => s.invalidate)
 
   useEffect(() => {
     let cancelled = false
@@ -55,14 +56,17 @@ export default function GuidedCamera({
         const now: View = { position: [cam.position.x, cam.position.y, cam.position.z], target: [ctl.target.x, ctl.target.y, ctl.target.z] }
         // Measured from where the camera is heading if it is already gliding, so glides never fight.
         const next = stepRefit(size, stepBox, glide.current?.to ?? now, view.width / view.height, safe())
-        if (next) glide.current = { from: now, to: next, start: performance.now() }
+        if (next) {
+          glide.current = { from: now, to: next, start: performance.now() }
+          invalidate() // render on demand: the glide runs from the frame loop
+        }
       })
     })
     return () => {
       cancelled = true
       cancelAnimationFrame(frame)
     }
-  }, [size, stepBox, view, safe])
+  }, [size, stepBox, view, safe, invalidate])
 
   // A camera drag by the player cancels a glide.
   const cancelGlide = useCallback(() => {
@@ -81,6 +85,7 @@ export default function GuidedCamera({
     ctl.target.set(mix(g.from.target, g.to.target, 0), mix(g.from.target, g.to.target, 1), mix(g.from.target, g.to.target, 2))
     ctl.update()
     if (k >= 1) glide.current = null
+    else invalidate() // the next step of the glide
   })
 
   const span = Math.max(size.w, size.d)

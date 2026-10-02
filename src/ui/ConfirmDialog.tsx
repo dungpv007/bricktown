@@ -1,4 +1,5 @@
 import { useT, type TKey } from './i18n'
+import { useCoverScene } from '../state/sceneCover'
 
 interface Props {
   messageKey: TKey
@@ -12,6 +13,7 @@ interface Props {
  */
 export default function ConfirmDialog({ messageKey, onYes, onNo }: Props) {
   const t = useT()
+  useCoverScene()
   return (
     <div
       className="bt-modal-backdrop bt-ask-backdrop"

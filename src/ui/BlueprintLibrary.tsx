@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { buildModelPackage } from '../core/share'
 import type { Blueprint } from '../core/types'
 import { getThumbnail } from '../render/thumbnails'
+import { useCoverScene } from '../state/sceneCover'
 import { useGame } from '../state/useGame'
 import { useShareImport } from '../state/useShareImport'
 import { KIND_ICON } from './blueprintKinds'
@@ -33,6 +34,7 @@ function ShareModel({ blueprint, onClose }: { blueprint: Blueprint; onClose: () 
 /** Grid of the kid's saved models as picture buttons; each can be shared, and friends' models imported (📥). */
 export default function BlueprintLibrary({ onPick, onClose, allowDelete = true }: Props) {
   const t = useT()
+  useCoverScene()
   const blueprints = useGame((s) => s.data.blueprints)
   const deleteBlueprint = useGame((s) => s.deleteBlueprint)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)

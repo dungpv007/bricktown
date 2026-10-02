@@ -806,11 +806,20 @@
   opacity: 0.85;
 }
 
-/* drei <Stats /> (dev only) sets inline top/left; move it out of the top bar. */
+/* `?stats` renderer numbers (ui/DevStats): a small strip at the bottom, never in the way of taps. */
 .bt-stats {
-  top: 12px !important;
-  left: auto !important;
-  right: 260px !important; /* clear of the three top-right buttons */
+  position: fixed;
+  left: 50%;
+  bottom: calc(4px + var(--bt-safe-bottom));
+  z-index: 1000;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #7fff7f;
+  font: 12px/1.4 ui-monospace, monospace;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* ---------- Save slots / persistence ---------- */
@@ -2788,4 +2797,120 @@ form.bt-dialog,
   .bt-menu-import-label {
     display: none;
   }
+}
+
+/* ---------- Settings dialog tabs (🎚️ Âm thanh | ⚙️ Đồ họa) ---------- */
+.bt-settings-tabs {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: calc(8px * var(--bt-s));
+  min-width: 0;
+}
+
+.bt-settings-tab {
+  padding: 0 calc(14px * var(--bt-s));
+  font-size: calc(20px * var(--bt-s));
+  white-space: nowrap;
+}
+
+/* ---------- Graphics settings: presets, then one row of big choices per switch ---------- */
+.bt-gfx {
+  display: flex;
+  flex-direction: column;
+  gap: calc(12px * var(--bt-s));
+}
+
+.bt-gfx-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: calc(10px * var(--bt-s));
+}
+
+.bt-gfx-preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(2px * var(--bt-s));
+  padding: calc(8px * var(--bt-s));
+  line-height: 1.15;
+}
+
+.bt-gfx-preset-icon {
+  font-size: calc(30px * var(--bt-s));
+  line-height: 1;
+}
+
+.bt-gfx-auto-pick {
+  font-size: max(12px, calc(15px * var(--bt-s)));
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.bt-gfx-custom {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+}
+
+.bt-gfx-rows {
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--bt-s));
+}
+
+.bt-gfx-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(8px * var(--bt-s));
+  padding: calc(10px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.bt-gfx-label {
+  font-size: calc(20px * var(--bt-s));
+  font-weight: 700;
+}
+
+.bt-gfx-choices {
+  display: flex;
+  gap: calc(6px * var(--bt-s));
+  margin-left: auto;
+}
+
+.bt-gfx-choice {
+  min-width: calc(76px * var(--bt-s));
+  padding: 0 calc(12px * var(--bt-s));
+  font-size: calc(18px * var(--bt-s));
+}
+
+/* The "graphics lowered" notice: a pill under the top bar, out of the way of the play area's middle. */
+.bt-gfx-toast {
+  position: fixed;
+  top: calc(var(--bt-touch) + 20px * var(--bt-s) + var(--bt-safe-top));
+  left: 50%;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+  max-width: calc(100% - 32px);
+  padding: calc(6px * var(--bt-s)) calc(6px * var(--bt-s)) calc(6px * var(--bt-s)) calc(16px * var(--bt-s));
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  border-radius: var(--bt-radius);
+  background: var(--bt-white);
+  color: var(--bt-ink);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(20px * var(--bt-s));
+  font-weight: 700;
+}
+
+.bt-gfx-toast-close {
+  flex: none;
+  box-shadow: none;
+  background: rgba(27, 42, 65, 0.08);
 }

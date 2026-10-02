@@ -37,7 +37,7 @@ const grow = (v: number, thickness: number) => (v > 0 ? (v + 2 * thickness) / v 
  * materials and the bake cache are never copied or disposed. A grey placeholder block glows the same.
  */
 export default function PlacementHighlight({ placement, blueprints, sizeOf, shakeKey }: Props) {
-  const shakeRef = useHighlightPulse(shakeKey, SHAKE_AMPLITUDE)
+  const shakeRef = useHighlightPulse(shakeKey, SHAKE_AMPLITUDE, 0, placement !== null)
   const modelRef = useRef<THREE.Group>(null)
 
   const source = placement?.source ?? null

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import * as THREE from 'three'
 import * as sfx from '../../audio/sfx'
@@ -7,6 +7,7 @@ import { analyzeDrive } from '../../core/drive'
 import { solve, type Cell, type Maze } from '../../core/maze'
 import { MAZE_STEER, cellAtPoint, cellCenterXZ, spawnPose } from '../../core/mazeRun'
 import { advanceStepper, placeStepper, pressStep, startStepper, stepperPose, type StepResult, type Stepper } from '../../core/mazeStep'
+import BtCanvas from '../../render/BtCanvas'
 import { resolveSource } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
 import { useDriveInput } from '../../state/useDriveInput'
@@ -14,7 +15,6 @@ import { useDriveStatus } from '../../state/useDriveStatus'
 import { useGame } from '../../state/useGame'
 import { useMazeRun, type MazeCamera } from '../../state/useMazeRun'
 import { useMazeStep } from '../../state/useMazeStep'
-import DevStats from '../../ui/DevStats'
 import DriveUI from '../drive/DriveUI'
 import Sun from '../drive/Sun'
 import Vehicle, { GRAVITY, type DrivableSetup, type KinematicDriver } from '../drive/Vehicle'
@@ -27,6 +27,7 @@ import { MAZE_TILT, followDistance, frameMaze, topViewShowsWhole, type Vec3 } fr
 
 const SKY = '#87ceeb'
 const FOV = 50
+const CAMERA = { fov: FOV, near: 0.5, far: 3000 }
 /** Fog from / to (studs from the camera) when close; pushed back in proportion when the view is far up. */
 const FOG_NEAR = 250
 const FOG_FAR = 700
@@ -376,12 +377,11 @@ export default function MazeDriveScene({ maze, source, runId, onChangeVehicle, o
 
   return (
     <>
-      <Canvas shadows="percentage" dpr={[1, 1.5]} camera={{ fov: FOV, near: 0.5, far: 3000 }} data-testid="maze-drive-canvas">
+      <BtCanvas testId="maze-drive-canvas" animated camera={CAMERA}>
         <color attach="background" args={[SKY]} />
         <fog attach="fog" args={[SKY, FOG_NEAR, FOG_FAR]} />
         <MazeDriveWorld key={runId} maze={maze} setup={setup} />
-        <DevStats />
-      </Canvas>
+      </BtCanvas>
       <DriveUI source={source} onChangeVehicle={onChangeVehicle} quietEngine={won} stepMode={stepMode} />
       <MazeDriveUI onRetry={onRetry} onEdit={onEdit} onMenu={onMenu} />
     </>

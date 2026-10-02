@@ -5,6 +5,7 @@ import { useGuided } from './state/useGuided'
 import { MAZE_MAX_VEHICLE_WIDTH, isPlayable } from './core/maze'
 import { currentMaze, useHasOpenMaze, useMazeEditor } from './state/useMazeEditor'
 import { useMazeRun } from './state/useMazeRun'
+import GraphicsToast from './ui/GraphicsToast'
 import MainMenu from './ui/MainMenu'
 import SceneBoundary from './ui/SceneBoundary'
 import { lazyScene } from './ui/lazyScene'
@@ -199,6 +200,7 @@ function PlayScreen({ mode }: { mode: PlayMode }) {
     <>
       <Play mode={mode} />
       <TopBar titleKey={TITLE_KEYS[mode]} onBack={onBack} />
+      <GraphicsToast />
     </>
   )
 }

@@ -23,20 +23,23 @@ export const flushAutosave = (page: Page) =>
   page.evaluate(() => (window as unknown as { __bt: { flushAutosave(): Promise<boolean> } }).__bt.flushAutosave())
 
 interface PoseWindow {
-  __bt: { plateScreen: { pose: { frame: number; camera: number[] } | null } }
+  __bt: { plateScreen: { pose: { frame: number; camera: number[] } | null }; invalidate(): void }
 }
 
 /**
  * Waits until the Workshop camera is at rest: its pose (dev handle, rounded) is the same over two
  * rendered frames. Replaces fixed sleeps after a fit, glide, orbit or drag, which are too short
- * when the software GL is busy and needlessly long when it is not.
+ * when the software GL is busy and needlessly long when it is not. Scenes render on demand, so it
+ * asks for those frames.
  */
 export const waitForCameraStill = (page: Page) =>
   expect
     .poll(
       () =>
         page.evaluate(() => {
-          const screen = (window as unknown as PoseWindow).__bt.plateScreen
+          const bt = (window as unknown as PoseWindow).__bt
+          const screen = bt.plateScreen
+          bt.invalidate()
           const start = screen.pose
           if (!start) return false
           const key = JSON.stringify(start.camera)
@@ -45,7 +48,10 @@ export const waitForCameraStill = (page: Page) =>
               const now = screen.pose
               if (!now || JSON.stringify(now.camera) !== key) resolve(false)
               else if (now.frame >= start.frame + 2) resolve(true)
-              else requestAnimationFrame(check)
+              else {
+                bt.invalidate()
+                requestAnimationFrame(check)
+              }
             }
             requestAnimationFrame(check)
           })

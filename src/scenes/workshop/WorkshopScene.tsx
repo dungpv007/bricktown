@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type RefObject } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 import { bounds, canPlace, pointerAnchor, type Bounds } from '../../core/model'
@@ -7,9 +7,12 @@ import { getPart } from '../../core/parts/catalog'
 import { rotateNormalY, type PickHit, type Vec3 } from '../../core/pick'
 import type { Baseplate as BaseplateSize, Brick, PartDef, Rot } from '../../core/types'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
+import BtCanvas from '../../render/BtCanvas'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks, { brickOfInstance } from '../../render/InstancedBricks'
 import SelectionHighlight from '../../render/SelectionHighlight'
+import { useSunShadow } from '../../render/useSunShadow'
+import { useApp } from '../../state/useApp'
 import { useEditor, type ViewShift } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
 import Baseplate from './Baseplate'
@@ -19,7 +22,6 @@ import { plateScreen } from './plateScreen'
 import { safeRect, toNdc } from './safeArea'
 import { useWorkshopGestures } from './useWorkshopGestures'
 import { VIEW_FOV, defaultView, modelTop, plateCorners, projectBounds, rectInside, workshopFit } from './viewFit'
-import DevStats from '../../ui/DevStats'
 
 export const SKY = '#87ceeb'
 const GROUND = '#a9dc9b'
@@ -41,6 +43,7 @@ export function Lights({ size, height = 0 }: { size: BaseplateSize; height?: num
   const cz = size.d / 2
   const reach = Math.max(1, (height + 8) / SUN_OFFSET[1])
   const extent = Math.max(size.w, size.d) * 0.75 + 4 + height * 0.6
+  const { castShadow, mapSize } = useSunShadow(SHADOW_MAP_SIZE)
 
   useLayoutEffect(() => {
     const cam = light.current?.shadow.camera
@@ -63,8 +66,8 @@ export function Lights({ size, height = 0 }: { size: BaseplateSize; height?: num
         target={target}
         position={[cx + SUN_OFFSET[0] * reach, SUN_OFFSET[1] * reach, cz + SUN_OFFSET[2] * reach]}
         intensity={2.2}
-        castShadow
-        shadow-mapSize={[SHADOW_MAP_SIZE, SHADOW_MAP_SIZE]}
+        castShadow={castShadow}
+        shadow-mapSize={[mapSize, mapSize]}
         shadow-bias={-0.0005}
         shadow-normalBias={0.03}
       />
@@ -125,6 +128,7 @@ function CameraRig({
   const camera = useRef<THREE.PerspectiveCamera>(null)
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
   const glide = useRef<Glide | null>(null)
+  const invalidate = useThree((s) => s.invalidate)
   const seenShift = useRef(shift?.seq)
   useLayoutEffect(() => {
     if (!shift || shift.seq === seenShift.current) return
@@ -172,8 +176,11 @@ function CameraRig({
       refit = before !== null && rectInside(before, f.safe, 0.01)
     }
     fitted.current = { w: size.w, d: size.d, width: view.width, height: view.height, safe: next.safe }
-    if (refit) glide.current = { from: { p, t }, to: { p: next.position, t: next.target }, start: performance.now() }
-  }, [size, model, canvas, view])
+    if (refit) {
+      glide.current = { from: { p, t }, to: { p: next.position, t: next.target }, start: performance.now() }
+      invalidate() // render on demand: the glide runs from the frame loop
+    }
+  }, [size, model, canvas, view, invalidate])
 
   // Any camera drag by the player cancels a glide. Passed as a prop so it follows the controls
   // instance drei recreates (e.g. when the default camera changes), not just the first one.
@@ -200,6 +207,7 @@ function CameraRig({
     ctl.target.set(mix(g.from.t, g.to.t, 0), mix(g.from.t, g.to.t, 1), mix(g.from.t, g.to.t, 2))
     ctl.update()
     if (k >= 1) glide.current = null
+    else invalidate() // the next step of the glide
   })
 
   return (
@@ -500,17 +508,19 @@ function WorkshopWorld() {
   )
 }
 
+/** Read from the frame loop and layout effects (edge buttons, view shifts): a change asks for a frame. */
+const WATCH = [useGame, useEditor, useApp]
+
 export default function WorkshopScene() {
   const edges = useRef<EdgeElements>({})
   return (
     <>
-      <Canvas shadows="percentage" dpr={[1, 1.75]} data-testid="workshop-canvas">
+      <BtCanvas testId="workshop-canvas" watch={WATCH}>
         <color attach="background" args={[SKY]} />
         <fog attach="fog" args={[SKY, 80, 220]} />
         <WorkshopWorld />
         <PlateEdgeTracker edges={edges} />
-        <DevStats />
-      </Canvas>
+      </BtCanvas>
       <PlateEdgeButtons edges={edges} />
     </>
   )
