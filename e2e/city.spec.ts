@@ -489,3 +489,94 @@ test('city: cars, a train and people move when 🚦 is on, none when off, and th
   await expect.poll(npcCount).toBeGreaterThanOrEqual(10)
   expect(errors).toEqual([])
 })
+
+interface CameraPose {
+  target: number[]
+  distance: number
+  azimuth: number
+  polar: number
+}
+interface PoseBt {
+  __bt: { cityScreen: { cameraPose: (() => CameraPose) | null; cellToClient: ((cx: number, cz: number) => { x: number; y: number }) | null } }
+}
+
+test.describe('city on a touch phone', () => {
+  test.use({ viewport: { width: 412, height: 891 }, hasTouch: true, isMobile: true, deviceScaleFactor: 1 })
+
+  test('city: one finger pans, a pinch zooms, a twist turns and a side-by-side push tilts the camera', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (e) => errors.push(e.message))
+    await page.goto('/')
+    await page.getByTestId('menu-city').click()
+    const box = await sizedBox(page.getByTestId('mode-city').locator('canvas'))
+    await expect.poll(() => page.evaluate(() => (window as unknown as PoseBt).__bt.cityScreen.cameraPose !== null)).toBe(true)
+    const pose = () => page.evaluate(() => (window as unknown as PoseBt).__bt.cityScreen.cameraPose!())
+    /** Screen angle of the city's x axis (radians, clockwise positive). */
+    const xAxisAngle = () =>
+      page.evaluate(() => {
+        const at = (window as unknown as PoseBt).__bt.cityScreen.cellToClient!
+        const a = at(10, 10)
+        const b = at(20, 10)
+        return Math.atan2(b.y - a.y, b.x - a.x)
+      })
+    /** Waits for the camera's damping glide to finish, then reads the pose. */
+    const settled = async () => {
+      let last = ''
+      await expect
+        .poll(async () => {
+          const now = JSON.stringify(await pose())
+          const still = now === last
+          last = now
+          return still
+        }, { intervals: [250] })
+        .toBe(true)
+      return pose()
+    }
+    const cdp = await page.context().newCDPSession(page)
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', points: Array<[number, number]>) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points.map(([px, py], id) => ({ x: px, y: py, id })) })
+    const x = box.x + box.width / 2
+    const y = box.y + box.height * 0.45
+
+    // One finger on the empty ground pans.
+    const start = await settled()
+    await touch('touchStart', [[x, y]])
+    for (let i = 1; i <= 10; i++) await touch('touchMove', [[x + i * 8, y + i * 6]])
+    await touch('touchEnd', [])
+    const panned = await settled()
+    expect(Math.hypot(panned.target[0] - start.target[0], panned.target[2] - start.target[2])).toBeGreaterThan(5)
+
+    // Two fingers spreading zoom in.
+    await touch('touchStart', [[x - 40, y]])
+    await touch('touchStart', [[x - 40, y], [x + 40, y]])
+    for (let i = 1; i <= 8; i++) await touch('touchMove', [[x - 40 - i * 10, y], [x + 40 + i * 10, y]])
+    await touch('touchEnd', [])
+    const zoomed = await settled()
+    expect(zoomed.distance).toBeLessThan(panned.distance - 5)
+
+    // Two fingers twisting clockwise turn the map clockwise with them.
+    const axisBefore = await xAxisAngle()
+    const r = 80
+    await touch('touchStart', [[x - r, y]])
+    await touch('touchStart', [[x - r, y], [x + r, y]])
+    for (let i = 1; i <= 12; i++) {
+      const a = (i / 12) * (Math.PI / 3)
+      await touch('touchMove', [[x - r * Math.cos(a), y - r * Math.sin(a)], [x + r * Math.cos(a), y + r * Math.sin(a)]])
+    }
+    await touch('touchEnd', [])
+    const turned = await settled()
+    expect(Math.abs(turned.azimuth - zoomed.azimuth)).toBeGreaterThan(0.5)
+    const axisTurn = (await xAxisAngle()) - axisBefore
+    expect(Math.atan2(Math.sin(axisTurn), Math.cos(axisTurn)), 'the map turns the way the fingers did').toBeGreaterThan(0.1)
+
+    // Two fingers side by side pushed up tilt the view towards the horizon (no zoom, no pan).
+    await touch('touchStart', [[x - 60, y + 100]])
+    await touch('touchStart', [[x - 60, y + 100], [x + 60, y + 100]])
+    for (let i = 1; i <= 10; i++) await touch('touchMove', [[x - 60, y + 100 - i * 8], [x + 60, y + 100 - i * 8]])
+    await touch('touchEnd', [])
+    const tilted = await settled()
+    expect(tilted.polar).toBeGreaterThan(turned.polar + 0.1)
+    expect(tilted.distance).toBeCloseTo(turned.distance, 0)
+    expect(errors).toEqual([])
+  })
+})

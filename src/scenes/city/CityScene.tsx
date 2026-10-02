@@ -39,6 +39,7 @@ import Rails from './Rails'
 import Roads from './Roads'
 import Terrain from './Terrain'
 import { useCityGestures, type CityPick, type GroundPoint } from './useCityGestures'
+import { useTwoFingerCamera } from './useTwoFingerCamera'
 
 const VALID = new THREE.Color('#3cd35a')
 const INVALID = new THREE.Color('#ff3b30')
@@ -143,7 +144,8 @@ function startDistance(city: CityState, blueprints: Blueprint[]): number {
 }
 
 // Two fingers always pinch-zoom and pan (in both modes), so the map can still be moved when the
-// screen is full of buildings, where every one-finger drag starts on a building and moves it.
+// screen is full of buildings, where every one-finger drag starts on a building and moves it. Their
+// twist turns the view and a side-by-side push tilts it (useTwoFingerCamera).
 const PAN_TOUCHES = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN }
 const PAN_MOUSE = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE }
 // Road mode: one finger / the left button paints (no mapping = controls ignore it), so the camera
@@ -167,7 +169,8 @@ function stopGlide(controls: MapControlsImpl) {
 }
 
 /**
- * Top-down-ish camera with map controls (one-finger pan, two-finger pinch zoom + pan), kept over the city.
+ * Top-down-ish camera with map controls (one-finger pan, two-finger pinch zoom + pan, twist to turn,
+ * side-by-side push to tilt), kept over the city.
  * It starts on the centre of what is built. A town too big for the usual view (the sample town) is
  * framed whole instead, as far as the zoom-out limit allows (a phone held upright shows its middle).
  */
@@ -202,6 +205,8 @@ function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
   })
   const controls = useRef<MapControlsImpl>(null)
   const span = size * CELL
+  const el = useThree((s) => s.gl.domElement)
+  useTwoFingerCamera(el, controls)
 
   const keepOverCity = useCallback(() => {
     const c = controls.current
@@ -556,8 +561,15 @@ function CityWorld() {
       const rect = el.getBoundingClientRect()
       return { x: rect.left + ((projected.x + 1) / 2) * rect.width, y: rect.top + ((1 - projected.y) / 2) * rect.height }
     }
+    cityScreen.cameraPose = () => {
+      const { camera, controls } = getThree()
+      const target = (controls as MapControlsImpl | null)?.target ?? new THREE.Vector3()
+      const s = new THREE.Spherical().setFromVector3(camera.position.clone().sub(target))
+      return { target: target.toArray(), distance: s.radius, azimuth: s.theta, polar: s.phi }
+    }
     return () => {
       cityScreen.cellToClient = null
+      cityScreen.cameraPose = null
     }
   }, [el, getThree])
 
