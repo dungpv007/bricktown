@@ -2,9 +2,12 @@ import * as THREE from 'three'
 import { COLORS, colorMaterialKind, type MaterialKind } from './colors'
 import { figKey, figOf, isFigure } from './figures'
 import { brickBodyGeometry, brickPrintGeometry } from './parts/brickGeometry'
+import { getPart } from './parts/catalog'
 import { buildFigureGeometry, peekFigureGeometry, type FigureGeometry } from './parts/figureGeometry'
-import { brickCenter, QUARTER_COS, QUARTER_SIN } from './rotation'
-import type { Brick, Rot } from './types'
+import { bakedStudGeometry, partStuds, studVertexCount } from './parts/geometry'
+import { brickCenter, footprint, QUARTER_COS, QUARTER_SIN } from './rotation'
+import type { Brick, PartShape, Rot } from './types'
+import { platesToWorld } from './units'
 
 /**
  * Baking merges a whole brick model into one geometry per material kind (see `MaterialKind`), so
@@ -44,6 +47,101 @@ export function disposeBaked(baked: BakedModel): void {
   baked.trans?.dispose()
   baked.metal?.dispose()
   baked.print?.dispose()
+}
+
+/** Part shapes whose underside is solid over the whole footprint: a stud right under one is hidden inside it. */
+const SOLID_BOTTOM: ReadonlySet<PartShape> = new Set<PartShape>(['box', 'tile', 'tile_print', 'slope', 'window', 'door'])
+
+/**
+ * The studs of each brick that stay visible (flags in `partStuds` order), for the bricks that have
+ * some stud buried in the solid, non-transparent underside of a brick sitting right on top of it.
+ * Those studs can never be seen, so the bake leaves them out: a wall of stacked bricks loses most
+ * of its stud triangles at no visual cost. Bricks with every stud showing are not in the map.
+ */
+function visibleStuds(bricks: Brick[]): Map<Brick, boolean[]> {
+  const covered = new Set<string>() // "x,y,z": stud cell x, z under the bottom (in plates) y of a solid brick
+  for (const b of bricks) {
+    if (isFigure(b) || colorMaterialKind(b.c) === 'trans') continue
+    const part = getPart(b.p)
+    if (!SOLID_BOTTOM.has(part.shape)) continue
+    const { fx, fz } = footprint(part, b.r)
+    for (let x = 0; x < fx; x++) for (let z = 0; z < fz; z++) covered.add(`${b.x + x},${b.y},${b.z + z}`)
+  }
+  const out = new Map<Brick, boolean[]>()
+  if (covered.size === 0) return out
+  for (const b of bricks) {
+    if (isFigure(b)) continue
+    const studs = partStuds(b.p)
+    if (studs.length === 0) continue
+    const part = getPart(b.p)
+    const top = b.y + part.h
+    const [cx, , cz] = brickCenter(b)
+    const cos = QUARTER_COS[b.r]
+    const sin = QUARTER_SIN[b.r]
+    let hidden = false
+    const visible = studs.map(([sx, sz]) => {
+      const x = Math.floor(sx * cos + sz * sin + cx)
+      const z = Math.floor(-sx * sin + sz * cos + cz)
+      const show = !covered.has(`${x},${top},${z}`)
+      if (!show) hidden = true
+      return show
+    })
+    if (hidden) out.set(b, visible)
+  }
+  return out
+}
+
+const bakedParts = new Map<string, THREE.BufferGeometry>()
+
+/**
+ * A part's geometry as baked models draw it: its body (the part geometry minus its studs, which
+ * close it, see `studVertexCount`) plus the low-poly baked stud (see `bakedStudGeometry`) on the
+ * `visible` stud cells only. Baked models are seen from afar (the City, Drive, thumbnails), where
+ * a six-sided stud looks round and costs 40% less than the Workshop's. Cached per part and mask.
+ */
+function bakedPartGeometry(partId: string, g: THREE.BufferGeometry, visible: readonly boolean[]): THREE.BufferGeometry {
+  const key = `${partId}|${visible.map((v) => (v ? 1 : 0)).join('')}`
+  const cached = bakedParts.get(key)
+  if (cached) return cached
+  const pos = g.getAttribute('position')
+  const nor = g.getAttribute('normal')
+  const body = pos.count - visible.length * studVertexCount()
+  if (g.index || body < 0) return g
+  const stud = bakedStudGeometry()
+  const studPos = stud.getAttribute('position').array as Float32Array
+  const studNor = stud.getAttribute('normal').array as Float32Array
+  const per = studPos.length / 3
+  const shown = visible.filter(Boolean).length
+  const positions = new Float32Array((body + shown * per) * 3)
+  const normals = new Float32Array(positions.length)
+  positions.set((pos.array as Float32Array).subarray(0, body * 3))
+  normals.set((nor.array as Float32Array).subarray(0, body * 3))
+  const top = platesToWorld(getPart(partId).h) / 2
+  const studs = partStuds(partId)
+  let at = body * 3
+  visible.forEach((show, i) => {
+    if (!show) return
+    const [sx, sz] = studs[i]
+    for (let v = 0; v < studPos.length; v += 3, at += 3) {
+      positions[at] = studPos[v] + sx
+      positions[at + 1] = studPos[v + 1] + top
+      positions[at + 2] = studPos[v + 2] + sz
+    }
+    normals.set(studNor, at - studPos.length)
+  })
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  out.setAttribute('normal', new THREE.BufferAttribute(normals, 3))
+  bakedParts.set(key, out)
+  return out
+}
+
+/** A brick's body as baked models draw it: `visible` stud flags (default: all studs) on its part, or a figure's own body. */
+function bakedBody(b: Brick, visible?: readonly boolean[]): THREE.BufferGeometry {
+  const g = brickBodyGeometry(b)
+  if (isFigure(b)) return g
+  const count = partStuds(b.p).length
+  return count === 0 ? g : bakedPartGeometry(b.p, g, visible ?? new Array<boolean>(count).fill(true))
 }
 
 const FALLBACK_HEX = '#ffffff'
@@ -155,7 +253,8 @@ export function bakeBricksUncached(bricks: Brick[], options: BakeOptions = {}): 
     return g
   }
   const transient = options.transientFigures === true
-  const bodyOf = (b: Brick) => (transient && isFigure(b) ? figure(b).body : brickBodyGeometry(b))
+  const studs = visibleStuds(bricks)
+  const bodyOf = (b: Brick) => (transient && isFigure(b) ? figure(b).body : bakedBody(b, studs.get(b)))
   const printOf = (b: Brick) => (transient && isFigure(b) ? figure(b).print : brickPrintGeometry(b))
   try {
     const byKind: Record<MaterialKind, Brick[]> = { opaque: [], trans: [], metal: [] }
@@ -193,6 +292,29 @@ export function bakeBricks(bricks: Brick[]): BakedModel {
   return baked
 }
 
+const shadowCache = new Map<string, THREE.BufferGeometry>()
+
+/**
+ * A cheap stand-in that casts a model's shadow: the bodies of its shadow-casting (opaque and
+ * metallic) bricks without a single stud, position and normal only. A stud's shadow is a speck no
+ * shadow map resolves, and studs are most of a model's triangles. Cached like `bakeBricks` (same
+ * key, dropped by `evictBakes` with it); shared, never dispose or mutate it.
+ */
+export function bakeShadowBricks(bricks: Brick[]): THREE.BufferGeometry {
+  const key = bakeKey(bricks)
+  let geometry = shadowCache.get(key)
+  if (!geometry) {
+    const casters = bricks.filter((b) => brickMaterialKind(b) !== 'trans')
+    geometry = mergeBricks(
+      casters,
+      (b) => (isFigure(b) ? brickBodyGeometry(b) : bakedBody(b, new Array<boolean>(partStuds(b.p).length).fill(false))),
+      false,
+    )
+    shadowCache.set(key, geometry)
+  }
+  return geometry
+}
+
 /** Number of models in the bake cache. */
 export function bakeCacheSize(): number {
   return cache.size
@@ -211,6 +333,11 @@ export function evictBakes(keep: ReadonlySet<string>): number {
     cache.delete(key)
     disposeBaked(baked)
     dropped++
+  }
+  for (const [key, geometry] of shadowCache) {
+    if (keep.has(key)) continue
+    shadowCache.delete(key)
+    geometry.dispose()
   }
   return dropped
 }

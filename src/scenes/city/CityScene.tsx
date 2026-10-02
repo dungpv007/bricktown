@@ -13,12 +13,17 @@ import { registerPaletteDropTarget, type ClientPoint } from '../../input/palette
 import BakedMeshes from '../../render/BakedMeshes'
 import { createGhostMaterial } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
+import { installShadowProxies } from '../../render/shadowProxies'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
+import { useApp } from '../../state/useApp'
+import { onCityReplaced } from '../../state/cityReplaced'
 import { useCityEditor } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
 import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
+import { fitCityFrame } from './cityFraming'
+import NpcLife from './NpcLife'
 import PlacementHighlight from './PlacementHighlight'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
 import Rails from './Rails'
@@ -36,6 +41,13 @@ const START_DISTANCE = 120
 const START_TILT = 0.75
 /** Furthest the camera zooms out. */
 const MAX_DISTANCE = 340
+/** Vertical field of view (degrees). */
+const FOV = 45
+/**
+ * Where a big town's starting view puts it (normalised screen coordinates, y up): a little inside the
+ * edges, and above the Kho drawer along the bottom.
+ */
+const FRAME_WINDOW = { left: -0.94, right: 0.94, bottom: -0.62, top: 0.94 }
 /** Start distance per stud of the tallest model, so a scaled-up giant is in view, not cut off. */
 const DISTANCE_PER_HEIGHT = 3
 
@@ -106,22 +118,59 @@ function contentCenter(city: CityState, blueprints: Blueprint[]): [number, numbe
   return [((minX + maxX) / 2) * CELL, ((minZ + maxZ) / 2) * CELL]
 }
 
+/** Height (studs) of each source's model, at size x1, looked up once per source. */
+function heightLookup(blueprints: Blueprint[]): (source: string) => number {
+  const heights = new Map<string, number>()
+  return (source) => {
+    let h = heights.get(source)
+    if (h === undefined) {
+      const r = resolveRenderable(source, { blueprints })
+      h = r ? bakedHeight(r.baked) : PLACEHOLDER_HEIGHT
+      heights.set(source, h)
+    }
+    return h
+  }
+}
+
+/**
+ * What the starting view should show (world studs): the ground corners of everything built, and the
+ * top corners of every model.
+ */
+function framePoints(city: CityState, blueprints: Blueprint[]): Array<[number, number, number]> {
+  const sizeOf = makeSizeOf({ blueprints })
+  const heightOf = heightLookup(blueprints)
+  let minX = Infinity
+  let minZ = Infinity
+  let maxX = -Infinity
+  let maxZ = -Infinity
+  const t = city.terrain
+  for (const key of [...city.roads, ...(city.rails ?? []), ...(t ? [...t.water, ...t.pavement, ...t.sand] : [])]) {
+    const [cx, cz] = key.split(',').map(Number)
+    minX = Math.min(minX, cx)
+    minZ = Math.min(minZ, cz)
+    maxX = Math.max(maxX, cx + 1)
+    maxZ = Math.max(maxZ, cz + 1)
+  }
+  const points: Array<[number, number, number]> = []
+  for (const p of city.placements) {
+    const { x0, z0, x1, z1 } = footprintBox(p, sizeOf(p.source))
+    const y = heightOf(p.source) * scaleOf(p)
+    points.push([x0, y, z0], [x1, y, z0], [x0, y, z1], [x1, y, z1], [x0, 0, z1], [x1, 0, z1])
+  }
+  if (minX !== Infinity) {
+    for (const x of [minX, maxX]) for (const z of [minZ, maxZ]) points.push([x * CELL, 0, z * CELL])
+  }
+  return points
+}
+
 /**
  * How far the camera starts: the usual distance, or further back when a (scaled-up) model is so
  * tall that it would not fit the view, up to the zoom-out limit.
  */
 function startDistance(city: CityState, blueprints: Blueprint[]): number {
-  const heights = new Map<string, number>()
+  const heightOf = heightLookup(blueprints)
   let tallest = 0
-  for (const p of city.placements) {
-    let h = heights.get(p.source)
-    if (h === undefined) {
-      const r = resolveRenderable(p.source, { blueprints })
-      h = r ? bakedHeight(r.baked) : PLACEHOLDER_HEIGHT
-      heights.set(p.source, h)
-    }
-    tallest = Math.max(tallest, h * scaleOf(p))
-  }
+  for (const p of city.placements) tallest = Math.max(tallest, heightOf(p.source) * scaleOf(p))
   return Math.min(MAX_DISTANCE, Math.max(START_DISTANCE, tallest * DISTANCE_PER_HEIGHT))
 }
 
@@ -149,12 +198,30 @@ function stopGlide(controls: MapControlsImpl) {
   controls.update()
 }
 
-/** Top-down-ish camera with map controls (one-finger pan, two-finger pinch zoom + pan), kept over the city. */
+/**
+ * Top-down-ish camera with map controls (one-finger pan, two-finger pinch zoom + pan), kept over the city.
+ * It starts on the centre of what is built. A town too big for the usual view (the sample town) is
+ * framed whole instead, as far as the zoom-out limit allows (a phone held upright shows its middle).
+ */
 function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
+  const viewport = useThree((s) => s.size)
   const [start] = useState(() => {
     const { city, blueprints } = useGame.getState().data
-    const [x, z] = contentCenter(city, blueprints)
-    const distance = startDistance(city, blueprints)
+    let [x, z] = contentCenter(city, blueprints)
+    let distance = startDistance(city, blueprints)
+    const fit = fitCityFrame(framePoints(city, blueprints), {
+      fov: FOV,
+      aspect: viewport.width / Math.max(1, viewport.height),
+      tilt: START_TILT,
+      minDistance: START_DISTANCE,
+      maxDistance: MAX_DISTANCE,
+      window: FRAME_WINDOW,
+    })
+    if (fit && fit.distance > START_DISTANCE + 1) {
+      x = fit.target[0]
+      z = fit.target[2]
+      distance = fit.distance
+    }
     const target: [number, number, number] = [x, 0, z]
     const position: [number, number, number] = [
       x,
@@ -181,7 +248,7 @@ function CameraRig({ size, roadMode }: { size: number; roadMode: boolean }) {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={start.position} fov={45} near={1} far={2000} />
+      <PerspectiveCamera makeDefault position={start.position} fov={FOV} near={1} far={2000} />
       <MapControls
         ref={controls}
         makeDefault
@@ -299,10 +366,19 @@ function CityWorld() {
   const selectedSource = useCityEditor((s) => s.selectedSource)
   const selectedPlacementId = useCityEditor((s) => s.selectedPlacementId)
   const errorSeq = useCityEditor((s) => s.errorSeq)
+  const npcOn = useApp((s) => s.npcOn)
   const el = useThree((s) => s.gl.domElement)
   const getThree = useThree((s) => s.get)
 
   const sizeOf = useMemo(() => makeSizeOf({ blueprints }), [blueprints])
+
+  // Models cast their shadows through cheap stand-ins (see render/shadowProxies).
+  const gl = useThree((s) => s.gl)
+  useEffect(() => installShadowProxies(gl), [gl])
+
+  // A whole new city (the sample town, an import) gets a fresh starting view: the camera rig remounts.
+  const [framing, setFraming] = useState(0)
+  useEffect(() => onCityReplaced(() => setFraming((n) => n + 1)), [])
 
   // Road being dragged: shown merged into (or cut out of) the real roads so the auto-tiling previews live.
   const [stroke, setStrokeState] = useState<Stroke | null>(null)
@@ -528,13 +604,15 @@ function CityWorld() {
 
   return (
     <>
-      <CameraRig size={city.size} roadMode={roadMode} />
+      <CameraRig key={framing} size={city.size} roadMode={roadMode} />
       <Lights size={city.size} />
       <CityGround size={city.size} />
       <Terrain terrain={display.terrain} />
       <Roads roads={display.roads} />
-      {display.rails && <Rails rails={display.rails} roads={display.roads} />}
-      <Placements placements={shown} blueprints={blueprints} />
+      {display.rails && <Rails rails={display.rails} roads={display.roads} shadows={false} />}
+      <Placements placements={shown} blueprints={blueprints} shadowProxies />
+      {/* Ambient life follows the saved city (not a stroke in progress); picking ignores it (see `pick`). */}
+      {npcOn && <NpcLife city={city} blueprints={blueprints} />}
       {selected && selectedCells && (
         <FootprintMarker cx={selected.cx} cz={selected.cz} cw={selectedCells.cw} cd={selectedCells.cd} color={SELECTED} opacity={0.55} />
       )}

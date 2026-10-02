@@ -397,3 +397,47 @@ test('city: a painted lake and a rail loop persist across a reload', async ({ pa
   expect(new Set(after.rails)).toEqual(set)
   expect(errors).toEqual([])
 })
+
+test('city: cars, a train and people move when 🚦 is on, none when off, and the choice persists', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (e) => errors.push(e.message))
+  const npcCount = () => page.evaluate(() => (window as unknown as { __bt: { npcCount(): number } }).__bt.npcCount())
+  await page.goto('/')
+  await page.getByTestId('menu-city').click()
+  await expect(page.getByTestId('mode-city').locator('canvas')).toBeVisible()
+
+  // A road grid around a pavement square, and a rail loop that one of the roads crosses twice.
+  await page.evaluate(() => {
+    const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i)
+    const row = (z: number, x0: number, x1: number) => range(x0, x1).map((x) => `${x},${z}`)
+    const col = (x: number, z0: number, z1: number) => range(z0, z1).map((z) => `${x},${z}`)
+    const game = (window as unknown as BtWindow).__bt.useGame.getState()
+    game.setCity({
+      ...game.data.city,
+      roads: [...new Set([...row(10, 6, 18), ...row(16, 6, 18), ...col(6, 10, 16), ...col(12, 4, 16), ...col(18, 10, 16)])],
+      rails: [...row(5, 9, 15), ...row(8, 9, 15), ...col(9, 6, 7), ...col(15, 6, 7)],
+      terrain: { water: [], pavement: range(11, 15).flatMap((z) => row(z, 7, 11)), sand: [] },
+    })
+  })
+  const toggle = page.getByTestId('city-npc-toggle')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  // 47 road cells: 7 cars; a train of 3 on the loop; people on the pavement and the sidewalks.
+  await expect.poll(npcCount).toBeGreaterThanOrEqual(10)
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await expect.poll(npcCount).toBe(0)
+
+  await flushAutosave(page)
+  await expect.poll(async () => (await savedSlotData<{ city: CityData }>(page))?.city.rails?.length).toBe(18)
+  await page.reload()
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+  await page.getByTestId('menu-city').click()
+  await expect(page.getByTestId('mode-city').locator('canvas')).toBeVisible()
+  await expect(page.getByTestId('city-npc-toggle')).toHaveAttribute('aria-pressed', 'false')
+  await page.waitForTimeout(500)
+  expect(await npcCount()).toBe(0)
+  await page.getByTestId('city-npc-toggle').click()
+  await expect.poll(npcCount).toBeGreaterThanOrEqual(10)
+  expect(errors).toEqual([])
+})

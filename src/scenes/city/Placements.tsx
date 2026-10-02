@@ -1,11 +1,12 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { bakedGeometries, type BakedKind, type BakedModel } from '../../core/bake'
+import { bakedGeometries, bakeShadowBricks, type BakedKind, type BakedModel } from '../../core/bake'
 import { CELL, placementCells, scaleOf } from '../../core/city'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
 import { bakedMaterials, castsShadow } from '../../render/materials'
 import { placementMatrix } from '../../render/placementTransform'
+import { registerShadowProxy } from '../../render/shadowProxies'
 import { makeSizeOf, resolveRenderable, type RenderableSource } from '../../render/sources'
 
 /** Height (studs) of a baked model, at least 1. */
@@ -31,6 +32,8 @@ export function footprintBox(
 }
 
 const MIN_CAPACITY = 8
+/** With shadow stand-ins, models lower than this (studs, at x1) cast no shadow. */
+const MIN_SHADOW_HEIGHT = 3.5
 
 const tmpMatrix = new THREE.Matrix4()
 
@@ -39,11 +42,17 @@ function BakedInstances({
   kind,
   baseplate,
   placements,
+  shadow = castsShadow(kind),
+  proxy = false,
 }: {
   geometry: THREE.BufferGeometry
   kind: BakedKind
   baseplate: Baseplate
   placements: CityPlacement[]
+  /** Casts a shadow (by default: when its material kind does). */
+  shadow?: boolean
+  /** A shadow stand-in: drawn into the shadow map only (see render/shadowProxies). */
+  proxy?: boolean
 }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   const capacity = useInstanceCapacity(placements.length, MIN_CAPACITY)
@@ -57,6 +66,7 @@ function BakedInstances({
     mesh.computeBoundingSphere()
     mesh.boundingBox = null
   }, [placements, baseplate, capacity, geometry])
+  useLayoutEffect(() => (proxy && ref.current ? registerShadowProxy(ref.current) : undefined), [proxy, capacity])
 
   // Geometry (bake cache) and materials are shared app-wide. Passed through `args`, R3F's unmount
   // dispose only frees this mesh's own instance buffers, never them.
@@ -65,19 +75,34 @@ function BakedInstances({
       key={capacity}
       ref={ref}
       args={[geometry, bakedMaterials[kind], capacity]}
-      castShadow={castsShadow(kind)}
-      receiveShadow
+      castShadow={shadow}
+      receiveShadow={!proxy}
     />
   )
 }
 
-function SourceGroup({ source, placements }: { source: RenderableSource; placements: CityPlacement[] }) {
-  const { baked, baseplate } = source
+function SourceGroup({ source, placements, shadowProxies }: { source: RenderableSource; placements: CityPlacement[]; shadowProxies: boolean }) {
+  const { baked, baseplate, bricks } = source
+  // Low models (flower beds, bushes) cast none: their shadow would be a smudge nobody misses.
+  const proxy = useMemo(
+    () => (shadowProxies && bakedHeight(baked) >= MIN_SHADOW_HEIGHT ? bakeShadowBricks(bricks) : null),
+    [shadowProxies, baked, bricks],
+  )
   return (
     <>
       {bakedGeometries(baked).map(([kind, geometry]) => (
-        <BakedInstances key={kind} geometry={geometry} kind={kind} baseplate={baseplate} placements={placements} />
+        <BakedInstances
+          key={kind}
+          geometry={geometry}
+          kind={kind}
+          baseplate={baseplate}
+          placements={placements}
+          shadow={!shadowProxies && castsShadow(kind)}
+        />
       ))}
+      {proxy && proxy.getAttribute('position').count > 0 && (
+        <BakedInstances key="shadow" geometry={proxy} kind="opaque" baseplate={baseplate} placements={placements} shadow proxy />
+      )}
     </>
   )
 }
@@ -118,7 +143,19 @@ function Placeholders({ placements, sizeOf }: { placements: CityPlacement[]; siz
  * A scaled placement is the same shared geometry with a bigger instance matrix (see `placementMatrix`).
  * Placements whose source is missing or cannot be baked show as grey placeholder blocks.
  */
-export default function Placements({ placements, blueprints }: { placements: CityPlacement[]; blueprints: Blueprint[] }) {
+/**
+ * With `shadowProxies`, models cast their shadows through stud-less stand-ins (see
+ * render/shadowProxies): the scene must call `installShadowProxies` on its renderer.
+ */
+export default function Placements({
+  placements,
+  blueprints,
+  shadowProxies = false,
+}: {
+  placements: CityPlacement[]
+  blueprints: Blueprint[]
+  shadowProxies?: boolean
+}) {
   const { drawable, missing } = useMemo(() => {
     const bySource = new Map<string, CityPlacement[]>()
     for (const p of placements) {
@@ -140,7 +177,7 @@ export default function Placements({ placements, blueprints }: { placements: Cit
   return (
     <group>
       {drawable.map(([source, r, list]) => (
-        <SourceGroup key={source} source={r} placements={list} />
+        <SourceGroup key={source} source={r} placements={list} shadowProxies={shadowProxies} />
       ))}
       {missing.length > 0 && <Placeholders placements={missing} sizeOf={sizeOf} />}
     </group>

@@ -183,7 +183,7 @@ interface TileInstance {
 const MIN_CAPACITY = 16
 const tmpMatrix = new THREE.Matrix4()
 
-function TileMesh({ tile, instances }: { tile: TrackTile; instances: TileInstance[] }) {
+function TileMesh({ tile, instances, shadows }: { tile: TrackTile; instances: TileInstance[]; shadows: boolean }) {
   const ref = useRef<THREE.InstancedMesh>(null)
   const capacity = useInstanceCapacity(instances.length, MIN_CAPACITY)
   useLayoutEffect(() => {
@@ -199,11 +199,14 @@ function TileMesh({ tile, instances }: { tile: TrackTile; instances: TileInstanc
     mesh.computeBoundingSphere()
   }, [instances, capacity])
   // Shared geometry/material go in through `args`: R3F's unmount dispose only frees the instance buffers.
-  return <instancedMesh key={capacity} ref={ref} args={[tileGeometry(tile), railMaterial, capacity]} castShadow receiveShadow />
+  return <instancedMesh key={capacity} ref={ref} args={[tileGeometry(tile), railMaterial, capacity]} castShadow={shadows} receiveShadow />
 }
 
-/** All rail cells ("cx,cz" keys), auto-tiled from their rail neighbours; cells also in `roads` are level crossings. */
-export default function Rails({ rails, roads }: { rails: string[]; roads: string[] }) {
+/**
+ * All rail cells ("cx,cz" keys), auto-tiled from their rail neighbours; cells also in `roads` are level
+ * crossings. `shadows: false` skips the track's own (very flat) shadow, for views from high above.
+ */
+export default function Rails({ rails, roads, shadows = true }: { rails: string[]; roads: string[]; shadows?: boolean }) {
   const byTile = useMemo(() => {
     const set = new Set(rails)
     const roadSet = new Set(roads)
@@ -222,7 +225,7 @@ export default function Rails({ rails, roads }: { rails: string[]; roads: string
   return (
     <group>
       {byTile.map(([tile, instances]) => (
-        <TileMesh key={tile} tile={tile} instances={instances} />
+        <TileMesh key={tile} tile={tile} instances={instances} shadows={shadows} />
       ))}
     </group>
   )
