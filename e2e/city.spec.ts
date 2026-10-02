@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { flushAutosave, savedSlotData } from './support'
+import { cityCanvasBox, flushAutosave, savedSlotData } from './support'
 
 interface CityData {
   size: number
@@ -54,7 +54,7 @@ test('city: in road mode one finger paints roads (two fingers do not) and the er
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
+  const box = await cityCanvasBox(page)
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
   await page.getByTestId('city-road-mode').click()
@@ -102,17 +102,15 @@ test('city: tap selects (rotate, delete), a placement drags to a new cell, a Kho
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
+  const box = await cityCanvasBox(page)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
   const house = async () => (await cityData(page)).placements.find((p) => p.id === 'house')
 
   // Tap: the action bar appears; rotate turns the house.
   await expect(page.getByTestId('city-action-bar')).toHaveCount(0)
-  await expect.poll(async () => {
-    await page.mouse.click(cx, cy) // the canvas may still be sizing itself right after it appears
-    return page.getByTestId('city-action-bar').count()
-  }).toBe(1)
+  await page.mouse.click(cx, cy)
+  await expect(page.getByTestId('city-action-bar')).toHaveCount(1)
   await expect(page.getByTestId('city-act-edit')).toHaveCount(0) // a template: not editable
   await page.getByTestId('city-act-rotate').click()
   expect((await house())?.rot).toBe(1)
@@ -157,16 +155,14 @@ test('city: a picked Kho card quick-places where the ground is tapped; undo / re
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
+  const box = await cityCanvasBox(page)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
 
   await page.getByTestId('src-tpl-tree').click()
   await expect(page.getByTestId('src-tpl-tree')).toHaveAttribute('aria-pressed', 'true')
-  await expect.poll(async () => {
-    if ((await cityData(page)).placements.length === 0) await page.mouse.click(cx, cy + 90)
-    return (await cityData(page)).placements.map((p) => p.source)
-  }).toEqual(['tpl:tree'])
+  await page.mouse.click(cx, cy + 90)
+  expect((await cityData(page)).placements.map((p) => p.source)).toEqual(['tpl:tree'])
   await expect(page.getByTestId('city-action-bar')).toBeVisible()
 
   await page.getByTestId('city-undo').click()
@@ -237,12 +233,10 @@ test('city: placements whose blueprint is gone or broken show as blocks that can
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
+  const box = await cityCanvasBox(page)
   const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  await expect.poll(async () => {
-    await page.mouse.click(centre.x, centre.y) // the canvas may still be sizing itself right after it appears
-    return page.getByTestId('city-action-bar').count()
-  }).toBe(1)
+  await page.mouse.click(centre.x, centre.y)
+  await expect(page.getByTestId('city-action-bar')).toHaveCount(1)
   await page.getByTestId('city-act-delete').click()
   expect((await cityData(page)).placements).toHaveLength(0)
 
@@ -273,7 +267,7 @@ test('city: a finger whose release got lost does not block later taps', async ({
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
+  const box = await cityCanvasBox(page)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
 
@@ -303,11 +297,9 @@ test('city: the size control scales the selected model (one undo step each) and 
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
-  await expect.poll(async () => {
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2) // the canvas may still be sizing itself
-    return page.getByTestId('city-action-bar').count()
-  }).toBe(1)
+  const box = await cityCanvasBox(page)
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(page.getByTestId('city-action-bar')).toHaveCount(1)
   const label = page.getByTestId('city-scale-label')
   const rocketSize = async () => (await cityData(page)).placements.find((p) => p.id === 'rocket')?.s
   await expect(label).toHaveText('×1')
@@ -349,7 +341,7 @@ test('city: a painted lake and a rail loop persist across a reload', async ({ pa
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
+  const box = await cityCanvasBox(page)
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
   const cdp = await page.context().newCDPSession(page)
