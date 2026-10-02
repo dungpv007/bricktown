@@ -6,6 +6,7 @@ import { newId } from '../core/ids'
 import { paintRoadLine } from '../core/roads'
 import type { CityState } from '../core/types'
 import { makeSizeOf, resolveRenderable } from '../render/sources'
+import { onCityReplaced } from './cityReplaced'
 import { createHistory } from './history'
 import { useGame } from './useGame'
 
@@ -222,3 +223,6 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
     },
   }
 })
+
+// A city import replaces the whole city: its undo history and selection are void.
+onCityReplaced(() => useCityEditor.getState().reset())

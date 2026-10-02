@@ -32,6 +32,7 @@ const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).inclu
  */
 export default function ShareImportHost() {
   const open = useShareImport((s) => s.pickerOpen || s.incoming !== null || s.done !== null)
+  const seq = useShareImport((s) => s.seq)
 
   useEffect(() => {
     const takeHash = () => {
@@ -60,7 +61,7 @@ export default function ShareImportHost() {
 
   if (!open) return null
   return (
-    <DialogBoundary>
+    <DialogBoundary key={seq}>
       <Suspense fallback={null}>
         <ImportDialogs />
       </Suspense>

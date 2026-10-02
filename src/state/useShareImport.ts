@@ -4,6 +4,7 @@ import { isShareError, parseShareHash, parseShareText, type ShareError, type Sha
 import { applyImport, planImport, type ImportPlan, type ShareImportOptions } from '../core/shareImport'
 import { t } from '../ui/i18n'
 import { useApp, type Lang } from './useApp'
+import { notifyCityReplaced } from './cityReplaced'
 import { useGame } from './useGame'
 
 /**
@@ -34,6 +35,8 @@ export interface ShareImportState {
   done: ImportPlan | null
   /** The 📥 dialog: pick a file or paste a link. */
   pickerOpen: boolean
+  /** Bumped by every new import or picker opening, so the dialog's error boundary starts fresh. */
+  seq: number
   openPicker: () => void
   closePicker: () => void
   receiveText: (text: string, source: ShareSource) => void
@@ -71,18 +74,19 @@ export function consumeShareHash(
 export const useShareImport = create<ShareImportState>()((set, get) => {
   const receive = (parsed: SharePackage | ShareError, source: ShareSource) => {
     if (isShareError(parsed)) {
-      set({ incoming: { status: 'error', error: parsed.error, source }, done: null, pickerOpen: false })
+      set((s) => ({ incoming: { status: 'error', error: parsed.error, source }, done: null, pickerOpen: false, seq: s.seq + 1 }))
       return
     }
     const plan = planImport(useGame.getState().data, parsed)
-    set({ incoming: { status: 'preview', pkg: parsed, plan, source }, done: null, pickerOpen: false })
+    set((s) => ({ incoming: { status: 'preview', pkg: parsed, plan, source }, done: null, pickerOpen: false, seq: s.seq + 1 }))
   }
 
   return {
     incoming: null,
     done: null,
     pickerOpen: false,
-    openPicker: () => set({ pickerOpen: true }),
+    seq: 0,
+    openPicker: () => set((s) => ({ pickerOpen: true, seq: s.seq + 1 })),
     closePicker: () => set({ pickerOpen: false }),
 
     receiveText: (text, source) => receive(parseShareText(text, shareImportOptions()), source),
@@ -111,6 +115,11 @@ export const useShareImport = create<ShareImportState>()((set, get) => {
       const game = useGame.getState()
       const plan = planImport(game.data, incoming.pkg)
       game.update((d) => applyImport(d, plan))
+      if (plan.kind === 'city') {
+        notifyCityReplaced() // the City editor forgets its undo history: undo must not bring the old city back
+        // Driving collides with the city that was just replaced: go back to the city instead.
+        if (useApp.getState().mode === 'drive') useApp.getState().setMode('city')
+      }
       set({ incoming: null, done: plan })
       return plan
     },

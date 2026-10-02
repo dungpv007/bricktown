@@ -31,6 +31,9 @@ const DUCK_UP = 0.4
 
 let element: HTMLAudioElement | null = null
 let blobUrl: Promise<string | null> | null = null
+/** When the last download failed (ms); retries wait RETRY_AFTER_MS or an `online` event. */
+let failedAt = 0
+const RETRY_AFTER_MS = 30_000
 let srcSet = false
 /** element -> fade -> duck -> destination, built the first time the music plays. */
 let fade: GainNode | null = null
@@ -47,6 +50,8 @@ const wanted = () =>
 /** Fetches the whole file once and returns a Blob URL for it (null when offline and not cached yet). */
 function fetchTrack(): Promise<string | null> {
   if (!blobUrl) {
+    // Offline and not cached yet: do not send one failing request per tap.
+    if (failedAt && Date.now() - failedAt < RETRY_AFTER_MS) return Promise.resolve(null)
     let request: Promise<string | null>
     try {
       request = fetch(MUSIC_URL)
@@ -57,7 +62,12 @@ function fetchTrack(): Promise<string | null> {
       request = Promise.resolve(null) // no fetch / no Blob URLs
     }
     blobUrl = request.then((url) => {
-      if (!url) blobUrl = null // try again at the next chance
+      if (!url) {
+        blobUrl = null // try again later (not before RETRY_AFTER_MS, or when the network is back)
+        failedAt = Date.now()
+      } else {
+        failedAt = 0
+      }
       return url
     })
   }
@@ -206,6 +216,9 @@ export function installMusic(): void {
   for (const name of GESTURES) window.addEventListener(name, onGesture, true)
   onAudioStateChange(sync)
   document.addEventListener('visibilitychange', sync)
+  window.addEventListener('online', () => {
+    failedAt = 0 // the network is back: the next tap may try the download again
+  })
   useApp.subscribe((s, prev) => {
     if (s.musicOn !== prev.musicOn) sync()
   })
@@ -215,6 +228,7 @@ export function installMusic(): void {
 export function resetMusicForTests(): void {
   element = null
   blobUrl = null
+  failedAt = 0
   srcSet = false
   fade = null
   duck = null

@@ -148,10 +148,13 @@ function SourceCard(props: { testId: string; name: string; icon: string; url: st
   const { testId, name, icon, url, source, selected } = props
   // The click that follows a drag's release must not also pick (or unpick) the card.
   const dragged = useRef(false)
-  const startDrag = usePaletteDrag(() => {
-    dragged.current = true
-    useCityEditor.getState().setDraggedSource(source)
-  })
+  const startDrag = usePaletteDrag(
+    () => {
+      dragged.current = true
+      useCityEditor.getState().setDraggedSource(source)
+    },
+    { cancelOnSecondPointer: true },
+  )
   return (
     <button
       className="bt-btn bt-source-card bt-part-drag"

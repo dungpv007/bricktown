@@ -4,7 +4,6 @@ import type { ImportPlan } from '../../core/shareImport'
 import { getThumbnail } from '../../render/thumbnails'
 import { mazeThumbnail } from '../../scenes/maze/mazeThumbnail'
 import { useApp } from '../../state/useApp'
-import { useCityEditor } from '../../state/useCityEditor'
 import { useMazeEditor } from '../../state/useMazeEditor'
 import { useShareImport, type Incoming } from '../../state/useShareImport'
 import { KIND_ICON } from '../blueprintKinds'
@@ -115,8 +114,7 @@ function Preview({ pkg, plan }: { pkg: SharePackage; plan: ImportPlan }) {
   const { confirm, dismiss } = useShareImport.getState()
   const [asking, setAsking] = useState(false)
   const add = () => {
-    const done = confirm()
-    if (done?.kind === 'city') useCityEditor.getState().reset() // undo must not bring the old city back
+    confirm()
   }
   const onYes = () => (replacesSomething(plan) ? setAsking(true) : add())
   return (
@@ -259,9 +257,12 @@ export default function ImportDialogs() {
   const pickerOpen = useShareImport((s) => s.pickerOpen)
   const incoming = useShareImport((s) => s.incoming)
   const done = useShareImport((s) => s.done)
+  // A preview or error card closes only with its own button: the link is already gone from the address
+  // bar, so a stray tap beside the card must not lose a friend's creation.
   const close = () => {
     const s = useShareImport.getState()
-    if (s.incoming || s.done) s.dismiss()
+    if (s.incoming) return
+    if (s.done) s.dismiss()
     else s.closePicker()
   }
   if (!pickerOpen && !incoming && !done) return null

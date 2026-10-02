@@ -5,6 +5,7 @@ import { createEmptySave } from '../core/serialize'
 import { buildCityPackage, buildMazePackage, buildModelPackage, shareFileText, shareLink } from '../core/share'
 import type { Blueprint } from '../core/types'
 import { useApp } from './useApp'
+import { useCityEditor } from './useCityEditor'
 import { useGame } from './useGame'
 import { MAX_SHARE_FILE_BYTES, consumeShareHash, shareImportOptions, useShareImport } from './useShareImport'
 
@@ -35,6 +36,7 @@ beforeEach(() => {
   useGame.setState({ data: createEmptySave() })
   useApp.setState({ lang: 'vi' })
   useShareImport.setState({ incoming: null, done: null, pickerOpen: false })
+  useApp.setState({ mode: 'menu' })
 })
 
 describe('consumeShareHash', () => {
@@ -96,6 +98,35 @@ describe('useShareImport', () => {
     expect(data().city.roads).toEqual(['5,5', '6,5'])
     expect(data().blueprints).toHaveLength(1)
     expect(data().city.placements[0].source).toBe(data().blueprints[0].id)
+  })
+
+  it('confirming a city import clears the city undo history, so undo cannot bring the old city back', () => {
+    const oldCity = { size: 48, roads: [], placements: [] }
+    useGame.setState({ data: { ...createEmptySave(), city: oldCity } })
+    useCityEditor.getState().reset()
+    useCityEditor.getState().paintRoad({ cx: 2, cz: 2 }, { cx: 5, cz: 2 })
+    expect(useCityEditor.getState().canUndo).toBe(true)
+    const city = { size: 24, roads: ['5,5', '6,5'], placements: [] }
+    s().receiveText(shareLink(buildCityPackage(city, [], { name: 'Phố' }), BASE), 'paste')
+    s().confirm()
+    expect(useCityEditor.getState().canUndo).toBe(false)
+    useCityEditor.getState().undo()
+    expect(data().city.roads).toEqual(['5,5', '6,5'])
+    expect(data().city.size).toBe(24)
+  })
+
+  it('a city import while driving returns to the city', () => {
+    useApp.setState({ mode: 'drive' })
+    s().receiveText(shareLink(buildCityPackage({ size: 24, roads: ['5,5'], placements: [] }, [], { name: 'Phố' }), BASE), 'paste')
+    s().confirm()
+    expect(useApp.getState().mode).toBe('city')
+  })
+
+  it('every new import or picker opening bumps seq (the dialog error boundary starts fresh)', () => {
+    const before = s().seq
+    s().openPicker()
+    s().receiveText(`${BASE}/#s=not-a-real-payload`, 'link')
+    expect(s().seq).toBe(before + 2)
   })
 
   it('shows an error card for a broken link and changes nothing', () => {
