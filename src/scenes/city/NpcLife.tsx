@@ -11,6 +11,7 @@ import type { Blueprint, CityState } from '../../core/types'
 import { installLiveFigureKeys } from '../../render/liveFigures'
 import { useFrameRequest } from '../../render/frameDriver'
 import { bakedMaterials, castsShadow } from '../../render/materials'
+import { nightMaterials, nightState } from '../../render/nightGlow'
 import { bakedModelBox } from '../../render/placementTransform'
 import { isShadowProxy, registerShadowProxy } from '../../render/shadowProxies'
 import { makeSizeOf } from '../../render/sources'
@@ -60,6 +61,8 @@ const SWAY = 0.07
 /** Edits come in bursts (a road stroke, a drag): rebuild the networks once things settle. */
 const REBUILD_DELAY = 300
 const SEED = 2026
+/** Headlights: half the gap between a car's two lamps (studs). */
+const HEADLIGHT_SPREAD = 0.75
 
 const modelCache = new Map<string, NpcModel | null>()
 
@@ -226,6 +229,14 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
   // Render on demand: keep frames coming (at the graphics frame cap) while anyone lives in this city.
   const [alive, setAlive] = useState(false)
   useFrameRequest(alive, 'motion')
+  // Night: two headlight sprites in front of every car (one Points draw call, hidden by day).
+  const headlights = useMemo(() => {
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_CARS * 2 * 3), 3).setUsage(THREE.DynamicDrawUsage))
+    g.setDrawRange(0, 0)
+    return g
+  }, [])
+  useEffect(() => () => headlights.dispose(), [headlights])
 
   useEffect(() => {
     const s =
@@ -301,6 +312,29 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
       place(all[m] ?? [], slots[m].model, n[m]++, p.x, p.y + bob, p.z, p.hx, p.hz, walking ? Math.sin(p.phase) * SWAY : 0)
     }
     for (let m = 0; m < slots.length; m++) flush(all[m] ?? [], n[m])
+    let lit = 0
+    if (nightState.night > 0.02) {
+      const attr = headlights.getAttribute('position') as THREE.BufferAttribute
+      const pos = attr.array as Float32Array
+      for (const car of s.cars) {
+        if (lit >= MAX_CARS * 2) break
+        const half = (looks.cars[car.variant]?.model.length ?? 6) / 2
+        const fx = car.x + car.hx * half
+        const fz = car.z + car.hz * half
+        const sx = car.hz * HEADLIGHT_SPREAD
+        const sz = car.hx * HEADLIGHT_SPREAD
+        const i = lit * 3
+        pos[i] = fx - sx
+        pos[i + 1] = ROAD_Y + 1
+        pos[i + 2] = fz + sz
+        pos[i + 3] = fx + sx
+        pos[i + 4] = ROAD_Y + 1
+        pos[i + 5] = fz - sz
+        lit += 2
+      }
+      attr.needsUpdate = true
+    }
+    headlights.setDrawRange(0, lit)
     npcStats.count = s.count()
     npcStats.calls = gl.info.render.calls
     npcStats.triangles = gl.info.render.triangles
@@ -309,6 +343,7 @@ export default function NpcLife({ city, blueprints, density = 1 }: { city: CityS
 
   return (
     <group>
+      <points geometry={headlights} material={nightMaterials().headlight} frustumCulled={false} raycast={noRaycast} renderOrder={2} dispose={null} />
       {slots.map((slot, m) => (
         <SlotMeshes
           key={m}

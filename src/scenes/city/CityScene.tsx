@@ -19,7 +19,7 @@ import { placementMatrix } from '../../render/placementTransform'
 import { installShadowProxies } from '../../render/shadowProxies'
 import { makeSizeOf, resolveRenderable } from '../../render/sources'
 import { useEvictStaleBakesOnUnmount } from '../../render/useBakeEviction'
-import { useSunShadow } from '../../render/useSunShadow'
+import { nightMaterials } from '../../render/nightGlow'
 import { useApp } from '../../state/useApp'
 import { onCityReplaced } from '../../state/cityReplaced'
 import { useCityEditor } from '../../state/useCityEditor'
@@ -27,18 +27,19 @@ import { useGame } from '../../state/useGame'
 import { useGraphics } from '../../state/useGraphics'
 import { useRoadBrush } from '../../state/useRoadBrush'
 import CityGround from './CityGround'
+import { CityLights, Horizon } from './CitySky'
 import { fitCityFrame } from './cityFraming'
+import { horizonLayout } from './horizonGeometry'
 import { cityScreen } from './cityScreen'
 import NpcLife from './NpcLife'
 import PlacementHighlight from './PlacementHighlight'
 import Placements, { bakedHeight, footprintBox, PLACEHOLDER_HEIGHT } from './Placements'
+import LampGlows from './LampGlows'
 import Rails from './Rails'
 import Roads from './Roads'
 import Terrain from './Terrain'
 import { useCityGestures, type CityPick, type GroundPoint } from './useCityGestures'
 
-const SKY = '#87ceeb'
-const SHADOW_MAP_SIZE = 2048
 const VALID = new THREE.Color('#3cd35a')
 const INVALID = new THREE.Color('#ff3b30')
 const SELECTED = '#ffd500'
@@ -58,46 +59,6 @@ const FRAME_WINDOW = { left: -0.94, right: 0.94, bottom: -0.62, top: 0.94 }
 const DISTANCE_PER_HEIGHT = 3
 
 const GROUND_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-
-function Lights({ size }: { size: number }) {
-  const light = useRef<THREE.DirectionalLight>(null)
-  const span = size * CELL
-  const mid = span / 2
-  const target = useMemo(() => new THREE.Object3D(), [])
-  const { castShadow, mapSize } = useSunShadow(SHADOW_MAP_SIZE)
-
-  useLayoutEffect(() => {
-    const cam = light.current?.shadow.camera
-    if (!cam) return
-    const extent = span * 0.75
-    cam.left = -extent
-    cam.right = extent
-    cam.top = extent
-    cam.bottom = -extent
-    // From behind the light too: a x10 model can be taller than the light is high, and its top must
-    // still cast a shadow (an orthographic shadow camera takes a negative near plane).
-    cam.near = -span
-    cam.far = span * 2
-    cam.updateProjectionMatrix()
-  }, [span])
-
-  return (
-    <>
-      <hemisphereLight args={['#ffffff', '#7a9a6a', 1.6]} />
-      <primitive object={target} position={[mid, 0, mid]} />
-      <directionalLight
-        ref={light}
-        target={target}
-        position={[mid + span * 0.3, span * 0.6, mid + span * 0.2]}
-        intensity={2.2}
-        castShadow={castShadow}
-        shadow-mapSize={[mapSize, mapSize]}
-        shadow-bias={-0.0005}
-        shadow-normalBias={0.05}
-      />
-    </>
-  )
-}
 
 /** Centre of everything built so far (or of the city when empty), where the camera starts. */
 function contentCenter(city: CityState, blueprints: Blueprint[]): [number, number] {
@@ -637,12 +598,14 @@ function CityWorld() {
   return (
     <>
       <CameraRig key={framing} size={city.size} roadMode={roadMode} />
-      <Lights size={city.size} />
-      <CityGround size={city.size} />
+      <CityLights size={city.size} />
+      <CityGround size={city.size} border={horizonLayout(city.size).groundHalf - (city.size * CELL) / 2} />
+      <Horizon size={city.size} />
       <Terrain terrain={display.terrain} />
       <Roads roads={display.roads} />
       {display.rails && <Rails rails={display.rails} roads={display.roads} shadows={false} />}
-      <Placements placements={shown} blueprints={blueprints} shadowProxies />
+      <Placements placements={shown} blueprints={blueprints} shadowProxies transMaterial={nightMaterials().windows} />
+      <LampGlows placements={shown} sizeOf={sizeOf} />
       {/* Ambient life follows the saved city (not a stroke in progress); picking ignores it (see `pick`). */}
       {npcOn && npcFactor > 0 && <NpcLife city={city} blueprints={blueprints} density={npcFactor} />}
       {selected && selectedCells && (
@@ -659,14 +622,13 @@ const WATCH = [useGame, useCityEditor, useApp]
 
 /**
  * The City renders on demand: frames come from input, edits and the camera; it only runs a loop (at
- * the graphics frame cap) while something in it moves on its own (city life, water).
+ * the graphics frame cap) while something in it moves on its own (city life, water, the automatic day).
+ * The sky, fog and lights come from the time of day (see CitySky).
  */
 export default function CityScene() {
   useEvictStaleBakesOnUnmount()
   return (
     <BtCanvas testId="city-canvas" watch={WATCH}>
-      <color attach="background" args={[SKY]} />
-      <fog attach="fog" args={[SKY, 450, 900]} />
       <CityWorld />
     </BtCanvas>
   )

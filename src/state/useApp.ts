@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
 import { DEVICE_CLASSES, type DeviceClass } from './deviceClass'
+import { CITY_TIMES, type CityTime } from '../core/timeOfDay'
 import { GRAPHICS_PRESETS, presetToggles, sanitizeToggles, type GraphicsPreset, type GraphicsToggles } from './graphics'
 
 export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive' | 'maze' | 'mazeDrive'
@@ -29,6 +30,10 @@ export interface AppState {
   graphicsPreset: GraphicsPreset
   /** The player's own toggles, used while the preset is 'custom'. */
   graphicsCustom: GraphicsToggles
+  /** City time of day (☀️ 🌞 🌅 🌙). */
+  cityTime: CityTime
+  /** City automatic day / night cycle (also needs the graphics switch, and no reduced motion). */
+  cityTimeAuto: boolean
   setMode: (mode: Mode) => void
   setLang: (lang: Lang) => void
   setDifficulty: (difficulty: Difficulty) => void
@@ -42,6 +47,8 @@ export interface AppState {
   setGraphicsPreset: (preset: GraphicsPreset) => void
   /** Switches to 'custom' with these toggles. */
   setGraphicsCustom: (toggles: GraphicsToggles) => void
+  setCityTime: (time: CityTime) => void
+  setCityTimeAuto: (on: boolean) => void
 }
 
 /** Whether the colour picker is folded on `deviceClass`: the kid's choice, else folded on portrait phones only. */
@@ -93,7 +100,7 @@ const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
 
 type Prefs = Pick<
   AppState,
-  'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed' | 'npcOn' | 'graphicsPreset' | 'graphicsCustom'
+  'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed' | 'npcOn' | 'graphicsPreset' | 'graphicsCustom' | 'cityTime' | 'cityTimeAuto'
 >
 
 /** Custom toggles before the player made any: Cân bằng on a tablet. */
@@ -121,6 +128,8 @@ export function sanitizePrefs(persisted: unknown): Partial<Prefs> {
   if (typeof p.npcOn === 'boolean') out.npcOn = p.npcOn
   if (GRAPHICS_PRESETS.includes(p.graphicsPreset as GraphicsPreset)) out.graphicsPreset = p.graphicsPreset as GraphicsPreset
   if (p.graphicsCustom !== undefined) out.graphicsCustom = sanitizeToggles(p.graphicsCustom, DEFAULT_CUSTOM)
+  if (CITY_TIMES.includes(p.cityTime as CityTime)) out.cityTime = p.cityTime as CityTime
+  if (typeof p.cityTimeAuto === 'boolean') out.cityTimeAuto = p.cityTimeAuto
   if (typeof p.colorsCollapsed === 'object' && p.colorsCollapsed !== null) {
     const saved = p.colorsCollapsed as Record<string, unknown>
     const kept: Partial<Record<DeviceClass, boolean>> = {}
@@ -145,6 +154,8 @@ export const useApp = create<AppState>()(
       npcOn: !prefersReducedMotion(),
       graphicsPreset: 'auto',
       graphicsCustom: DEFAULT_CUSTOM,
+      cityTime: 'noon',
+      cityTimeAuto: false,
       setMode: (mode) => set({ mode }),
       setLang: (lang) => set({ lang }),
       setDifficulty: (difficulty) => set({ difficulty }),
@@ -158,6 +169,8 @@ export const useApp = create<AppState>()(
       setNpcOn: (npcOn) => set({ npcOn }),
       setGraphicsPreset: (graphicsPreset) => set({ graphicsPreset }),
       setGraphicsCustom: (toggles) => set({ graphicsPreset: 'custom', graphicsCustom: sanitizeToggles(toggles, DEFAULT_CUSTOM) }),
+      setCityTime: (cityTime) => set({ cityTime }),
+      setCityTimeAuto: (cityTimeAuto) => set({ cityTimeAuto }),
     }),
     {
       name: 'bricktown-prefs',
@@ -174,6 +187,8 @@ export const useApp = create<AppState>()(
         npcOn: s.npcOn,
         graphicsPreset: s.graphicsPreset,
         graphicsCustom: s.graphicsCustom,
+        cityTime: s.cityTime,
+        cityTimeAuto: s.cityTimeAuto,
       }),
       merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),
     },
