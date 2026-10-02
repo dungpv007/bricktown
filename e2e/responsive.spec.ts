@@ -160,6 +160,53 @@ async function expectAudioDialogFits(page: Page) {
   }
 }
 
+/** Shortest side under 600px: a phone (theme.css's phone queries). */
+const isPhone = (vw: number, vh: number) => Math.min(vw, vh) < 600
+
+/**
+ * A compact HUD control (swatch-column toggle, undo / redo, tools, part-size chips, action buttons,
+ * the City size control) `size` px across: full HUD size on a tablet, half size on a phone.
+ */
+function expectCompact(size: number, vw: number, vh: number, name: string) {
+  if (isPhone(vw, vh)) {
+    expect(size, `${name} is still tappable on a phone`).toBeGreaterThanOrEqual(20)
+    expect(size, `${name} stays small on a phone`).toBeLessThanOrEqual(30)
+  } else {
+    expect(size, `${name} is full size on a tablet`).toBeGreaterThanOrEqual(60)
+  }
+}
+
+/** The Workshop's compact controls (with a brick selected): the colour swatches, undo, a part-size chip, an action button. */
+async function expectWorkshopSizes(page: Page) {
+  const r = await page.evaluate(() => {
+    const min = (sel: string) => {
+      const el = document.querySelector(sel)
+      if (!el) return null
+      const b = el.getBoundingClientRect()
+      return Math.min(b.width, b.height)
+    }
+    return {
+      swatch: min('.bt-colors .bt-swatch'),
+      undo: min('[data-testid="undo"]'),
+      chip: min('.bt-palette-parts .bt-part-btn:not(.bt-rotate-btn)'),
+      action: min('[data-testid="action-bar"] .bt-btn'),
+      vw: innerWidth,
+      vh: innerHeight,
+    }
+  })
+  for (const name of ['undo', 'chip', 'action'] as const) {
+    expect(r[name], `${name} is shown`).not.toBeNull()
+    expectCompact(r[name]!, r.vw, r.vh, name)
+  }
+  // A portrait phone starts with the colour column folded (no swatches shown); colors.spec checks them open.
+  if (isPhone(r.vw, r.vh)) {
+    if (r.swatch !== null) expect(r.swatch).toBeLessThanOrEqual(22)
+  } else {
+    expect(r.swatch, 'swatch is shown').not.toBeNull()
+    expect(r.swatch!).toBeGreaterThanOrEqual(56)
+  }
+}
+
 /**
  * The City selection: every action and the size control (− ×N +) show in full (neither panel
  * scrolls, so the ✕ is never pushed out of view), on screen, as big touch targets, none overlapping.
@@ -188,8 +235,8 @@ async function expectCityActionsFit(page: Page) {
     expect(a.y, `${a.name} on screen`).toBeGreaterThanOrEqual(-1)
     expect(a.x + a.w, `${a.name} on screen`).toBeLessThanOrEqual(r.vw + 1)
     expect(a.y + a.h, `${a.name} on screen`).toBeLessThanOrEqual(r.vh + 1)
-    // Action buttons are half the HUD button size (user request): 32px on tablets, 22px on phones.
-    if (a.button) expect(Math.min(a.w, a.h), `${a.name} is still tappable`).toBeGreaterThanOrEqual(22)
+    // Action buttons: full HUD size on tablets (64px), half on phones (24px, 22px on the smallest).
+    if (a.button) expectCompact(Math.min(a.w, a.h), r.vw, r.vh, a.name)
   }
   for (let i = 0; i < r.parts.length; i++) {
     for (let j = i + 1; j < r.parts.length; j++) {
@@ -239,8 +286,8 @@ async function expectCityToolsFit(page: Page) {
   if (r.scrolls) expect(r.scrollable, 'a tool list taller than the screen scrolls').toBe(true)
   for (const t of r.tools) {
     expect(t.inside, `${t.name} can be reached`).toBe(true)
-    // City tools are half the HUD button size (user request): half of the usual 40px floor.
-    expect(Math.min(t.w, t.h), `${t.name} is still tappable`).toBeGreaterThanOrEqual(20)
+    // City tools: full HUD size on tablets, half on phones.
+    expectCompact(Math.min(t.w, t.h), r.vw, r.vh, t.name)
   }
 }
 
@@ -311,6 +358,7 @@ for (const [width, height] of [
     await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().place(3, 0, 3))
     await expect(page.getByTestId('action-bar')).toBeVisible()
     await expectTidy(page, 'workshop')
+    await expectWorkshopSizes(page)
     await page.getByTestId('colors-toggle').click()
     await expectTidy(page, 'workshop, colours toggled')
     await page.getByTestId('colors-toggle').click()
@@ -400,11 +448,32 @@ for (const [width, height] of [
 }
 
 test('tablet 1080×810: the menu row stays on one line and the Sound dialog fits', async ({ page }) => {
+  test.setTimeout(90_000)
   await page.goto('/')
   await expect(page.getByTestId('main-menu')).toBeVisible()
   await expectTidy(page, 'menu')
   await expectMenuRowOneLine(page)
   await checkAudioDialog(page)
+
+  // Workshop: full-size compact controls (swatches, undo / redo, part chips, actions), nothing overlapping.
+  await page.getByTestId('menu-workshop').click()
+  await expect(page.getByTestId('workshop-canvas')).toBeVisible()
+  await devHandle(page)
+  await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().place(3, 0, 3))
+  await expect(page.getByTestId('action-bar')).toBeVisible()
+  await expectTidy(page, 'workshop')
+  await expectWorkshopSizes(page)
+  await page.getByTestId('back').click()
+
+  // Maze editor: the side column (wall colour, size, 🎲) at full size too.
+  await page.getByTestId('menu-maze').click()
+  await page.getByTestId('maze-tpl-easy').click()
+  await expect(page.getByTestId('maze-editor')).toBeVisible()
+  await expectTidy(page, 'maze editor')
+  await page.getByTestId('back').click()
+  await expect(page.getByTestId('maze-picker')).toBeVisible()
+  await page.getByTestId('back').click()
+  await expect(page.getByTestId('main-menu')).toBeVisible()
 
   // City: the action bar column and the size control column beside it, ✕ in view.
   await devHandle(page)

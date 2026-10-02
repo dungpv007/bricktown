@@ -16,8 +16,15 @@
   --bt-s: 1;
   --bt-radius: calc(24px * var(--bt-s));
   --bt-touch: calc(64px * var(--bt-s));
-  /* Half-size HUD controls (user request): colour swatches, undo / redo and tool columns, part-size chips. */
-  --bt-half: calc(var(--bt-touch) / 2);
+  /*
+   * Compact HUD controls: colour swatches, undo / redo and the tool columns, part-size chips, the
+   * selection action bar and the City size control. --bt-k is 2 on tablets (full HUD size, easy for
+   * small fingers) and 1 on phones (half size, user request); --bt-ks is the matching scale for their
+   * icons, paddings and radii (like --bt-s for everything else).
+   */
+  --bt-k: 2;
+  --bt-ks: calc(var(--bt-s) * var(--bt-k));
+  --bt-half: calc(var(--bt-touch) / 2 * var(--bt-k));
   --bt-gap: calc(12px * var(--bt-s));
   --bt-shadow: 0 calc(6px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
   /* Notch / rounded corners / home indicator (index.html sets viewport-fit=cover). 0 elsewhere. */
@@ -33,6 +40,7 @@
 @media (max-width: 599.98px), (max-height: 599.98px) {
   :root {
     --bt-s: 0.75;
+    --bt-k: 1; /* compact HUD controls at half size */
   }
 }
 
@@ -246,11 +254,10 @@
   --bt-edge: calc(12px * var(--bt-s));
   /* Under the top bar: its padding, a button and a gap. */
   --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
-  /* Two rows (categories, parts) with their gaps and the panel padding. */
-  /* Two rows with their gaps and the panel padding: categories (full size), part-size chips (half size). */
-  --bt-palette-h: calc(1.5 * var(--bt-touch) + 28px * var(--bt-s));
-  /* 30 colours: tiny swatches (half of the old 56px) so the whole palette shows without scrolling. */
-  --bt-swatch: 28px;
+  /* Two rows with their gaps and the panel padding: categories (full size), part-size chips (compact). */
+  --bt-palette-h: calc(var(--bt-touch) + var(--bt-half) + 28px * var(--bt-s));
+  /* 30 colours: 56px swatches on tablets; tiny ones on phones (see the phone queries) so they all show. */
+  --bt-swatch: calc(28px * var(--bt-k));
   position: absolute;
   inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
@@ -292,36 +299,36 @@
   max-height: calc(100% - var(--bt-top) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: flex;
   flex-direction: column;
-  gap: calc(4px * var(--bt-s));
-  padding: calc(3px * var(--bt-s));
-  border-radius: calc(var(--bt-radius) / 2);
+  gap: calc(4px * var(--bt-ks));
+  padding: calc(3px * var(--bt-ks));
+  border-radius: calc(12px * var(--bt-ks));
   overflow-y: auto;
   scrollbar-width: none;
 }
 
-/* Undo / redo and the City / maze tools: half the HUD button size (user request). */
+/* Undo / redo and the City / maze tools: compact (full HUD size on tablets, half on phones). */
 .bt-toolbar .bt-btn,
 .bt-maze-side .bt-btn {
   min-width: var(--bt-half);
   min-height: var(--bt-half);
-  border-radius: calc(var(--bt-radius) / 2);
-  box-shadow: 0 calc(3px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
+  border-radius: calc(12px * var(--bt-ks));
+  box-shadow: 0 calc(3px * var(--bt-ks)) 0 rgba(0, 0, 0, 0.2);
 }
 
 .bt-toolbar .bt-icon-btn,
 .bt-maze-side .bt-icon-btn {
   width: var(--bt-half);
   height: var(--bt-half);
-  font-size: calc(16px * var(--bt-s));
+  font-size: calc(16px * var(--bt-ks));
 }
 
 /* Actions for the selected brick, under undo / redo in the left column. */
 .bt-actionbar {
   position: absolute;
   left: var(--bt-edge);
-  /* Below the undo / redo panel: two half-size buttons, their gap and the panel padding, then a gap. */
-  top: calc(var(--bt-top) + var(--bt-touch) + 22px * var(--bt-s));
-  max-height: calc(100% - var(--bt-top) - var(--bt-touch) - 22px * var(--bt-s) - var(--bt-palette-h) - 2 * var(--bt-edge));
+  /* Below the undo / redo panel: two compact buttons, their gap and the panel padding, then a gap. */
+  top: calc(var(--bt-top) + 2 * var(--bt-half) + 10px * var(--bt-ks) + 12px * var(--bt-s));
+  max-height: calc(100% - var(--bt-top) - 2 * var(--bt-half) - 10px * var(--bt-ks) - 12px * var(--bt-s) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: flex;
   flex-direction: column;
   gap: calc(8px * var(--bt-s));
@@ -335,25 +342,25 @@
   background: #ffd7d9;
 }
 
-/* Action buttons (selected brick / placement, City size control): half the HUD button size. */
+/* Action buttons (selected brick / placement, City size control): compact (full size on tablets, half on phones). */
 .bt-actionbar {
-  --bt-act: calc(var(--bt-touch) / 2);
-  gap: calc(4px * var(--bt-s));
-  padding: calc(3px * var(--bt-s));
-  border-radius: calc(var(--bt-radius) / 2);
+  --bt-act: var(--bt-half);
+  gap: calc(4px * var(--bt-ks));
+  padding: calc(3px * var(--bt-ks));
+  border-radius: calc(12px * var(--bt-ks));
 }
 
 .bt-actionbar .bt-btn {
   min-width: var(--bt-act);
   min-height: var(--bt-act);
-  border-radius: calc(var(--bt-radius) / 2);
-  box-shadow: 0 calc(3px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
+  border-radius: calc(12px * var(--bt-ks));
+  box-shadow: 0 calc(3px * var(--bt-ks)) 0 rgba(0, 0, 0, 0.2);
 }
 
 .bt-actionbar .bt-icon-btn {
   width: var(--bt-act);
   height: var(--bt-act);
-  font-size: calc(16px * var(--bt-s));
+  font-size: calc(16px * var(--bt-ks));
 }
 
 @keyframes bt-actionbar-in {
@@ -400,8 +407,8 @@
   min-width: var(--bt-half);
   min-height: var(--bt-half);
   height: var(--bt-half);
-  padding: 0 calc(3px * var(--bt-s));
-  border-radius: calc(var(--bt-radius) / 2);
+  padding: 0 calc(3px * var(--bt-ks));
+  border-radius: calc(12px * var(--bt-ks));
 }
 
 .bt-colors[data-collapsed='true'] {
@@ -425,30 +432,30 @@
   --bt-swatch-color: #ffffff;
   display: block;
   flex: none;
-  width: calc(20px * var(--bt-s));
-  height: calc(20px * var(--bt-s));
+  width: calc(20px * var(--bt-ks));
+  height: calc(20px * var(--bt-ks));
   border-radius: 50%;
   background-color: var(--bt-swatch-color);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 0 0 calc(1px * var(--bt-k)) rgba(0, 0, 0, 0.18);
 }
 
 .bt-colors-caret {
-  font-size: max(8px, calc(9px * var(--bt-s)));
+  font-size: max(8px, calc(9px * var(--bt-ks)));
   line-height: 1;
 }
 
 .bt-colors[data-collapsed='true'] .bt-colors-caret {
   position: absolute;
-  right: calc(-2px * var(--bt-s));
-  bottom: calc(-2px * var(--bt-s));
+  right: calc(-2px * var(--bt-ks));
+  bottom: calc(-2px * var(--bt-ks));
   display: grid;
   place-items: center;
-  width: calc(12px * var(--bt-s));
-  height: calc(12px * var(--bt-s));
+  width: calc(12px * var(--bt-ks));
+  height: calc(12px * var(--bt-ks));
   border-radius: 50%;
   background: var(--bt-yellow);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
-  font-size: max(7px, calc(7px * var(--bt-s)));
+  box-shadow: 0 calc(1px * var(--bt-k)) 0 rgba(0, 0, 0, 0.2);
+  font-size: max(7px, calc(7px * var(--bt-ks)));
 }
 
 /* Workshop palette parts drag up onto the view; sideways still scrolls the row. */
@@ -471,9 +478,9 @@
   max-height: calc(100% - var(--bt-top) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: grid;
   grid-template-columns: repeat(2, var(--bt-swatch));
-  gap: 2px;
-  padding: calc(3px * var(--bt-s));
-  border-radius: calc(var(--bt-radius) / 2);
+  gap: calc(2px * var(--bt-k));
+  padding: calc(3px * var(--bt-ks));
+  border-radius: calc(12px * var(--bt-ks));
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -485,9 +492,9 @@
   height: var(--bt-swatch);
   padding: 0;
   background: var(--bt-swatch-color);
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  border-radius: calc(9px * var(--bt-s));
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+  border: calc(2px * var(--bt-k)) solid rgba(255, 255, 255, 0.9);
+  border-radius: calc(9px * var(--bt-ks));
+  box-shadow: 0 calc(1.5px * var(--bt-k)) 0 rgba(0, 0, 0, 0.25);
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -507,7 +514,7 @@
 .bt-swatch-trans {
   background:
     linear-gradient(135deg, transparent 0 22%, rgba(255, 255, 255, 0.85) 22% 34%, transparent 34%),
-    repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0 25%, rgba(185, 196, 206, 0.35) 0 50%) 0 0 / 8px 8px,
+    repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0 25%, rgba(185, 196, 206, 0.35) 0 50%) 0 0 / calc(8px * var(--bt-k)) calc(8px * var(--bt-k)),
     var(--bt-swatch-color);
 }
 
@@ -524,7 +531,7 @@
       linear-gradient(135deg, transparent 0 22%, rgba(255, 255, 255, 0.85) 22% 34%, transparent 34%),
       linear-gradient(color-mix(in srgb, var(--bt-swatch-color) 62%, transparent),
         color-mix(in srgb, var(--bt-swatch-color) 62%, transparent)),
-      repeating-conic-gradient(#ffffff 0 25%, #b9c4ce 0 50%) 0 0 / 8px 8px;
+      repeating-conic-gradient(#ffffff 0 25%, #b9c4ce 0 50%) 0 0 / calc(8px * var(--bt-k)) calc(8px * var(--bt-k));
   }
 
   .bt-swatch-metal {
@@ -539,10 +546,10 @@
  */
 .bt-colors-more {
   position: sticky;
-  bottom: calc(-3px * var(--bt-s)); /* over the panel's bottom padding too */
+  bottom: calc(-3px * var(--bt-ks)); /* over the panel's bottom padding too */
   grid-column: 1 / -1;
-  height: calc(22px * var(--bt-s));
-  margin: calc(-22px * var(--bt-s)) calc(-3px * var(--bt-s)) calc(-3px * var(--bt-s));
+  height: calc(22px * var(--bt-ks));
+  margin: calc(-22px * var(--bt-ks)) calc(-3px * var(--bt-ks)) calc(-3px * var(--bt-ks));
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -550,7 +557,7 @@
   border-radius: 0 0 var(--bt-radius) var(--bt-radius);
   background: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.95));
   color: var(--bt-ink);
-  font-size: calc(11px * var(--bt-s));
+  font-size: calc(11px * var(--bt-ks));
   line-height: 1;
   pointer-events: none;
 }
@@ -619,25 +626,25 @@
   opacity: 0.75;
 }
 
-/* Part-size chips (the palette's bottom row, and the rotate button): half size (user request). */
+/* Part-size chips (the palette's bottom row, and the rotate button): compact (full size on tablets, half on phones). */
 .bt-palette-parts .bt-part-btn {
-  min-width: calc(36px * var(--bt-s));
+  min-width: calc(36px * var(--bt-ks));
   min-height: var(--bt-half);
   height: var(--bt-half);
-  padding: 0 calc(3px * var(--bt-s));
-  border-radius: calc(var(--bt-radius) / 2);
-  font-size: max(7px, calc(6.5px * var(--bt-s)));
-  box-shadow: 0 calc(3px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
+  padding: 0 calc(3px * var(--bt-ks));
+  border-radius: calc(12px * var(--bt-ks));
+  font-size: max(7px, calc(6.5px * var(--bt-ks)));
+  box-shadow: 0 calc(3px * var(--bt-ks)) 0 rgba(0, 0, 0, 0.2);
 }
 
 .bt-palette-parts .bt-part-btn svg {
-  width: calc(18px * var(--bt-s));
-  height: calc(18px * var(--bt-s));
+  width: calc(18px * var(--bt-ks));
+  height: calc(18px * var(--bt-ks));
 }
 
 .bt-palette-parts .bt-part-emoji {
-  font-size: calc(14px * var(--bt-s));
-  line-height: calc(18px * var(--bt-s));
+  font-size: calc(14px * var(--bt-ks));
+  line-height: calc(18px * var(--bt-ks));
 }
 
 .bt-rotate-btn {
@@ -647,9 +654,9 @@
 
 .bt-rotate-arrow {
   position: absolute;
-  top: 1px;
-  right: 3px;
-  font-size: calc(11px * var(--bt-s));
+  top: calc(1px * var(--bt-k));
+  right: calc(3px * var(--bt-k));
+  font-size: calc(11px * var(--bt-ks));
 }
 
 .bt-rotate-preview {
@@ -1212,6 +1219,49 @@
   font-size: calc(56px * var(--bt-s));
 }
 
+/*
+ * Workshop palette drag (PartPalette's LiftAvatar): the lifted part sits above the finger (placed
+ * from script), pops in, shrinks and fades into the 3D ghost over the view (data-state in-scene),
+ * and is hidden while no drag is on. Transform and opacity only.
+ */
+.bt-drag-avatar.bt-lift {
+  opacity: 1;
+  will-change: transform;
+}
+
+.bt-drag-avatar.bt-lift[data-state='idle'] {
+  visibility: hidden;
+}
+
+.bt-lift .bt-drag-avatar-inner {
+  margin: 0;
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 12px 8px rgba(0, 0, 0, 0.35));
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+}
+
+.bt-lift[data-state='lifted'] .bt-drag-avatar-inner {
+  animation: bt-lift-pop 0.18s ease-out;
+}
+
+.bt-lift[data-state='in-scene'] .bt-drag-avatar-inner {
+  transform: scale(0.35);
+  opacity: 0;
+}
+
+@keyframes bt-lift-pop {
+  from { transform: scale(0.6); }
+  60% { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-lift .bt-drag-avatar-inner {
+    transition: none;
+    animation: none !important;
+  }
+}
+
 /* "Drag me": a hand sliding from the first card to its spot on the model. */
 .bt-drag-hint {
   position: fixed;
@@ -1679,7 +1729,7 @@ form.bt-dialog,
 .bt-city-left > .bt-toolbar {
   position: static;
   flex: 0 1 auto;
-  min-height: var(--bt-touch); /* two half-size tools */
+  min-height: calc(2 * var(--bt-half)); /* two compact tools */
   max-height: none;
   pointer-events: auto;
 }
@@ -1719,15 +1769,15 @@ form.bt-dialog,
   align-items: center;
   justify-content: center;
   width: var(--bt-act);
-  padding: calc(1px * var(--bt-s)) 0;
-  font-size: calc(11px * var(--bt-s));
+  padding: calc(1px * var(--bt-ks)) 0;
+  font-size: calc(11px * var(--bt-ks));
   font-weight: 800;
   line-height: 1.1;
   color: var(--bt-ink);
 }
 
 .bt-city-scale-value > span:first-child {
-  font-size: calc(10px * var(--bt-s));
+  font-size: calc(10px * var(--bt-ks));
 }
 
 .bt-city-drive {
@@ -1922,6 +1972,24 @@ form.bt-dialog,
   align-items: stretch;
   gap: calc(8px * var(--bt-s));
   height: var(--bt-palette-h);
+}
+
+/*
+ * Tablets (full-size compact controls): a selected placement's actions stand in two columns, so all
+ * five fit under the tools without scrolling, with the size control in a third column beside them;
+ * the open drawer starts after those columns instead of under them.
+ */
+@media (min-width: 600px) and (min-height: 600px) {
+  .bt-city-actions > .bt-actionbar:not(.bt-city-scale) {
+    display: grid;
+    grid-template-columns: repeat(2, var(--bt-act));
+    align-content: start;
+  }
+
+  .bt-city-ui:has(.bt-city-scale) .bt-city-drawer:not(.bt-city-drawer-closed) {
+    /* Edge, actions (two buttons, their gap, the panel padding), size control (a button, padding), two gaps. */
+    left: calc(var(--bt-edge) + 3 * var(--bt-half) + 16px * var(--bt-ks) + 2 * var(--bt-gap));
+  }
 }
 
 .bt-city-drawer-closed {
@@ -2448,7 +2516,7 @@ form.bt-dialog,
   --bt-edge: calc(12px * var(--bt-s));
   --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
   --bt-palette-h: 0px;
-  --bt-swatch: 28px;
+  --bt-swatch: calc(28px * var(--bt-k));
   position: absolute;
   inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
@@ -2492,21 +2560,22 @@ form.bt-dialog,
   top: var(--bt-top);
   display: flex;
   flex-direction: column;
-  gap: calc(4px * var(--bt-s));
-  padding: calc(3px * var(--bt-s));
-  border-radius: calc(var(--bt-radius) / 2);
+  gap: calc(4px * var(--bt-ks));
+  padding: calc(3px * var(--bt-ks));
+  border-radius: calc(12px * var(--bt-ks));
 }
 
 .bt-maze-color-chip {
   --bt-swatch-color: #fe8a18;
   display: block;
-  width: calc(20px * var(--bt-s));
-  height: calc(20px * var(--bt-s));
+  width: calc(20px * var(--bt-ks));
+  height: calc(20px * var(--bt-ks));
   margin: auto;
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  border-radius: calc(4px * var(--bt-k));
+  box-shadow: inset 0 0 0 calc(1px * var(--bt-k)) rgba(0, 0, 0, 0.2);
   background:
-    radial-gradient(circle, rgba(255, 255, 255, 0.35) 0 1.5px, rgba(0, 0, 0, 0.18) 1.5px 2.25px, transparent 2.5px) 0 0 / 6.7px 6.7px,
+    radial-gradient(circle, rgba(255, 255, 255, 0.35) 0 calc(1.5px * var(--bt-k)), rgba(0, 0, 0, 0.18) calc(1.5px * var(--bt-k)) calc(2.25px * var(--bt-k)), transparent calc(2.5px * var(--bt-k)))
+      0 0 / calc(6.7px * var(--bt-k)) calc(6.7px * var(--bt-k)),
     var(--bt-swatch-color);
 }
 
@@ -2518,7 +2587,8 @@ form.bt-dialog,
 .bt-maze-pop {
   position: absolute;
   top: var(--bt-top);
-  right: calc(var(--bt-edge) + var(--bt-half) + 12px * var(--bt-s));
+  /* Beside the side column (a compact button and its panel padding), with a small gap. */
+  right: calc(var(--bt-edge) + var(--bt-half) + 6px * var(--bt-ks) + 6px * var(--bt-s));
   max-height: calc(100% - var(--bt-top) - var(--bt-edge));
   display: flex;
   flex-direction: column;
@@ -2531,7 +2601,7 @@ form.bt-dialog,
 .bt-maze-pop-colors {
   display: grid;
   grid-template-columns: repeat(5, var(--bt-swatch));
-  gap: 2px;
+  gap: calc(2px * var(--bt-k));
 }
 
 .bt-maze-name {
@@ -2876,9 +2946,9 @@ form.bt-dialog,
   }
 
   .bt-maze-pop {
-    top: calc(var(--bt-top) + var(--bt-half) + 12px * var(--bt-s) + var(--bt-gap));
+    top: calc(var(--bt-top) + var(--bt-half) + 6px * var(--bt-ks) + 6px * var(--bt-s) + var(--bt-gap));
     right: var(--bt-edge);
-    max-height: calc(100% - var(--bt-top) - var(--bt-half) - 12px * var(--bt-s) - var(--bt-gap) - var(--bt-edge));
+    max-height: calc(100% - var(--bt-top) - var(--bt-half) - 6px * var(--bt-ks) - 6px * var(--bt-s) - var(--bt-gap) - var(--bt-edge));
   }
 
   /* Maze drive, chase view: camera and hint under horn and flip. */

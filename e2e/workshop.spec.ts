@@ -451,6 +451,51 @@ test('workshop: a palette drag released over the palette or the sky places nothi
   await expect(page.getByTestId('place-error')).toHaveCount(0)
 })
 
+test('workshop: a palette drag lifts the part under the finger, lands it on the plate, or flies it back', async ({ page }) => {
+  await openWorkshop(page)
+  const avatar = page.getByTestId('drag-avatar')
+  await expect(avatar).toBeHidden()
+  const button = await page.getByTestId('part-brick_2x2').boundingBox()
+  if (!button) throw new Error('no part button')
+  const from = { x: button.x + button.width / 2, y: button.y + button.height / 2 }
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', p?: { x: number; y: number }) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: p ? [{ ...p, id: 1 }] : [] })
+  const slide = async (a: { x: number; y: number }, b: { x: number; y: number }, steps = 8) => {
+    for (let i = 1; i <= steps; i++) {
+      await touch('touchMove', { x: a.x + ((b.x - a.x) * i) / steps, y: a.y + ((b.y - a.y) * i) / steps })
+      await page.waitForTimeout(16)
+    }
+  }
+
+  // Lifted over the palette: the part floats above the finger.
+  await touch('touchStart', from)
+  // Upwards (sideways would scroll the row), still over the palette's category tabs.
+  const overPalette = { x: from.x + 8, y: from.y - 40 }
+  await slide(from, overPalette, 4)
+  await expect(avatar).toBeVisible()
+  await expect(avatar).toHaveAttribute('data-state', 'lifted')
+  const box = await avatar.locator('.bt-drag-avatar-inner').boundingBox()
+  expect(box!.y + box!.height).toBeLessThan(overPalette.y) // above the finger, not under it
+  // Over the plate it turns into the ghost; released there, the brick lands and the avatar goes.
+  const to = await screenOf(page, [8.5, 0, 8.5])
+  await slide(overPalette, to, 10)
+  await expect(avatar).toHaveAttribute('data-state', 'in-scene')
+  await touch('touchEnd')
+  await expect.poll(() => brickCount(page)).toBe(1)
+  await expect(avatar).toBeHidden()
+
+  // Released over the sky: nothing is placed and the part flies back to its chip, then hides.
+  await touch('touchStart', from)
+  await slide(from, { x: 540, y: 130 }, 10)
+  await expect(avatar).toHaveAttribute('data-state', 'lifted')
+  await touch('touchEnd')
+  await cdp.detach()
+  await expect(avatar).toBeHidden()
+  await waitForCameraStill(page)
+  expect(await brickCount(page)).toBe(1)
+})
+
 test('workshop: a palette drag cancelled by the system (pointercancel) places nothing', async ({ page }) => {
   await openWorkshop(page)
   const button = await page.getByTestId('part-brick_2x2').boundingBox()

@@ -18,14 +18,14 @@ async function openWorkshop(page: Page) {
   await expect(page.getByTestId('mode-workshop').locator('canvas')).toBeVisible()
 }
 
-test('colours: 30 small swatches in a two-wide scrolling column; picking silver selects it', async ({ page }) => {
+test('colours: 30 swatches in a two-wide scrolling column; picking silver selects it', async ({ page }) => {
   await openWorkshop(page)
   const swatches = page.locator('.bt-colors .bt-swatch')
   await expect(swatches).toHaveCount(30)
   const first = await swatches.first().boundingBox()
-  // Swatches are half of the old 56px (user request): 28px on tablets.
-  expect(first!.width).toBeGreaterThanOrEqual(28)
-  expect(first!.height).toBeGreaterThanOrEqual(28)
+  // Full size on tablets (easy for small fingers): 56px. Phones keep 20px ones (see the next test).
+  expect(first!.width).toBeGreaterThanOrEqual(56)
+  expect(first!.height).toBeGreaterThanOrEqual(56)
   const lefts = await swatches.evaluateAll((els) => [...new Set(els.map((e) => (e as HTMLElement).offsetLeft))])
   expect(lefts).toHaveLength(2)
   await expect(page.getByTestId('color-17')).toHaveClass(/bt-swatch-trans/)
@@ -35,6 +35,22 @@ test('colours: 30 small swatches in a two-wide scrolling column; picking silver 
   await page.getByTestId('color-28').click()
   await expect(page.getByTestId('color-28')).toHaveAttribute('aria-pressed', 'true')
   expect(await page.evaluate(() => (window as unknown as BtWindow).__bt.useEditor.getState().color)).toBe(28)
+})
+
+test('colours: small swatches on a phone, portrait and landscape', async ({ page }) => {
+  for (const [width, height] of [
+    [412, 891],
+    [891, 412],
+  ]) {
+    await page.setViewportSize({ width, height })
+    await openWorkshop(page)
+    // A portrait phone starts with the column folded into its toggle: open it.
+    await expect(page.locator('.bt-colors')).toBeVisible()
+    if ((await page.locator('.bt-colors').getAttribute('data-collapsed')) === 'true') await page.getByTestId('colors-toggle').click()
+    const first = await page.locator('.bt-colors .bt-swatch').first().boundingBox()
+    expect(first!.width, `${width}×${height}`).toBeGreaterThanOrEqual(18)
+    expect(first!.width, `${width}×${height}`).toBeLessThanOrEqual(22)
+  }
 })
 
 test('baseplate colour: pick gray, undo back to green, redo; saved with the workshop', async ({ page }) => {

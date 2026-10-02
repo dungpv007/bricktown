@@ -31,12 +31,13 @@ export interface PaletteDragOptions {
  * Lets a palette button be dragged onto the 3D view, when a drop target is registered (otherwise
  * the button only clicks). The button captures the pointer and the moves / release are followed
  * on the document, so touch drags work too. `begin` runs once the press has moved far enough to be
- * a drag (it makes the button's part the current one); a press that does not move stays a normal
- * click. Losing the pointer (pointercancel, lost capture), the window losing focus or the page
- * being hidden cancels the drag (and, with `cancelOnSecondPointer`, a second pointer going down).
+ * a drag (it makes the button's part the current one; `touch` tells a finger from a mouse); a press
+ * that does not move stays a normal click. Losing the pointer (pointercancel, lost capture), the
+ * window losing focus or the page being hidden cancels the drag (and, with `cancelOnSecondPointer`,
+ * a second pointer going down).
  */
 export function usePaletteDrag(
-  begin: () => void,
+  begin: (info: { touch: boolean }) => void,
   { cancelOnSecondPointer = false }: PaletteDragOptions = {},
 ): (e: ReactPointerEvent<HTMLElement>) => void {
   const beginRef = useRef(begin)
@@ -53,6 +54,7 @@ export function usePaletteDrag(
     const x0 = e.clientX
     const y0 = e.clientY
     const button = e.currentTarget
+    const touch = e.pointerType !== 'mouse'
     try {
       button.setPointerCapture(id)
     } catch {
@@ -64,7 +66,7 @@ export function usePaletteDrag(
       if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) >= TAP_MAX_PX) {
         dragging = true
         setDragActive('palette', true)
-        beginRef.current()
+        beginRef.current({ touch })
       }
       if (dragging) target?.hover({ x: ev.clientX, y: ev.clientY })
     }

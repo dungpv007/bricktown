@@ -1,11 +1,14 @@
-import { useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { COLORS } from '../core/colors'
 import { FIG_PRESETS, MINIFIG_PART, figKey } from '../core/figures'
-import { PART_CATEGORIES, PARTS } from '../core/parts/catalog'
+import { PART_BY_ID, PART_CATEGORIES, PARTS } from '../core/parts/catalog'
 import type { PartCategory, PartDef, PartShape } from '../core/types'
+import { POP_MS, RETURN_MS, avatarOffset, reducedMotion } from '../input/dragLift'
 import { usePaletteDrag } from '../input/paletteDrag'
 import { useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
+import { usePaletteLift, type LiftItem } from '../state/usePaletteLift'
 import { getPartThumbnail } from '../render/thumbnails'
 import { FigureImage } from './FigureEditor'
 import { useT, type TKey } from './i18n'
@@ -136,19 +139,36 @@ type PaletteButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick
   toggle?: () => void
   /** The part can be dragged out onto the 3D view (Workshop). */
   dragToPlace: boolean
+  /** What a drag lifts out of this button (the floating copy under the finger). */
+  lift: () => LiftItem
+  'data-testid': string
+}
+
+/** The chip's pop when a drag lifts its part out (none with reduced motion). */
+function popChip(el: HTMLElement) {
+  if (reducedMotion() || typeof el.animate !== 'function') return
+  el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.2)', offset: 0.4 }, { transform: 'scale(1)' }], {
+    duration: POP_MS,
+    easing: 'ease-out',
+  })
 }
 
 /** A palette button that selects its part on a tap and, when `dragToPlace`, can be dragged onto the view. */
-function PaletteButton({ select, toggle, dragToPlace, className, ...rest }: PaletteButtonProps) {
+function PaletteButton({ select, toggle, dragToPlace, lift, className, ...rest }: PaletteButtonProps) {
   // A drag is not a tap: the click that may follow its release must not toggle the part off again.
   const dragged = useRef(false)
-  const startDrag = usePaletteDrag(() => {
+  const button = useRef<HTMLButtonElement>(null)
+  const testId = rest['data-testid']
+  const startDrag = usePaletteDrag(({ touch }) => {
     dragged.current = true
     select()
+    if (button.current) popChip(button.current)
+    usePaletteLift.getState().begin({ item: lift(), source: testId, touch })
   })
   return (
     <button
       {...rest}
+      ref={button}
       className={dragToPlace ? `${className} bt-part-drag` : className}
       onPointerDown={
         dragToPlace
@@ -166,6 +186,89 @@ function PaletteButton({ select, toggle, dragToPlace, className, ...rest }: Pale
         ;(toggle ?? select)()
       }}
     />
+  )
+}
+
+/** The lifted part's picture: the part in the colour it was dragged in, or the figure. */
+function LiftImage({ item }: { item: LiftItem }) {
+  if (item.kind === 'fig') return <FigureImage fig={item.fig} />
+  const part = PART_BY_ID[item.partId]
+  if (!part) return null
+  return <ColoredPartImage part={part} color={item.color} hex={COLORS[item.color]?.hex ?? '#ffffff'} />
+}
+
+const translate = (x: number, y: number) => `translate3d(${x}px, ${y}px, 0)`
+
+/**
+ * The part lifted out of the palette: it follows the finger (a little above it, with a shadow),
+ * shrinks and fades into the 3D ghost while over the view, shows again over the HUD, and flies back
+ * to its chip when the drop placed nothing. Moved straight from the lift store (transform only, no
+ * re-render per pointer move); hidden while no drag is on.
+ */
+function LiftAvatar() {
+  const drag = usePaletteLift((s) => s.drag)
+  const hasPointer = usePaletteLift((s) => s.pointer !== null)
+  const inScene = usePaletteLift((s) => s.inScene)
+  const last = usePaletteLift((s) => s.last)
+  // The last fly-back that finished (by drag number).
+  const [returned, setReturned] = useState(0)
+  const ref = useRef<HTMLDivElement>(null)
+  const offset = useRef({ dx: 0, dy: 0 })
+
+  useEffect(
+    () =>
+      usePaletteLift.subscribe((s, prev) => {
+        const el = ref.current
+        if (!el || !s.drag) return
+        if (s.drag !== prev.drag) {
+          const size = (el.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0
+          offset.current = avatarOffset(size, s.drag.touch)
+        }
+        if (s.pointer) el.style.transform = translate(s.pointer.x + offset.current.dx, s.pointer.y + offset.current.dy)
+      }),
+    [],
+  )
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el || !last || last.outcome === 'placed' || !last.at) return
+    const size = (el.firstElementChild as HTMLElement | null)?.offsetWidth ?? 0
+    const { dx, dy } = offset.current
+    const chip = document.querySelector(`[data-testid="${last.drag.source}"]`)?.getBoundingClientRect()
+    const to = chip
+      ? { x: chip.left + chip.width / 2 - size / 2, y: chip.top + chip.height / 2 - size / 2 }
+      : { x: last.at.x + dx, y: last.at.y + dy }
+    const seq = last.seq
+    if (typeof el.animate !== 'function') {
+      const timer = setTimeout(() => setReturned(seq), 0)
+      return () => clearTimeout(timer)
+    }
+    const fly = el.animate(
+      [
+        { transform: `${translate(last.at.x + dx, last.at.y + dy)} scale(1)`, opacity: 1 },
+        { transform: `${translate(to.x, to.y)} scale(0.5)`, opacity: 0 },
+      ],
+      { duration: reducedMotion() ? 0 : RETURN_MS, easing: 'ease-in' },
+    )
+    fly.onfinish = () => setReturned(seq)
+    return () => fly.cancel()
+  }, [last])
+
+  const flying = drag === null && last !== null && last.outcome !== 'placed' && last.at !== null && last.seq !== returned
+  const state = drag && hasPointer ? (inScene ? 'in-scene' : 'lifted') : flying ? 'returning' : 'idle'
+  const item = drag?.item ?? last?.drag.item
+  return createPortal(
+    <div
+      ref={ref}
+      className="bt-drag-avatar bt-lift"
+      data-testid="drag-avatar"
+      data-state={state}
+      data-shown={state !== 'idle'}
+      aria-hidden="true"
+    >
+      <div className="bt-drag-avatar-inner">{item && <LiftImage item={item} />}</div>
+    </div>,
+    document.body,
   )
 }
 
@@ -199,6 +302,7 @@ function FigureButtons({ dragToPlace }: { dragToPlace: boolean }) {
           aria-label={p.name[lang]}
           aria-pressed={current === figKey(p.style)}
           dragToPlace={dragToPlace}
+          lift={() => ({ kind: 'fig', fig: p.style })}
           select={() => {
             useEditor.getState().setFig(p.style)
             select()
@@ -242,56 +346,60 @@ export default function PartPalette({ allowedParts, dragToPlace = false }: Props
     : PARTS.filter((p) => p.category === category)
 
   return (
-    <div className="bt-palette bt-hud-panel">
-      {!allowedParts && (
-        <div className="bt-palette-row" role="tablist">
-          {PART_CATEGORIES.map((c) => (
-            <button
-              key={c}
-              role="tab"
-              className="bt-btn bt-icon-btn"
-              data-testid={`category-${c}`}
-              aria-label={t(CATEGORY_TABS[c].labelKey)}
-              aria-selected={category === c}
-              aria-pressed={category === c}
-              onClick={() => setCategory(c)}
+    <>
+      <div className="bt-palette bt-hud-panel">
+        {!allowedParts && (
+          <div className="bt-palette-row" role="tablist">
+            {PART_CATEGORIES.map((c) => (
+              <button
+                key={c}
+                role="tab"
+                className="bt-btn bt-icon-btn"
+                data-testid={`category-${c}`}
+                aria-label={t(CATEGORY_TABS[c].labelKey)}
+                aria-selected={category === c}
+                aria-pressed={category === c}
+                onClick={() => setCategory(c)}
+              >
+                {CATEGORY_TABS[c].icon}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="bt-palette-row bt-palette-parts">
+          <button
+            className="bt-btn bt-part-btn bt-rotate-btn"
+            data-testid="rotate-current"
+            aria-label={t('rotatePart')}
+            onClick={rotateCurrent}
+          >
+            <span className="bt-rotate-arrow" aria-hidden="true">↻</span>
+            {current && (
+              <span className="bt-rotate-preview" style={{ transform: `rotate(${-90 * rot}deg)` }}>
+                <PartIcon part={current} color={hex} />
+              </span>
+            )}
+          </button>
+          {!allowedParts && category === 'figure' && <FigureButtons dragToPlace={dragToPlace} />}
+          {(allowedParts || category !== 'figure') && parts.map((p) => (
+            <PaletteButton
+              key={p.id}
+              className="bt-btn bt-part-btn"
+              data-testid={`part-${p.id}`}
+              aria-label={sizeLabel(p)}
+              aria-pressed={partId === p.id}
+              dragToPlace={dragToPlace}
+              lift={() => ({ kind: 'part', partId: p.id, color: useEditor.getState().color })}
+              select={() => setPart(p.id)}
+              toggle={() => togglePart(p.id)}
             >
-              {CATEGORY_TABS[c].icon}
-            </button>
+              <PartButtonImage part={p} color={color} hex={hex} />
+              <span className="bt-part-label">{sizeLabel(p)}</span>
+            </PaletteButton>
           ))}
         </div>
-      )}
-      <div className="bt-palette-row bt-palette-parts">
-        <button
-          className="bt-btn bt-part-btn bt-rotate-btn"
-          data-testid="rotate-current"
-          aria-label={t('rotatePart')}
-          onClick={rotateCurrent}
-        >
-          <span className="bt-rotate-arrow" aria-hidden="true">↻</span>
-          {current && (
-            <span className="bt-rotate-preview" style={{ transform: `rotate(${-90 * rot}deg)` }}>
-              <PartIcon part={current} color={hex} />
-            </span>
-          )}
-        </button>
-        {!allowedParts && category === 'figure' && <FigureButtons dragToPlace={dragToPlace} />}
-        {(allowedParts || category !== 'figure') && parts.map((p) => (
-          <PaletteButton
-            key={p.id}
-            className="bt-btn bt-part-btn"
-            data-testid={`part-${p.id}`}
-            aria-label={sizeLabel(p)}
-            aria-pressed={partId === p.id}
-            dragToPlace={dragToPlace}
-            select={() => setPart(p.id)}
-            toggle={() => togglePart(p.id)}
-          >
-            <PartButtonImage part={p} color={color} hex={hex} />
-            <span className="bt-part-label">{sizeLabel(p)}</span>
-          </PaletteButton>
-        ))}
       </div>
-    </div>
+      {dragToPlace && <LiftAvatar />}
+    </>
   )
 }

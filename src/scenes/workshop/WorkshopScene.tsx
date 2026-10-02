@@ -6,16 +6,20 @@ import { bounds, canPlace, pointerAnchor, type Bounds } from '../../core/model'
 import { getPart } from '../../core/parts/catalog'
 import { rotateNormalY, type PickHit, type Vec3 } from '../../core/pick'
 import type { Baseplate as BaseplateSize, Brick, PartDef, Rot } from '../../core/types'
+import * as sfx from '../../audio/sfx'
+import { reducedMotion } from '../../input/dragLift'
 import { registerPaletteDropTarget, type ClientPoint } from '../../input/paletteDrag'
 import { useTwoFingerCamera } from '../../input/useTwoFingerCamera'
 import BtCanvas from '../../render/BtCanvas'
 import GhostBrick from '../../render/GhostBrick'
 import InstancedBricks, { brickOfInstance } from '../../render/InstancedBricks'
+import LandingBrick from '../../render/LandingBrick'
 import SelectionHighlight from '../../render/SelectionHighlight'
 import { useSunShadow } from '../../render/useSunShadow'
 import { useApp } from '../../state/useApp'
 import { useEditor, type ViewShift } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
+import { usePaletteLift } from '../../state/usePaletteLift'
 import Baseplate from './Baseplate'
 import { cameraView } from './cameraView'
 import PlateEdgeButtons, { PlateEdgeTracker, type EdgeElements } from './PlateEdgeButtons'
@@ -405,6 +409,9 @@ function WorkshopWorld() {
   }, [get])
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  // The brick a palette drop just placed, while it lands (drops in, squashes, bounces).
+  const [landingId, setLandingId] = useState<string | null>(null)
+  const endLanding = useCallback(() => setLandingId(null), [])
   const cancelGlide = useRef<(() => void) | null>(null)
 
   useWorkshopGestures(el, {
@@ -475,32 +482,42 @@ function WorkshopWorld() {
     },
   })
 
-  // Parts dragged out of the palette: a ghost over the view, placed on release.
+  // Parts dragged out of the palette: the lifted part follows the finger (usePaletteLift) and turns
+  // into a ghost over the view; on release the part lands there, or flies back to its chip.
   useEffect(() => {
     const overView = (p: ClientPoint) => document.elementFromPoint(p.x, p.y) === el
+    const lift = usePaletteLift.getState
     return registerPaletteDropTarget({
       hover: (p) => {
-        if (p) useEditor.getState().setPlateResize(false) // a part is being dragged out
-        const hit = p && overView(p) ? pick(p.x, p.y) : null
+        if (!p) {
+          setPreview(null)
+          lift().end('cancelled', null)
+          return
+        }
+        useEditor.getState().setPlateResize(false) // a part is being dragged out
+        const hit = overView(p) ? pick(p.x, p.y) : null
         setPreview(hit ? { kind: 'part', hit } : null)
+        lift().move(p, hit !== null)
       },
       drop: (p) => {
         const hit = overView(p) ? pick(p.x, p.y) : null
-        if (!hit) {
-          setPreview(null)
-          return
-        }
         const ed = useEditor.getState()
-        if (ed.partId === null) {
+        if (!hit || ed.partId === null) {
           setPreview(null)
+          lift().end('missed', p)
+          sfx.whoosh() // soft: the part flies back to the palette
           return
         }
         const a = dropAnchor(hit, getPart(ed.partId), ed.rot)
-        ed.place(a.x, a.y, a.z)
-        if (useEditor.getState().lastError === null) {
+        ed.place(a.x, a.y, a.z) // snap sound, or the error sound when it does not fit
+        const after = useEditor.getState()
+        if (after.lastError === null) {
           setPreview(null)
+          lift().end('placed', p)
+          if (after.selectedId !== null && !reducedMotion()) setLandingId(after.selectedId)
           return
         }
+        lift().end('rejected', p)
         setPreview({ kind: 'part', hit })
         flashPreview()
       },
@@ -529,10 +546,22 @@ function WorkshopWorld() {
 
   // The brick being moved stays in the model (nothing is lost if the app closes mid-drag) but is
   // hidden from view and from picking while its ghost follows the finger.
-  const shown = useMemo(() => (draggingId === null ? bricks : bricks.filter((b) => b.id !== draggingId)), [bricks, draggingId])
+  // A landing brick is drawn by LandingBrick until it settles (and is not highlighted meanwhile).
+  const landing = useMemo(() => (landingId === null ? null : (bricks.find((b) => b.id === landingId) ?? null)), [bricks, landingId])
+  const landingShownId = landing?.id ?? null
+  const shown = useMemo(
+    () =>
+      draggingId === null && landingShownId === null
+        ? bricks
+        : bricks.filter((b) => b.id !== draggingId && b.id !== landingShownId),
+    [bricks, draggingId, landingShownId],
+  )
   const selected = useMemo(
-    () => (selectedId === null || selectedId === draggingId ? null : (bricks.find((b) => b.id === selectedId) ?? null)),
-    [bricks, selectedId, draggingId],
+    () =>
+      selectedId === null || selectedId === draggingId || selectedId === landing?.id
+        ? null
+        : (bricks.find((b) => b.id === selectedId) ?? null),
+    [bricks, selectedId, draggingId, landing],
   )
 
   return (
@@ -545,6 +574,7 @@ function WorkshopWorld() {
         <Baseplate size={baseplate} kind={kind} />
         <InstancedBricks bricks={shown} />
       </group>
+      {landing && <LandingBrick key={landing.id} brick={landing} onDone={endLanding} />}
       <SelectionHighlight brick={selected} shakeKey={errorSeq} />
       {/* Always mounted (toggled via `visible`) so placing a brick never remounts it. */}
       <GhostBrick partId={ghostPart} fig={ghostFig} rot={ghostRot} anchor={anchor} valid={valid} visible={preview !== null} shakeKey={errorSeq} />
