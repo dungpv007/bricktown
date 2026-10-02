@@ -16,6 +16,8 @@
   --bt-s: 1;
   --bt-radius: calc(24px * var(--bt-s));
   --bt-touch: calc(64px * var(--bt-s));
+  /* Half-size HUD controls (user request): colour swatches, undo / redo and tool columns, part-size chips. */
+  --bt-half: calc(var(--bt-touch) / 2);
   --bt-gap: calc(12px * var(--bt-s));
   --bt-shadow: 0 calc(6px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
   /* Notch / rounded corners / home indicator (index.html sets viewport-fit=cover). 0 elsewhere. */
@@ -245,9 +247,10 @@
   /* Under the top bar: its padding, a button and a gap. */
   --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
   /* Two rows (categories, parts) with their gaps and the panel padding. */
-  --bt-palette-h: calc(2 * var(--bt-touch) + 28px * var(--bt-s));
-  /* 30 colours: swatches a little smaller than other buttons so more show before the column scrolls. */
-  --bt-swatch: 56px;
+  /* Two rows with their gaps and the panel padding: categories (full size), part-size chips (half size). */
+  --bt-palette-h: calc(1.5 * var(--bt-touch) + 28px * var(--bt-s));
+  /* 30 colours: tiny swatches (half of the old 56px) so the whole palette shows without scrolling. */
+  --bt-swatch: 28px;
   position: absolute;
   inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
@@ -289,18 +292,36 @@
   max-height: calc(100% - var(--bt-top) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: flex;
   flex-direction: column;
-  gap: calc(8px * var(--bt-s));
+  gap: calc(4px * var(--bt-s));
+  padding: calc(3px * var(--bt-s));
+  border-radius: calc(var(--bt-radius) / 2);
   overflow-y: auto;
   scrollbar-width: none;
+}
+
+/* Undo / redo and the City / maze tools: half the HUD button size (user request). */
+.bt-toolbar .bt-btn,
+.bt-maze-side .bt-btn {
+  min-width: var(--bt-half);
+  min-height: var(--bt-half);
+  border-radius: calc(var(--bt-radius) / 2);
+  box-shadow: 0 calc(3px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
+}
+
+.bt-toolbar .bt-icon-btn,
+.bt-maze-side .bt-icon-btn {
+  width: var(--bt-half);
+  height: var(--bt-half);
+  font-size: calc(16px * var(--bt-s));
 }
 
 /* Actions for the selected brick, under undo / redo in the left column. */
 .bt-actionbar {
   position: absolute;
   left: var(--bt-edge);
-  /* Below the undo / redo panel: two buttons, their gap and the panel padding, then a gap. */
-  top: calc(var(--bt-top) + 2 * var(--bt-touch) + 32px * var(--bt-s));
-  max-height: calc(100% - var(--bt-top) - 2 * var(--bt-touch) - 32px * var(--bt-s) - var(--bt-palette-h) - 2 * var(--bt-edge));
+  /* Below the undo / redo panel: two half-size buttons, their gap and the panel padding, then a gap. */
+  top: calc(var(--bt-top) + var(--bt-touch) + 22px * var(--bt-s));
+  max-height: calc(100% - var(--bt-top) - var(--bt-touch) - 22px * var(--bt-s) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: flex;
   flex-direction: column;
   gap: calc(8px * var(--bt-s));
@@ -376,13 +397,15 @@
   justify-content: center;
   gap: calc(6px * var(--bt-s));
   width: 100%;
-  min-width: var(--bt-touch);
-  height: var(--bt-touch);
-  padding: 0 calc(6px * var(--bt-s));
+  min-width: var(--bt-half);
+  min-height: var(--bt-half);
+  height: var(--bt-half);
+  padding: 0 calc(3px * var(--bt-s));
+  border-radius: calc(var(--bt-radius) / 2);
 }
 
 .bt-colors[data-collapsed='true'] {
-  grid-template-columns: var(--bt-touch);
+  grid-template-columns: var(--bt-half);
   padding: 0;
   overflow: visible;
   background: none;
@@ -392,7 +415,7 @@
 
 .bt-colors[data-collapsed='true'] .bt-colors-toggle {
   position: relative;
-  width: var(--bt-touch);
+  width: var(--bt-half);
   padding: 0;
   border-radius: 50%;
 }
@@ -402,30 +425,30 @@
   --bt-swatch-color: #ffffff;
   display: block;
   flex: none;
-  width: calc(40px * var(--bt-s));
-  height: calc(40px * var(--bt-s));
+  width: calc(20px * var(--bt-s));
+  height: calc(20px * var(--bt-s));
   border-radius: 50%;
   background-color: var(--bt-swatch-color);
-  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
 
 .bt-colors-caret {
-  font-size: max(12px, calc(18px * var(--bt-s)));
+  font-size: max(8px, calc(9px * var(--bt-s)));
   line-height: 1;
 }
 
 .bt-colors[data-collapsed='true'] .bt-colors-caret {
   position: absolute;
-  right: calc(-4px * var(--bt-s));
-  bottom: calc(-4px * var(--bt-s));
+  right: calc(-2px * var(--bt-s));
+  bottom: calc(-2px * var(--bt-s));
   display: grid;
   place-items: center;
-  width: calc(24px * var(--bt-s));
-  height: calc(24px * var(--bt-s));
+  width: calc(12px * var(--bt-s));
+  height: calc(12px * var(--bt-s));
   border-radius: 50%;
   background: var(--bt-yellow);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
-  font-size: max(12px, calc(14px * var(--bt-s)));
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+  font-size: max(7px, calc(7px * var(--bt-s)));
 }
 
 /* Workshop palette parts drag up onto the view; sideways still scrolls the row. */
@@ -448,7 +471,9 @@
   max-height: calc(100% - var(--bt-top) - var(--bt-palette-h) - 2 * var(--bt-edge));
   display: grid;
   grid-template-columns: repeat(2, var(--bt-swatch));
-  gap: 4px;
+  gap: 2px;
+  padding: calc(3px * var(--bt-s));
+  border-radius: calc(var(--bt-radius) / 2);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -460,9 +485,9 @@
   height: var(--bt-swatch);
   padding: 0;
   background: var(--bt-swatch-color);
-  border: 4px solid rgba(255, 255, 255, 0.9);
-  border-radius: calc(18px * var(--bt-s));
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: calc(9px * var(--bt-s));
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -482,7 +507,7 @@
 .bt-swatch-trans {
   background:
     linear-gradient(135deg, transparent 0 22%, rgba(255, 255, 255, 0.85) 22% 34%, transparent 34%),
-    repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0 25%, rgba(185, 196, 206, 0.35) 0 50%) 0 0 / 16px 16px,
+    repeating-conic-gradient(rgba(255, 255, 255, 0.55) 0 25%, rgba(185, 196, 206, 0.35) 0 50%) 0 0 / 8px 8px,
     var(--bt-swatch-color);
 }
 
@@ -499,7 +524,7 @@
       linear-gradient(135deg, transparent 0 22%, rgba(255, 255, 255, 0.85) 22% 34%, transparent 34%),
       linear-gradient(color-mix(in srgb, var(--bt-swatch-color) 62%, transparent),
         color-mix(in srgb, var(--bt-swatch-color) 62%, transparent)),
-      repeating-conic-gradient(#ffffff 0 25%, #b9c4ce 0 50%) 0 0 / 16px 16px;
+      repeating-conic-gradient(#ffffff 0 25%, #b9c4ce 0 50%) 0 0 / 8px 8px;
   }
 
   .bt-swatch-metal {
@@ -514,10 +539,10 @@
  */
 .bt-colors-more {
   position: sticky;
-  bottom: calc(-6px * var(--bt-s)); /* over the panel's bottom padding too */
+  bottom: calc(-3px * var(--bt-s)); /* over the panel's bottom padding too */
   grid-column: 1 / -1;
-  height: calc(44px * var(--bt-s));
-  margin: calc(-44px * var(--bt-s)) calc(-6px * var(--bt-s)) calc(-6px * var(--bt-s));
+  height: calc(22px * var(--bt-s));
+  margin: calc(-22px * var(--bt-s)) calc(-3px * var(--bt-s)) calc(-3px * var(--bt-s));
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -525,7 +550,7 @@
   border-radius: 0 0 var(--bt-radius) var(--bt-radius);
   background: linear-gradient(rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.95));
   color: var(--bt-ink);
-  font-size: calc(22px * var(--bt-s));
+  font-size: calc(11px * var(--bt-s));
   line-height: 1;
   pointer-events: none;
 }
@@ -535,7 +560,7 @@
 }
 
 @keyframes bt-colors-more-bob {
-  50% { transform: translateY(-5px); }
+  50% { transform: translateY(-3px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -594,6 +619,27 @@
   opacity: 0.75;
 }
 
+/* Part-size chips (the palette's bottom row, and the rotate button): half size (user request). */
+.bt-palette-parts .bt-part-btn {
+  min-width: calc(36px * var(--bt-s));
+  min-height: var(--bt-half);
+  height: var(--bt-half);
+  padding: 0 calc(3px * var(--bt-s));
+  border-radius: calc(var(--bt-radius) / 2);
+  font-size: max(7px, calc(6.5px * var(--bt-s)));
+  box-shadow: 0 calc(3px * var(--bt-s)) 0 rgba(0, 0, 0, 0.2);
+}
+
+.bt-palette-parts .bt-part-btn svg {
+  width: calc(18px * var(--bt-s));
+  height: calc(18px * var(--bt-s));
+}
+
+.bt-palette-parts .bt-part-emoji {
+  font-size: calc(14px * var(--bt-s));
+  line-height: calc(18px * var(--bt-s));
+}
+
 .bt-rotate-btn {
   position: relative;
   background: var(--bt-yellow);
@@ -601,9 +647,9 @@
 
 .bt-rotate-arrow {
   position: absolute;
-  top: 2px;
-  right: 6px;
-  font-size: calc(22px * var(--bt-s));
+  top: 1px;
+  right: 3px;
+  font-size: calc(11px * var(--bt-s));
 }
 
 .bt-rotate-preview {
@@ -1624,7 +1670,7 @@ form.bt-dialog,
 .bt-city-left > .bt-toolbar {
   position: static;
   flex: 0 1 auto;
-  min-height: calc(var(--bt-touch) * 2);
+  min-height: var(--bt-touch); /* two half-size tools */
   max-height: none;
   pointer-events: auto;
 }
@@ -2393,7 +2439,7 @@ form.bt-dialog,
   --bt-edge: calc(12px * var(--bt-s));
   --bt-top: calc(var(--bt-touch) + 20px * var(--bt-s));
   --bt-palette-h: 0px;
-  --bt-swatch: 56px;
+  --bt-swatch: 28px;
   position: absolute;
   inset: var(--bt-safe-inset); /* every control stays clear of notches and the home indicator */
   pointer-events: none;
@@ -2437,19 +2483,21 @@ form.bt-dialog,
   top: var(--bt-top);
   display: flex;
   flex-direction: column;
-  gap: calc(8px * var(--bt-s));
+  gap: calc(4px * var(--bt-s));
+  padding: calc(3px * var(--bt-s));
+  border-radius: calc(var(--bt-radius) / 2);
 }
 
 .bt-maze-color-chip {
   --bt-swatch-color: #fe8a18;
   display: block;
-  width: calc(40px * var(--bt-s));
-  height: calc(40px * var(--bt-s));
+  width: calc(20px * var(--bt-s));
+  height: calc(20px * var(--bt-s));
   margin: auto;
-  border-radius: 8px;
-  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
   background:
-    radial-gradient(circle, rgba(255, 255, 255, 0.35) 0 3px, rgba(0, 0, 0, 0.18) 3px 4.5px, transparent 5px) 0 0 / 13.3px 13.3px,
+    radial-gradient(circle, rgba(255, 255, 255, 0.35) 0 1.5px, rgba(0, 0, 0, 0.18) 1.5px 2.25px, transparent 2.5px) 0 0 / 6.7px 6.7px,
     var(--bt-swatch-color);
 }
 
@@ -2461,7 +2509,7 @@ form.bt-dialog,
 .bt-maze-pop {
   position: absolute;
   top: var(--bt-top);
-  right: calc(var(--bt-edge) + var(--bt-touch) + 24px * var(--bt-s));
+  right: calc(var(--bt-edge) + var(--bt-half) + 12px * var(--bt-s));
   max-height: calc(100% - var(--bt-top) - var(--bt-edge));
   display: flex;
   flex-direction: column;
@@ -2474,7 +2522,7 @@ form.bt-dialog,
 .bt-maze-pop-colors {
   display: grid;
   grid-template-columns: repeat(5, var(--bt-swatch));
-  gap: 4px;
+  gap: 2px;
 }
 
 .bt-maze-name {
@@ -2708,11 +2756,11 @@ form.bt-dialog,
 @media (max-width: 599.98px), (max-height: 599.98px) {
   .bt-workshop-ui,
   .bt-maze-ui {
-    --bt-swatch: 40px;
+    --bt-swatch: 20px;
   }
 
   .bt-swatch {
-    border-width: 3px;
+    border-width: 2px;
   }
 
   /* Selected-brick actions: a row just above the palette (the left column has no room for five). */
@@ -2737,7 +2785,7 @@ form.bt-dialog,
 @media (max-width: 379.98px), (max-height: 379.98px) {
   .bt-workshop-ui,
   .bt-maze-ui {
-    --bt-swatch: 36px;
+    --bt-swatch: 18px;
   }
 }
 
@@ -2819,9 +2867,9 @@ form.bt-dialog,
   }
 
   .bt-maze-pop {
-    top: calc(var(--bt-top) + var(--bt-touch) + 12px * var(--bt-s) + var(--bt-gap));
+    top: calc(var(--bt-top) + var(--bt-half) + 12px * var(--bt-s) + var(--bt-gap));
     right: var(--bt-edge);
-    max-height: calc(100% - var(--bt-top) - var(--bt-touch) - 12px * var(--bt-s) - var(--bt-gap) - var(--bt-edge));
+    max-height: calc(100% - var(--bt-top) - var(--bt-half) - 12px * var(--bt-s) - var(--bt-gap) - var(--bt-edge));
   }
 
   /* Maze drive, chase view: camera and hint under horn and flip. */
@@ -2836,7 +2884,7 @@ form.bt-dialog,
   .bt-city-ui .bt-toolbar,
   .bt-maze-tools {
     display: grid;
-    grid-template-columns: repeat(2, var(--bt-touch));
+    grid-template-columns: repeat(2, var(--bt-half));
   }
 
   .bt-city-ui .bt-toolbar-sep,

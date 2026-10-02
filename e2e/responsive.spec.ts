@@ -239,7 +239,8 @@ async function expectCityToolsFit(page: Page) {
   if (r.scrolls) expect(r.scrollable, 'a tool list taller than the screen scrolls').toBe(true)
   for (const t of r.tools) {
     expect(t.inside, `${t.name} can be reached`).toBe(true)
-    expect(Math.min(t.w, t.h), `${t.name} is a big touch target`).toBeGreaterThanOrEqual(40)
+    // City tools are half the HUD button size (user request): half of the usual 40px floor.
+    expect(Math.min(t.w, t.h), `${t.name} is still tappable`).toBeGreaterThanOrEqual(20)
   }
 }
 

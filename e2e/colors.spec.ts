@@ -18,13 +18,14 @@ async function openWorkshop(page: Page) {
   await expect(page.getByTestId('mode-workshop').locator('canvas')).toBeVisible()
 }
 
-test('colours: 30 big swatches in a two-wide scrolling column; picking silver selects it', async ({ page }) => {
+test('colours: 30 small swatches in a two-wide scrolling column; picking silver selects it', async ({ page }) => {
   await openWorkshop(page)
   const swatches = page.locator('.bt-colors .bt-swatch')
   await expect(swatches).toHaveCount(30)
   const first = await swatches.first().boundingBox()
-  expect(first!.width).toBeGreaterThanOrEqual(56)
-  expect(first!.height).toBeGreaterThanOrEqual(56)
+  // Swatches are half of the old 56px (user request): 28px on tablets.
+  expect(first!.width).toBeGreaterThanOrEqual(28)
+  expect(first!.height).toBeGreaterThanOrEqual(28)
   const lefts = await swatches.evaluateAll((els) => [...new Set(els.map((e) => (e as HTMLElement).offsetLeft))])
   expect(lefts).toHaveLength(2)
   await expect(page.getByTestId('color-17')).toHaveClass(/bt-swatch-trans/)
@@ -58,7 +59,7 @@ test('baseplate colour: pick gray, undo back to green, redo; saved with the work
       const saved = await savedSlotData<{ schemaVersion: number; workshop: { baseplate: Plate } }>(page)
       return saved && { v: saved.schemaVersion, c: saved.workshop.baseplate.c }
     })
-    .toEqual({ v: 3, c: 24 })
+    .toEqual({ v: 4, c: 24 })
 })
 
 test('colours: a scroll cue shows while swatches hide below, and goes at the end', async ({ page }) => {
