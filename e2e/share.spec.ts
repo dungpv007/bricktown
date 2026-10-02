@@ -233,3 +233,51 @@ test('a broken link shows a friendly error card; a picked file is previewed', as
   await expect(page.getByTestId('import-name')).toHaveText('Tháp của An')
   await expect(page.getByTestId('import-with-steps')).toHaveCount(0)
 })
+
+/** What a chat assistant answers for a photo of a small tower: plain authoring JSON (with one duplicate brick). */
+const AUTHORED = {
+  format: 'bricktown-authoring',
+  version: 1,
+  kind: 'model',
+  name: 'Tháp từ ảnh',
+  blueprintKind: 'building',
+  baseplate: { w: 8, d: 8, c: 5 },
+  withSteps: true,
+  bricks: [
+    { p: 'brick_2x4', x: 2, y: 0, z: 2, r: 0, c: 2 },
+    { p: 'brick_2x4', x: 2, y: 3, z: 2, r: 0, c: 4 },
+    { p: 'brick_2x4', x: 2, y: 3, z: 2, r: 0, c: 4 },
+    { p: 'slope_2x2', x: 2, y: 6, z: 4, r: 0, c: 0 },
+  ],
+}
+
+test('plain authoring JSON pasted into 📥 is checked, repaired, previewed and added to the library', async ({ page }) => {
+  await openWith(page)
+  await page.getByTestId('menu-import').click()
+  await page.getByTestId('import-paste').fill(`\`\`\`json ${JSON.stringify(AUTHORED)} \`\`\``)
+  await page.getByTestId('import-paste-go').click()
+  await expect(page.getByTestId('import-preview')).toHaveAttribute('data-kind', 'model')
+  await expect(page.getByTestId('import-name')).toHaveText('Tháp từ ảnh')
+  await expect(page.getByTestId('import-bricks')).toContainText('3')
+  await expect(page.getByTestId('import-fixed')).toContainText('1') // the duplicate brick was dropped
+  await expect(page.getByTestId('import-with-steps')).toBeVisible()
+  await shot(page, '7-import-authoring')
+  await page.getByTestId('import-confirm').click()
+  await expect(page.getByTestId('import-done')).toBeVisible()
+  await page.getByTestId('import-done-ok').click()
+
+  const added = await page.evaluate(() => (window as unknown as BtWindow).__bt.useGame.getState().data.blueprints.at(-1)!)
+  expect(added.name).toBe('Tháp từ ảnh')
+  await page.getByTestId('menu-workshop').click()
+  await page.getByTestId('open-library').click()
+  await expect(page.getByTestId(`blueprint-card-${added.id}`)).toBeVisible()
+
+  // A broken one says what is wrong, brick by brick.
+  await page.goto('/')
+  await page.getByTestId('menu-import').click()
+  await page.getByTestId('import-paste').fill(JSON.stringify({ ...AUTHORED, bricks: [{ p: 'brick_9x9', x: 0, y: 0, z: 0, c: 2 }] }))
+  await page.getByTestId('import-paste-go').click()
+  await expect(page.getByTestId('import-error')).toBeVisible()
+  await expect(page.getByTestId('import-problems')).toContainText('brick_9x9')
+  await shot(page, '8-import-authoring-error')
+})

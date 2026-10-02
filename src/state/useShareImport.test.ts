@@ -145,6 +145,39 @@ describe('useShareImport', () => {
     expect(huge.text).not.toHaveBeenCalled()
   })
 
+  it('previews a plain authoring JSON (pasted), repairing it safely and saying so', () => {
+    const authored = {
+      format: 'bricktown-authoring', version: 1, kind: 'model', name: 'Tháp từ ảnh', blueprintKind: 'building',
+      baseplate: { w: 8, d: 8 }, withSteps: true,
+      bricks: [
+        { p: 'brick_2x4', x: 0, y: 0, z: 0, c: 2 },
+        { p: 'brick_2x4', x: 0, y: 0, z: 0, c: 2 }, // duplicate: dropped
+        { p: 'brick_2x2', x: 0, y: 1, z: 0, c: 4 }, // y counted in bricks: lifted to 3
+      ],
+    }
+    s().receiveText(`\`\`\`json\n${JSON.stringify(authored, null, 2)}\n\`\`\``, 'paste')
+    const incoming = s().incoming
+    if (incoming?.status !== 'preview') throw new Error(`expected a preview, got ${JSON.stringify(incoming)}`)
+    expect(incoming.fixed).toBe(2)
+    expect(incoming.pkg.name).toBe('Tháp từ ảnh')
+    expect(incoming.plan.kind === 'model' && incoming.plan.template?.steps.length).toBe(2)
+    s().confirm()
+    expect(data().blueprints.map((b) => [b.name, b.bricks.length])).toEqual([['Tháp từ ảnh', 2]])
+  })
+
+  it('shows the first problems of a broken authoring JSON on the error card', () => {
+    const authored = {
+      format: 'bricktown-authoring', version: 1, kind: 'model', baseplate: { w: 8, d: 8 },
+      bricks: [1, 2, 3, 4].map((i) => ({ p: 'brick_9x9', x: 0, y: 0, z: i, c: 2 })),
+    }
+    s().receiveText(JSON.stringify(authored), 'file')
+    const incoming = s().incoming
+    if (incoming?.status !== 'error') throw new Error('expected an error card')
+    expect(incoming.error).toBe('invalid')
+    expect(incoming.problems?.map((p) => [p.code, p.brick])).toEqual([['part_unknown', 0], ['part_unknown', 1], ['part_unknown', 2]])
+    expect(data()).toEqual(createEmptySave())
+  })
+
   it('reads a file and previews it; an unreadable file is an error card', async () => {
     const text = shareFileText(buildModelPackage(car, { withSteps: false }))
     await s().receiveFile({ size: text.length, text: async () => text })

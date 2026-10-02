@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { getTemplate } from '../content/templates'
+import { parseAuthoringText, type AuthoringIssue } from '../core/authoring'
 import { sourceSize } from '../core/city'
 import { isShareError, parseShareHash, parseShareText, type ShareError, type ShareErrorCode, type SharePackage } from '../core/share'
 import { applyImport, planImport, type ImportPlan, type ShareImportOptions } from '../core/shareImport'
@@ -17,8 +18,13 @@ import { useGame } from './useGame'
 export type ShareSource = 'link' | 'file' | 'paste'
 
 export type Incoming =
-  | { status: 'preview'; pkg: SharePackage; plan: ImportPlan; source: ShareSource }
-  | { status: 'error'; error: ShareErrorCode; source: ShareSource }
+  /** `fixed`: safe repairs made to a plain authoring JSON (see core/authoring), shown in the preview. */
+  | { status: 'preview'; pkg: SharePackage; plan: ImportPlan; source: ShareSource; fixed?: number }
+  /** `problems`: the first problems found in a plain authoring JSON, shown on the error card. */
+  | { status: 'error'; error: ShareErrorCode; source: ShareSource; problems?: AuthoringIssue[] }
+
+/** Problems of an authoring JSON shown on the error card at most. */
+export const MAX_SHOWN_PROBLEMS = 3
 
 /** A share file is a few kB, a city at most a few hundred; anything far larger is refused unread. */
 export const MAX_SHARE_FILE_BYTES = 4 * 1024 * 1024
@@ -76,13 +82,31 @@ export function consumeShareHash(
 }
 
 export const useShareImport = create<ShareImportState>()((set, get) => {
-  const receive = (parsed: SharePackage | ShareError, source: ShareSource) => {
+  const receive = (parsed: SharePackage | ShareError, source: ShareSource, extra: { fixed?: number; problems?: AuthoringIssue[] } = {}) => {
     if (isShareError(parsed)) {
-      set((s) => ({ incoming: { status: 'error', error: parsed.error, source }, done: null, pickerOpen: false, seq: s.seq + 1 }))
+      const problems = extra.problems?.length ? { problems: extra.problems } : {}
+      set((s) => ({ incoming: { status: 'error', error: parsed.error, source, ...problems }, done: null, pickerOpen: false, seq: s.seq + 1 }))
       return
     }
     const plan = planImport(useGame.getState().data, parsed)
-    set((s) => ({ incoming: { status: 'preview', pkg: parsed, plan, source }, done: null, pickerOpen: false, seq: s.seq + 1 }))
+    const fixed = extra.fixed ? { fixed: extra.fixed } : {}
+    set((s) => ({ incoming: { status: 'preview', pkg: parsed, plan, source, ...fixed }, done: null, pickerOpen: false, seq: s.seq + 1 }))
+  }
+
+  /**
+   * A plain authoring JSON (pasted or a picked `.json` with the authoring marker, e.g. what a chat
+   * assistant made from a photo), checked with the share rules and safely repaired; false when the
+   * text is not one (then it is a share link or file).
+   */
+  const receiveAuthoring = (text: string, source: ShareSource): boolean => {
+    const result = parseAuthoringText(text, { ...shareImportOptions(), fix: true })
+    if (!result) return false
+    if (result.ok) receive(result.pkg, source, { fixed: result.fixes.length })
+    else {
+      const error: ShareErrorCode = result.errors.some((e) => e.code === 'too_big') ? 'too_big' : 'invalid'
+      receive({ error }, source, { problems: result.errors.slice(0, MAX_SHOWN_PROBLEMS) })
+    }
+    return true
   }
 
   return {
@@ -93,7 +117,9 @@ export const useShareImport = create<ShareImportState>()((set, get) => {
     openPicker: () => set((s) => ({ pickerOpen: true, seq: s.seq + 1 })),
     closePicker: () => set({ pickerOpen: false }),
 
-    receiveText: (text, source) => receive(parseShareText(text, shareImportOptions()), source),
+    receiveText: (text, source) => {
+      if (!receiveAuthoring(text, source)) receive(parseShareText(text, shareImportOptions()), source)
+    },
 
     receiveHash: (hash) => receive(parseShareHash(hash, shareImportOptions()) ?? { error: 'corrupt' }, 'link'),
 

@@ -13,7 +13,10 @@
     "e2e:offline": "playwright test -c playwright.offline.config.ts",
     "lint": "eslint .",
     "icons": "node scripts/icons.mjs",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "bt:pack": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/lib/register-ts.mjs scripts/bt-pack.ts",
+    "bt:preview": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/lib/register-ts.mjs scripts/bt-preview.ts",
+    "bt:ref": "node --experimental-transform-types --disable-warning=ExperimentalWarning --import ./scripts/lib/register-ts.mjs scripts/bt-gen-reference.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import type { AuthoringIssue } from '../../core/authoring'
 import type { ShareErrorCode, SharePackage } from '../../core/share'
 import type { ImportPlan } from '../../core/shareImport'
 import { getThumbnail } from '../../render/thumbnails'
@@ -10,6 +11,7 @@ import { KIND_ICON } from '../blueprintKinds'
 import ConfirmDialog from '../ConfirmDialog'
 import { useT, type TKey } from '../i18n'
 import { useThumbnail } from '../useThumbnail'
+import { issueText } from './authoringText'
 import { cityThumbnail } from './cityThumbnail'
 import './share.css'
 
@@ -92,13 +94,21 @@ function Counts({ plan }: { plan: ImportPlan }) {
   )
 }
 
-function ErrorCard({ error }: { error: ShareErrorCode }) {
+function ErrorCard({ error, problems }: { error: ShareErrorCode; problems?: AuthoringIssue[] }) {
   const t = useT()
+  const lang = useApp((s) => s.lang)
   const dismiss = useShareImport((s) => s.dismiss)
   return (
     <div className="bt-dialog bt-import bt-import-error" role="alertdialog" aria-label={t(ERROR_KEY[error])} data-testid="import-error" data-error={error}>
       <span className="bt-import-error-icon" aria-hidden="true">{ERROR_ICON[error]}</span>
       <p className="bt-ask-text">{t(ERROR_KEY[error])}</p>
+      {problems && problems.length > 0 && (
+        <ul className="bt-import-problems" data-testid="import-problems">
+          {problems.map((p, i) => (
+            <li key={i}>{issueText(p, lang)}</li>
+          ))}
+        </ul>
+      )}
       <button className="bt-btn bt-yes" data-testid="import-error-ok" aria-label={t('close')} onClick={dismiss}>
         ✓
       </button>
@@ -109,7 +119,7 @@ function ErrorCard({ error }: { error: ShareErrorCode }) {
 /** The city replaces the kid's own as a whole, so a non-empty city asks a second time. */
 const replacesSomething = (plan: ImportPlan) => plan.kind === 'city' && plan.replaces.placements + plan.replaces.roads > 0
 
-function Preview({ pkg, plan }: { pkg: SharePackage; plan: ImportPlan }) {
+function Preview({ pkg, plan, fixed }: { pkg: SharePackage; plan: ImportPlan; fixed?: number }) {
   const t = useT()
   const { confirm, dismiss } = useShareImport.getState()
   const [asking, setAsking] = useState(false)
@@ -128,6 +138,11 @@ function Preview({ pkg, plan }: { pkg: SharePackage; plan: ImportPlan }) {
           <span aria-hidden="true">📋</span> {t('importWithSteps')}
         </p>
       )}
+      {fixed ? (
+        <p className="bt-share-hint bt-import-fixed" data-testid="import-fixed">
+          <span aria-hidden="true">🔧</span> {t('importAutoFixed').replace('{n}', String(fixed))}
+        </p>
+      ) : null}
       <Counts plan={plan} />
       <div className="bt-row">
         <button className="bt-btn bt-no" data-testid="import-cancel" aria-label={t('close')} onClick={dismiss}>
@@ -188,7 +203,9 @@ function Done({ plan }: { plan: ImportPlan }) {
 }
 
 function ImportPreview({ incoming }: { incoming: Incoming }) {
-  return incoming.status === 'error' ? <ErrorCard error={incoming.error} /> : <Preview pkg={incoming.pkg} plan={incoming.plan} />
+  return incoming.status === 'error'
+    ? <ErrorCard error={incoming.error} problems={incoming.problems} />
+    : <Preview pkg={incoming.pkg} plan={incoming.plan} fixed={incoming.fixed} />
 }
 
 /** 📥: pick a `.bricktown` file or paste a link a friend sent. */

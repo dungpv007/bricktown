@@ -70,7 +70,7 @@ export default defineConfig({
   optimizeDeps: { include: ['@react-three/rapier'] },
   server: { host: true },
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
     environment: 'node',
   },
 })
