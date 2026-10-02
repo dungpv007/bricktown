@@ -102,6 +102,8 @@ export const vi = {
   deleteFailed: 'Không xóa được',
   cityToolRoad: 'Vẽ đường',
   cityRoadEraser: 'Xóa đường',
+  cityBrushAvenue: 'Đại lộ 4 làn',
+  cityBrushStreet: 'Đường nhỏ',
   cityToolRail: 'Đường ray',
   cityRailEraser: 'Xóa đường ray',
   cityToolTerrain: 'Địa hình',

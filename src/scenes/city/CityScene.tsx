@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import type { MapControls as MapControlsImpl } from 'three-stdlib'
 import { addRoads, CELL, placementCells, scaleOf } from '../../core/city'
 import { cellsOnLine, clampCell, placementCenter, planMove, planPlacement, pointToCell, type Cell, type PlacementPlan } from '../../core/cityPlan'
+import { brushLine, eraseKeys, type RoadBrush } from '../../core/avenues'
 import { addRails, eraseRails, eraseRoads } from '../../core/rails'
 import { paintRoadLine, roadKey } from '../../core/roads'
 import { paintTerrain, type TerrainBrush } from '../../core/terrain'
@@ -20,6 +21,7 @@ import { useApp } from '../../state/useApp'
 import { onCityReplaced } from '../../state/cityReplaced'
 import { useCityEditor } from '../../state/useCityEditor'
 import { useGame } from '../../state/useGame'
+import { useRoadBrush } from '../../state/useRoadBrush'
 import DevStats from '../../ui/DevStats'
 import CityGround from './CityGround'
 import { fitCityFrame } from './cityFraming'
@@ -349,8 +351,8 @@ interface Move {
  * erasing every cell passed over; on the terrain: the brush on every cell passed over.
  */
 type Stroke =
-  | { kind: 'paint'; layer: 'road' | 'rail'; from: Cell; to: Cell }
-  | { kind: 'erase'; layer: 'road' | 'rail'; last: Cell; keys: Set<string> }
+  | { kind: 'paint'; layer: 'road' | 'rail'; brush: RoadBrush; from: Cell; to: Cell }
+  | { kind: 'erase'; layer: 'road' | 'rail'; brush: RoadBrush; last: Cell; keys: Set<string> }
   | { kind: 'terrain'; brush: TerrainBrush; last: Cell; keys: Set<string> }
 
 interface HitBox {
@@ -394,9 +396,14 @@ function CityWorld() {
   const display = useMemo<CityState>(() => {
     if (!stroke) return city
     if (stroke.kind === 'terrain') return paintTerrain(city, stroke.keys, stroke.brush, sizeOf) ?? city
-    if (stroke.kind === 'erase') return (stroke.layer === 'road' ? eraseRoads : eraseRails)(city, stroke.keys) ?? city
-    const keys = paintRoadLine([], clampCell(stroke.from, city.size), clampCell(stroke.to, city.size))
-    return stroke.layer === 'road' ? addRoads(city, keys, sizeOf) : addRails(city, keys, sizeOf)
+    if (stroke.kind === 'erase') {
+      return (stroke.layer === 'road' ? eraseRoads(city, eraseKeys(city.roads, stroke.keys, stroke.brush)) : eraseRails(city, stroke.keys)) ?? city
+    }
+    const from = clampCell(stroke.from, city.size)
+    const to = clampCell(stroke.to, city.size)
+    return stroke.layer === 'road'
+      ? addRoads(city, brushLine(from, to, stroke.brush, city.size), sizeOf)
+      : addRails(city, paintRoadLine([], from, to), sizeOf)
   }, [stroke, city, sizeOf])
 
   // The ghost: stored only when it changes, so pointer moves within one cell re-render nothing.
@@ -542,7 +549,8 @@ function CityWorld() {
       if (paintLayer === 'terrain') setStroke({ kind: 'terrain', brush: terrainBrush, last: cell, keys })
       else {
         const layer = paintLayer === 'rail' ? 'rail' : 'road'
-        setStroke(roadTool === 'erase' ? { kind: 'erase', layer, last: cell, keys } : { kind: 'paint', layer, from: cell, to: cell })
+        const brush = useRoadBrush.getState().brush
+        setStroke(roadTool === 'erase' ? { kind: 'erase', layer, brush, last: cell, keys } : { kind: 'paint', layer, brush, from: cell, to: cell })
       }
     },
     roadMove: (point) => {
@@ -564,8 +572,11 @@ function CityWorld() {
       if (!apply || !s) return
       const ed = useCityEditor.getState()
       if (s.kind === 'terrain') ed.paintTerrain([...s.keys])
-      else if (s.kind === 'paint') (s.layer === 'road' ? ed.paintRoad : ed.paintRail)(s.from, s.to)
-      else (s.layer === 'road' ? ed.eraseRoads : ed.eraseRails)([...s.keys])
+      else if (s.kind === 'paint') {
+        if (s.layer === 'road') ed.paintRoad(s.from, s.to, s.brush)
+        else ed.paintRail(s.from, s.to)
+      } else if (s.layer === 'road') ed.eraseRoads(eraseKeys(useGame.getState().data.city.roads, s.keys, s.brush))
+      else ed.eraseRails([...s.keys])
     },
     hover: updateHover,
   })

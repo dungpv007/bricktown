@@ -1,3 +1,4 @@
+import { deriveRoads, straightAxis, type RoadShape } from './avenues'
 import { addRoads, coveredCells, inGrid, type PlaceError, type SourceSize } from './city'
 import { cellGraph, components, isLoop, parseKey, pathOrder, type CellGraph } from './cellGraph'
 import { roadKey, roadTileAt, type RoadTile } from './roads'
@@ -23,13 +24,23 @@ export function railTileAt(rails: Set<string>, cx: number, cz: number): { tile: 
 export const railCells = (city: Pick<CityState, 'rails'>): Set<string> => new Set(city.rails ?? [])
 
 /**
- * Whether a cell that is both a road and a rail is a valid level crossing: the road tile and the
- * rail tile are both straights, one along X and the other along Z.
+ * Whether a cell that is both a road and a rail is a valid level crossing: the rail is a straight, and
+ * the road runs straight across it at right angles: a straight street, or a plain stretch of avenue
+ * (see `straightAxis`; an avenue crossing takes both its halves). `shapes`: the derived road shapes,
+ * when the caller has them already.
  */
-export function isValidCrossing(roads: Set<string>, rails: Set<string>, cx: number, cz: number): boolean {
-  const road = roadTileAt(roads, cx, cz)
+export function isValidCrossing(
+  roads: Set<string>,
+  rails: Set<string>,
+  cx: number,
+  cz: number,
+  shapes: Map<string, RoadShape> = deriveRoads(roads),
+): boolean {
   const rail = roadTileAt(rails, cx, cz)
-  return road.tile === 'straight' && rail.tile === 'straight' && road.rot !== rail.rot
+  if (rail.tile !== 'straight') return false
+  const axis = straightAxis(shapes.get(roadKey(cx, cz)))
+  // A straight rail at rot 0 runs along Z.
+  return axis !== null && axis === (rail.rot === 0 ? 'x' : 'z')
 }
 
 /** The level crossings of a city: the cells that are both road and rail ("cx,cz" keys). */
@@ -42,11 +53,13 @@ export function levelCrossings(city: Pick<CityState, 'roads' | 'rails'>): string
 export function invalidCrossings(city: Pick<CityState, 'roads' | 'rails'>): string[] {
   const rails = railCells(city)
   if (rails.size === 0) return []
+  if (!city.roads.some((k) => rails.has(k))) return []
   const roads = new Set(city.roads)
+  const shapes = deriveRoads(roads)
   return city.roads.filter((k) => {
     if (!rails.has(k)) return false
     const { cx, cz } = parseKey(k)
-    return !isValidCrossing(roads, rails, cx, cz)
+    return !isValidCrossing(roads, rails, cx, cz, shapes)
   })
 }
 

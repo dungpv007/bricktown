@@ -1,3 +1,4 @@
+import { deriveRoads, opposite as oppositeSide, rightOf as rightOfSide, type RoadShape, type Side } from '../avenues'
 import { coveredCells, inGrid, type SourceSize } from '../city'
 import { parseKey, type CellGraph } from '../cellGraph'
 import { railGraph, railLines } from '../rails'
@@ -46,6 +47,16 @@ export interface RoadNet {
   crossing: Uint8Array
   /** Cells cars may spawn on: in a road piece of 2+ cells, not a level crossing. */
   spawnable: number[]
+  /**
+   * Headings (bit per Dir) a car may drive into and through each cell: all four on a street or a
+   * plaza; on an avenue half its one heading (right-hand traffic), plus cross traffic at a junction or
+   * the U-turn at an end; in a box the headings of its two avenues (and in from a side street).
+   */
+  accept: Uint8Array
+  /** Headings (bit per Dir) that use the avenue lanes in each cell (AVENUE_LANES); the others use LANE. */
+  avenue: Uint8Array
+  /** 1 where paths cross, so a car claims the cell before driving in: street junctions, boxes, avenue junctions and ends, plazas. */
+  junction: Uint8Array
 }
 
 export interface TrainLine {
@@ -80,7 +91,7 @@ export interface NpcNetwork {
   pedTarget: number
 }
 
-function buildRoadNet(city: CityState): RoadNet {
+function buildRoadNet(city: CityState, shapes: Map<string, RoadShape>): RoadNet {
   const keys = [...new Set(city.roads)].filter((k) => {
     const { cx, cz } = parseKey(k)
     return inGrid(city, cx, cz)
@@ -109,7 +120,41 @@ function buildRoadNet(city: CityState): RoadNet {
   }
   const spawnable: number[] = []
   for (let i = 0; i < n; i++) if (degree[i] > 0 && !crossing[i]) spawnable.push(i)
-  return { keys, index, cx, cz, nb, degree, crossing, spawnable }
+  const accept = new Uint8Array(n)
+  const avenue = new Uint8Array(n)
+  const junction = new Uint8Array(n)
+  for (let i = 0; i < n; i++) {
+    const shape = shapes.get(keys[i])
+    if (!shape || shape.kind === 'street' || shape.kind === 'plaza') {
+      accept[i] = 15
+      junction[i] = shape?.kind === 'plaza' || degree[i] >= 3 ? 1 : 0
+    } else if (shape.kind === 'avenue') {
+      const h = 1 << shape.heading
+      avenue[i] = h
+      let ok = h
+      // Cross traffic at a junction: anything but the wrong way.
+      if (shape.junction) ok = 15 & ~(1 << oppositeSide(shape.heading))
+      // The U-turn where the other half's lanes stop: in from the partner.
+      const p = nb[i * 4 + shape.partner]
+      if (p >= 0 && nb[p * 4 + oppositeSide(shape.heading)] < 0) ok |= 1 << oppositeSide(shape.partner)
+      accept[i] = ok
+      junction[i] = shape.junction || shape.end ? 1 : 0
+    } else {
+      const legal = (1 << rightOfSide(shape.inV)) | (1 << rightOfSide(shape.inH))
+      avenue[i] = legal
+      let ok = legal
+      // In from a side street (not an avenue) joining an outer side.
+      for (const o of [oppositeSide(shape.inV), oppositeSide(shape.inH)]) {
+        const j = nb[i * 4 + o]
+        if (j < 0) continue
+        const k = shapes.get(keys[j])?.kind
+        if (k === 'street' || k === 'plaza') ok |= 1 << oppositeSide(o)
+      }
+      accept[i] = ok
+      junction[i] = 1
+    }
+  }
+  return { keys, index, cx, cz, nb, degree, crossing, spawnable, accept, avenue, junction }
 }
 
 /**
@@ -174,14 +219,34 @@ function mirroredCorner(c: number, dir: Dir): number {
 }
 
 /**
- * Pedestrian waypoints: the centre of every free pavement cell (not under a model, not a road or a
- * rail) and the four sidewalk corners of every road cell that is not a level crossing (people keep
- * off rails). Links follow the sidewalks: along a closed side of a road cell, across to the touching
- * corner of the next road cell, from a closed side to the pavement cell beyond it, and between
- * pavement cells. A road is crossed only at a junction (a road cell with 3+ arms), straight across
- * one of its arms; never in the middle of a block.
+ * Which sidewalk corners of a road cell people use (bit per corner, 0 NW 1 NE 2 SE 3 SW): all four on
+ * a street or a plaza; on an avenue half the two on its outer (kerb) side; in a box quarter the one on
+ * the outside of the box.
  */
-function buildPedGraph(city: CityState, sizeOf: SizeOf, roads: RoadNet): { graph: PedGraph; pavementCells: number } {
+function liveCorners(shape: RoadShape | undefined): number {
+  if (!shape || shape.kind === 'street' || shape.kind === 'plaza') return 15
+  // Side d runs from corner d to corner d + 1.
+  const sideCorners = (d: Side) => (1 << d) | (1 << ((d + 1) & 3))
+  if (shape.kind === 'avenue') return sideCorners(oppositeSide(shape.partner))
+  return sideCorners(oppositeSide(shape.inV)) & sideCorners(oppositeSide(shape.inH))
+}
+
+/**
+ * Pedestrian waypoints: the centre of every free pavement cell (not under a model, not a road or a
+ * rail) and the sidewalk corners of every road cell that is not a level crossing (see `liveCorners`;
+ * people keep off rails). Links follow the sidewalks: along a closed side of a road cell (on into the
+ * next cell along it where this cell's corner would be mid-road, as across the end of an avenue),
+ * across to the touching corner of the next road cell, from a closed side to the pavement cell beyond
+ * it, and between pavement cells. A road is crossed only on a zebra: at a street junction (a road cell
+ * with 3+ arms) straight across one of its arms; at an avenue junction across the whole avenue, and
+ * across the side road; across the arms of an intersection box. Never in the middle of a block.
+ */
+function buildPedGraph(
+  city: CityState,
+  sizeOf: SizeOf,
+  roads: RoadNet,
+  shapes: Map<string, RoadShape>,
+): { graph: PedGraph; pavementCells: number } {
   const rails = new Set(city.rails ?? [])
   const roadSet = roads.index
   const covered = city.placements.length > 0 ? coveredCells(city, sizeOf) : new Set<string>()
@@ -209,12 +274,15 @@ function buildPedGraph(city: CityState, sizeOf: SizeOf, roads: RoadNet): { graph
     const { cx, cz } = parseKey(k)
     node(`p${k}`, cellCenter(cx), cellCenter(cz), PAVEMENT_Y, HALF - 1.4)
   }
-  const walkRoad = (i: number) => roads.crossing[i] === 0
-  for (let i = 0; i < roads.keys.length; i++) {
-    if (!walkRoad(i)) continue
+  const nRoads = roads.keys.length
+  const live = new Uint8Array(nRoads)
+  for (let i = 0; i < nRoads; i++) live[i] = roads.crossing[i] === 0 ? liveCorners(shapes.get(roads.keys[i])) : 0
+  for (let i = 0; i < nRoads; i++) {
     const x = cellCenter(roads.cx[i])
     const z = cellCenter(roads.cz[i])
-    for (let c = 0; c < 4; c++) node(`r${roads.keys[i]}:${c}`, x + CORNER_SX[c] * CORNER, z + CORNER_SZ[c] * CORNER, SIDEWALK_Y, 0.25)
+    for (let c = 0; c < 4; c++) {
+      if (live[i] & (1 << c)) node(`r${roads.keys[i]}:${c}`, x + CORNER_SX[c] * CORNER, z + CORNER_SZ[c] * CORNER, SIDEWALK_Y, 0.25)
+    }
   }
 
   const links: number[][] = keys.map(() => [])
@@ -235,29 +303,57 @@ function buildPedGraph(city: CityState, sizeOf: SizeOf, roads: RoadNet): { graph
     link(a, index.get(`p${roadKey(cx + 1, cz)}`))
     link(a, index.get(`p${roadKey(cx, cz + 1)}`))
   }
-  for (let i = 0; i < roads.keys.length; i++) {
-    if (!walkRoad(i)) continue
-    const corner = (c: number) => index.get(`r${roads.keys[i]}:${c}`)
+  /** Waypoint of corner `c` of road cell `i`, if people use it. */
+  const cornerOf = (i: number, c: number) => (live[i] & (1 << c) ? index.get(`r${roads.keys[i]}:${c}`) : undefined)
+  for (let i = 0; i < nRoads; i++) {
+    if (live[i] === 0) continue
+    const corner = (c: number) => cornerOf(i, c)
+    const shape = shapes.get(roads.keys[i])
     for (let d = 0; d < 4; d++) {
       const dir = d as Dir
+      // Side d runs from corner c0 to corner c1, heading rightOf(d).
       const c0 = d
       const c1 = (d + 1) & 3
       const j = roads.nb[i * 4 + d]
       if (j < 0) {
-        // Closed side: walk along its sidewalk, and step onto the pavement beyond.
-        link(corner(c0), corner(c1))
+        // Closed side: walk along its sidewalk, and step onto the pavement beyond. Where one of its
+        // corners is mid-road (an avenue's end, a box's side), the sidewalk runs on along the same side
+        // of the next cell to that cell's far corner.
+        const a = corner(c0)
+        const b = corner(c1)
+        if (a !== undefined && b !== undefined) link(a, b)
+        else if (a !== undefined) {
+          const k = roads.nb[i * 4 + rightOfSide(dir)]
+          if (k >= 0 && roads.nb[k * 4 + d] < 0) link(a, cornerOf(k, c1))
+        } else if (b !== undefined) {
+          const k = roads.nb[i * 4 + ((d + 3) & 3)]
+          if (k >= 0 && roads.nb[k * 4 + d] < 0) link(b, cornerOf(k, c0))
+        }
         const p = index.get(`p${roadKey(roads.cx[i] + DX[d], roads.cz[i] + DZ[d])}`)
-        link(corner(c0), p)
-        link(corner(c1), p)
+        link(a, p)
+        link(b, p)
         continue
       }
-      // Open side: a zebra across this arm at a junction only.
-      if (roads.degree[i] >= 3) link(corner(c0), corner(c1), true)
+      // Open side: zebras.
+      if (!shape || shape.kind === 'street' || shape.kind === 'plaza') {
+        // Across this arm, at a junction only.
+        if (roads.degree[i] >= 3) link(corner(c0), corner(c1), true)
+      } else if (shape.kind === 'avenue' && shape.junction) {
+        if (d === oppositeSide(shape.partner)) link(corner(c0), corner(c1), true) // across the side road
+        else if (d !== shape.partner) {
+          // Across the whole avenue along this edge, to the partner's kerb corner on it.
+          const pj = roads.nb[i * 4 + shape.partner]
+          if (pj >= 0) link(corner(c0) ?? corner(c1), cornerOf(pj, c0) ?? cornerOf(pj, c1), true)
+        }
+      } else if (shape.kind === 'box' && shape.zebra && (d === oppositeSide(shape.inV) || d === oppositeSide(shape.inH))) {
+        // Across this arm of the box, to the other box quarter on this side.
+        const other = roads.nb[i * 4 + (d === oppositeSide(shape.inV) ? shape.inH : shape.inV)]
+        if (other >= 0) link(corner(c0) ?? corner(c1), cornerOf(other, c0) ?? cornerOf(other, c1), true)
+      }
       // The touching corners of the next road cell continue the sidewalk.
-      if (walkRoad(j)) {
-        const other = (c: number) => index.get(`r${roads.keys[j]}:${mirroredCorner(c, dir)}`)
-        link(corner(c0), other(c0))
-        link(corner(c1), other(c1))
+      if (live[j] !== 0) {
+        link(corner(c0), cornerOf(j, mirroredCorner(c0, dir)))
+        link(corner(c1), cornerOf(j, mirroredCorner(c1, dir)))
       }
     }
   }
@@ -280,8 +376,9 @@ function buildPedGraph(city: CityState, sizeOf: SizeOf, roads: RoadNet): { graph
 }
 
 export function buildNetwork(city: CityState, sizeOf: SizeOf): NpcNetwork {
-  const roads = buildRoadNet(city)
-  const { graph: peds, pavementCells } = buildPedGraph(city, sizeOf, roads)
+  const shapes = deriveRoads(city.roads)
+  const roads = buildRoadNet(city, shapes)
+  const { graph: peds, pavementCells } = buildPedGraph(city, sizeOf, roads, shapes)
   const roadCells = roads.keys.length
   const carTarget = roads.spawnable.length === 0 ? 0 : Math.min(MAX_CARS, Math.floor(roadCells / ROADS_PER_CAR), Math.ceil(roads.spawnable.length / 2))
   const pedTarget =

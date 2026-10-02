@@ -1,5 +1,5 @@
 import { CELL } from '../city'
-import { cellCenter, laneCurve, newPose, opposite, polylinePose, type Dir, type Polyline, type Pose } from './geometry'
+import { cellCenter, laneCurve, leftOf, newPose, opposite, polylinePose, rightOf, type Dir, type Polyline, type Pose } from './geometry'
 import { MAX_TRAINS, ROAD_Y, type NpcNetwork, type RoadNet, type TrainLine } from './network'
 import { mulberry32, type Rng } from './rng'
 
@@ -26,6 +26,11 @@ export interface Car extends Pose {
   /** Heading when it entered the cell, heading it leaves by. */
   din: Dir
   dout: Dir
+  /** Lane offsets (LANE_OFFSETS indexes) it enters and leaves the cell by: 0 a street lane, 1 / 2 an avenue's inner / outer lane. */
+  oi: number
+  oo: number
+  /** Which avenue lane it keeps to: 0 inner, 1 outer (it moves out to turn right, in to turn left). */
+  lane: 0 | 1
   /** Distance travelled along the cell's lane curve. */
   s: number
   v: number
@@ -119,6 +124,8 @@ export class NpcSim {
   private readonly pedStyles: number
   private owner = new Int32Array(0)
   private trainNear = new Uint8Array(0)
+  /** Scratch list of ways out (chooseDout), so choosing allocates nothing. */
+  private readonly options = new Int8Array(4)
 
   constructor(options: NpcOptions = {}) {
     this.rng = mulberry32(options.seed ?? 1)
@@ -162,29 +169,66 @@ export class NpcSim {
 
   // ---- Cars ----------------------------------------------------------------------------------
 
-  private chooseDout(roads: RoadNet, cell: number, din: Dir): Dir {
+  /**
+   * A way out of `cell` for a car that came in heading `din` in avenue lane `lane`: a road neighbour
+   * that takes traffic heading that way (see `RoadNet.accept`), straight on twice as likely as a turn,
+   * never straight back. In an avenue lane, the inner lane does not turn right nor the outer lane
+   * left (unless there is no other way). No way out at all: back the way it came (a U-turn).
+   */
+  private chooseDout(roads: RoadNet, cell: number, din: Dir, lane: 0 | 1 = 1): Dir {
     const back = opposite(din)
-    let total = 0
-    for (let d = 0; d < 4; d++) if (d !== back && roads.nb[cell * 4 + d] >= 0) total += d === din ? 2 : 1
-    if (total === 0) return back // dead end: U-turn
-    let pick = this.rng() * total
+    const options = this.options
+    let count = 0
     for (let d = 0; d < 4; d++) {
-      if (d === back || roads.nb[cell * 4 + d] < 0) continue
-      pick -= d === din ? 2 : 1
-      if (pick < 0) return d as Dir
+      const next = roads.nb[cell * 4 + d]
+      if (d !== back && next >= 0 && roads.accept[next] & (1 << d)) options[count++] = d
     }
-    return din
+    if (count === 0) {
+      // Nothing takes traffic this way (an odd tangle): any road on, else a U-turn.
+      for (let d = 0; d < 4; d++) if (d !== back && roads.nb[cell * 4 + d] >= 0) options[count++] = d
+      if (count === 0) return back
+    }
+    if (roads.avenue[cell] & (1 << din)) {
+      const avoid = lane === 0 ? rightOf(din) : leftOf(din)
+      let kept = 0
+      for (let i = 0; i < count; i++) if (options[i] !== avoid) options[kept++] = options[i]
+      if (kept > 0) count = kept
+    }
+    let total = 0
+    for (let i = 0; i < count; i++) total += options[i] === din ? 2 : 1
+    let pick = this.rng() * total
+    for (let i = 0; i < count; i++) {
+      pick -= options[i] === din ? 2 : 1
+      if (pick < 0) return options[i] as Dir
+    }
+    return options[count - 1] as Dir
+  }
+
+  /** Lane offset index for heading `d` in `cell` (avenue lanes where that heading is an avenue's, else a street lane). */
+  private offset(roads: RoadNet, cell: number, d: Dir, lane: 0 | 1): number {
+    return roads.avenue[cell] & (1 << d) ? 1 + lane : 0
+  }
+
+  /** Picks the way out of the car's cell (and the lane it leaves in: out to turn right, in to turn left). */
+  private chooseExit(car: Car, roads: RoadNet): void {
+    car.dout = this.chooseDout(roads, car.cell, car.din, car.lane)
+    if (car.dout === rightOf(car.din)) car.lane = 1
+    else if (car.dout === leftOf(car.din)) car.lane = 0
+    car.oo = this.offset(roads, car.cell, car.dout, car.lane)
   }
 
   private placeCar(car: Car, roads: RoadNet, cell: number): void {
-    // Arrive from a random neighbour, then pick a way out as at any cell.
+    // Arrive from a random neighbour (one whose traffic may drive in), then pick a way out as at any cell.
     const from: Dir[] = []
-    for (let d = 0; d < 4; d++) if (roads.nb[cell * 4 + d] >= 0) from.push(d as Dir)
+    for (let d = 0; d < 4; d++) if (roads.nb[cell * 4 + d] >= 0 && roads.accept[cell] & (1 << opposite(d as Dir))) from.push(d as Dir)
+    if (from.length === 0) for (let d = 0; d < 4; d++) if (roads.nb[cell * 4 + d] >= 0) from.push(d as Dir)
     const back = from[Math.floor(this.rng() * from.length)] ?? 0
     car.cell = cell
     car.din = opposite(back)
-    car.dout = this.chooseDout(roads, cell, car.din)
-    car.s = this.rng() * laneCurve(car.din, car.dout).length * 0.5
+    car.lane = this.rng() < 0.5 ? 0 : 1
+    car.oi = this.offset(roads, cell, car.din, car.lane)
+    this.chooseExit(car, roads)
+    car.s = this.rng() * laneCurve(car.din, car.dout, car.oi, car.oo).length * 0.5
     car.v = 0
     car.stuck = 0
     car.ghost = 0
@@ -208,7 +252,7 @@ export class NpcSim {
   private spawnCar(roads: RoadNet): Car {
     const variant = Math.floor(this.rng() * this.carLengths.length)
     const car: Car = {
-      cell: 0, din: 0, dout: 0, s: 0, v: 0, x: 0, z: 0, hx: 0, hz: -1,
+      cell: 0, din: 0, dout: 0, oi: 0, oo: 0, lane: 1, s: 0, v: 0, x: 0, z: 0, hx: 0, hz: -1,
       cruise: CAR_CRUISE + (this.rng() - 0.5) * 2 * CAR_CRUISE_SPREAD,
       variant,
       length: this.carLengths[variant],
@@ -227,16 +271,21 @@ export class NpcSim {
       const key = old?.roads.keys[car.cell]
       const cell = key === undefined ? undefined : roads.index.get(key)
       if (cell === undefined || roads.degree[cell] === 0) continue
+      const oldCell = car.cell
       car.cell = cell
       const back = opposite(car.din)
-      if (roads.nb[cell * 4 + back] < 0) {
-        this.placeCar(car, roads, cell) // the road it came from is gone
+      // The cell changed shape (a street widened into an avenue...): lanes are re-picked.
+      const reshaped = !old || old.roads.accept[oldCell] !== roads.accept[cell] || old.roads.avenue[oldCell] !== roads.avenue[cell]
+      if (roads.nb[cell * 4 + back] < 0 || (reshaped && !(roads.accept[cell] & (1 << car.din)))) {
+        this.placeCar(car, roads, cell) // the road it came from is gone, or it would now drive the wrong way
       } else {
         const turnBack = car.dout === back
-        const deadEnd = this.chooseDout(roads, cell, car.din) === back
-        const valid = turnBack ? deadEnd : roads.nb[cell * 4 + car.dout] >= 0
-        if (!valid) car.dout = this.chooseDout(roads, cell, car.din)
-        car.s = Math.min(car.s, laneCurve(car.din, car.dout).length - 0.01)
+        const deadEnd = this.chooseDout(roads, cell, car.din, car.lane) === back
+        const valid = turnBack ? deadEnd : roads.nb[cell * 4 + car.dout] >= 0 && (roads.accept[roads.nb[cell * 4 + car.dout]] & (1 << car.dout)) !== 0
+        if (reshaped) car.oi = this.offset(roads, cell, car.din, car.lane)
+        if (!valid) this.chooseExit(car, roads)
+        else if (reshaped) car.oo = this.offset(roads, cell, car.dout, car.lane)
+        car.s = Math.min(car.s, laneCurve(car.din, car.dout, car.oi, car.oo).length - 0.01)
       }
       kept.push(car)
     }
@@ -245,7 +294,7 @@ export class NpcSim {
   }
 
   private carPose(car: Car, roads: RoadNet): void {
-    polylinePose(laneCurve(car.din, car.dout), car.s, tmpPose)
+    polylinePose(laneCurve(car.din, car.dout, car.oi, car.oo), car.s, tmpPose)
     car.x = cellCenter(roads.cx[car.cell]) + tmpPose.x
     car.z = cellCenter(roads.cz[car.cell]) + tmpPose.z
     car.hx = tmpPose.hx
@@ -260,11 +309,11 @@ export class NpcSim {
     const cars = this.cars
     for (let i = 0; i < cars.length; i++) {
       const c = cars[i].cell
-      if (roads.degree[c] >= 3 && owner[c] < 0) owner[c] = i
+      if (roads.junction[c] && owner[c] < 0) owner[c] = i
     }
     for (let i = 0; i < cars.length; i++) {
       const car = cars[i]
-      const curve = laneCurve(car.din, car.dout)
+      const curve = laneCurve(car.din, car.dout, car.oi, car.oo)
       let free = Infinity
       let waiting = false
       if (car.ghost <= 0) {
@@ -305,7 +354,7 @@ export class NpcSim {
             free = toEdge
             waiting = true
           }
-        } else if (car.ghost <= 0 && roads.degree[next] >= 3 && next !== car.cell) {
+        } else if (car.ghost <= 0 && roads.junction[next] && next !== car.cell) {
           const o = owner[next]
           if (o >= 0 && o !== i) {
             if (toEdge < free) {
@@ -340,8 +389,9 @@ export class NpcSim {
         }
         car.cell = into
         car.din = car.dout
-        car.dout = this.chooseDout(roads, into, car.din)
-        len = laneCurve(car.din, car.dout).length
+        car.oi = car.oo // the lane it left by is the lane it comes in by
+        this.chooseExit(car, roads)
+        len = laneCurve(car.din, car.dout, car.oi, car.oo).length
       }
       this.carPose(car, roads)
     }

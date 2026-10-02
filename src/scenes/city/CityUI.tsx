@@ -12,6 +12,7 @@ import { useApp } from '../../state/useApp'
 import { useCityEditor, type PaintLayer } from '../../state/useCityEditor'
 import { useEditor, workshopHasBricks } from '../../state/useEditor'
 import { useGame } from '../../state/useGame'
+import { useRoadBrush } from '../../state/useRoadBrush'
 import { KIND_ICON } from '../../ui/blueprintKinds'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import ErrorBadge from '../../ui/ErrorBadge'
@@ -33,10 +34,54 @@ const TERRAIN_BRUSH_UI: Array<{ brush: TerrainBrush; icon: string; labelKey: TKe
   { brush: 'grass', icon: '🟩', labelKey: 'terrainGrass' },
 ]
 
+/** A road seen from above: 4 lanes (double yellow centre, dashed lane lines) or 2 (one dashed centre line). */
+function RoadBrushIcon({ lanes }: { lanes: 2 | 4 }) {
+  const w = lanes === 4 ? 18 : 10
+  const x0 = 12 - w / 2
+  return (
+    <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x={x0 - 1.5} y="1" width={w + 3} height="22" rx="2" fill="#c9c5bb" />
+      <rect x={x0} y="1" width={w} height="22" fill="#4a4f57" />
+      {lanes === 4 ? (
+        <>
+          <rect x="11" y="1" width="0.8" height="22" fill="#f2c230" />
+          <rect x="12.2" y="1" width="0.8" height="22" fill="#f2c230" />
+          {[7, 17].map((x) => [3, 10, 17].map((y) => <rect key={`${x}-${y}`} x={x - 0.4} y={y} width="0.8" height="4" fill="#f4f4f4" />))}
+        </>
+      ) : (
+        [3, 10, 17].map((y) => <rect key={y} x="11.6" y={y} width="0.8" height="4" fill="#f4f4f4" />)
+      )}
+    </svg>
+  )
+}
+
+/** The road tool's brush: a 4-lane avenue (2 cells wide, the default) or a 2-lane street. Painting and erasing use it. */
+function RoadBrushToggle() {
+  const t = useT()
+  const brush = useRoadBrush((s) => s.brush)
+  const setBrush = useRoadBrush((s) => s.setBrush)
+  return (
+    <>
+      {(['avenue', 'street'] as const).map((b) => (
+        <button
+          key={b}
+          className="bt-btn bt-icon-btn bt-city-subtool"
+          data-testid={`city-road-brush-${b}`}
+          aria-label={t(b === 'avenue' ? 'cityBrushAvenue' : 'cityBrushStreet')}
+          aria-pressed={brush === b}
+          onClick={() => setBrush(b)}
+        >
+          <RoadBrushIcon lanes={b === 'avenue' ? 4 : 2} />
+        </button>
+      ))}
+    </>
+  )
+}
+
 /**
  * Left column, top: the painting tools (roads, rails, terrain), each followed while it is on by its
- * own choices (the 🧽 eraser; the terrain brushes), then undo / redo. Scrolls when it is taller than
- * the screen.
+ * own choices (the 🧽 eraser and the avenue / street brush for roads; the terrain brushes), then
+ * undo / redo. Scrolls when it is taller than the screen.
  */
 function CityToolbar() {
   const t = useT()
@@ -74,6 +119,7 @@ function CityToolbar() {
               🧽
             </button>
           )}
+          {paintLayer === layer && layer === 'road' && <RoadBrushToggle />}
           {paintLayer === layer &&
             layer === 'terrain' &&
             TERRAIN_BRUSH_UI.map(({ brush, icon: brushIcon, labelKey: brushKey }) => (

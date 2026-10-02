@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { CELL } from '../../core/city'
 import { parseKey } from '../../core/cellGraph'
+import { deriveRoads } from '../../core/avenues'
 import { railTileAt, type RailTile } from '../../core/rails'
 import type { Rot } from '../../core/types'
 import { useInstanceCapacity } from '../../render/instanceCapacity'
@@ -37,7 +38,8 @@ const RAIL_H = 0.3
 const SLEEPER_STEP = 1
 const CURVE_SEGMENTS = 10
 
-type TrackTile = RailTile | 'crossing'
+/** `crossing`: a level crossing with a street; `crossing_av`: with one half of an avenue (drawn with its partner +Z). */
+type TrackTile = RailTile | 'crossing' | 'crossing_av'
 
 interface Box {
   center: [number, number, number]
@@ -122,19 +124,21 @@ function tileBoxes(tile: TrackTile): Box[] {
       return [...straightBoxes(-HALF, HALF, BALLAST_H, true), ...turned(straightBoxes(GAUGE_HALF, HALF, BALLAST_H, true), 1)]
     case 'cross':
       return [...straightBoxes(-HALF, HALF, BALLAST_H, true), ...turned(straightBoxes(-HALF, HALF, BALLAST_H, true), 1)]
-    case 'crossing': {
+    case 'crossing':
+    case 'crossing_av': {
       // Sunk in the road: a dark panel flush over the asphalt, the rails on it, stripes either side.
       const panelTop = 0.16
       const boxes: Box[] = [{ center: [0, panelTop / 2, 0], size: [BALLAST_W, panelTop, CELL], color: PANEL }]
       const ry = panelTop + RAIL_H / 2 - 0.05
       for (const x of [-GAUGE_HALF, GAUGE_HALF]) boxes.push({ center: [x, ry, 0], size: [RAIL_W, RAIL_H, CELL], color: STEEL })
-      // Warning stripes across the road (which runs along X here), between the sidewalks.
-      const across = 5.4
-      const dashes = 6
-      const dash = across / dashes
+      // Warning stripes across the road (which runs along X here): between the sidewalks of a street,
+      // from the kerb (-Z) to the centre line (+Z edge) on an avenue half.
+      const [z0, z1] = tile === 'crossing' ? [-2.7, 2.7] : [-2.7, HALF]
+      const dashes = tile === 'crossing' ? 6 : 7
+      const dash = (z1 - z0) / dashes
       for (const x of [-3.2, 3.2]) {
         for (let i = 0; i < dashes; i++) {
-          const z = -across / 2 + dash * (i + 0.5)
+          const z = z0 + dash * (i + 0.5)
           boxes.push({ center: [x, 0.13, z], size: [0.5, 0.06, dash], color: i % 2 === 0 ? STRIPE_RED : STRIPE_WHITE })
         }
       }
@@ -210,14 +214,22 @@ export default function Rails({ rails, roads, shadows = true }: { rails: string[
   const byTile = useMemo(() => {
     const set = new Set(rails)
     const roadSet = new Set(roads)
+    const shapes = roads.some((k) => set.has(k)) ? deriveRoads(roadSet) : null
     const out = new Map<TrackTile, TileInstance[]>()
     for (const key of set) {
       const { cx, cz } = parseKey(key)
       const { tile, rot } = railTileAt(set, cx, cz)
-      const kind: TrackTile = roadSet.has(key) ? 'crossing' : tile
+      const road = shapes?.get(key)
+      let kind: TrackTile = tile
+      let r: Rot = rot
+      if (road?.kind === 'avenue') {
+        // Turned so the drawn partner side (+Z) faces the avenue's other half.
+        kind = 'crossing_av'
+        r = ((2 - road.partner + 4) & 3) as Rot
+      } else if (road) kind = 'crossing'
       let list = out.get(kind)
       if (!list) out.set(kind, (list = []))
-      list.push({ cx, cz, rot })
+      list.push({ cx, cz, rot: r })
     }
     return [...out]
   }, [rails, roads])

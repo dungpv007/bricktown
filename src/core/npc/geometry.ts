@@ -28,6 +28,16 @@ export const HALF = CELL / 2
  * asphalt between the sidewalks is 5.5 studs wide, so a car up to ~2.5 studs wide fits its lane.
  */
 export const LANE = 1.35
+/**
+ * Avenue lanes (right-hand traffic, two per direction): each half of an avenue carries one direction,
+ * the centre line on its left edge (HALF left of the cell centre) and a 1.25-stud kerb on the right.
+ * The asphalt between is split into two lanes; these are their centres, measured to the driver's right
+ * of the cell centre: inner (next to the centre line), outer (next to the kerb).
+ */
+const AVENUE_LANE_W = (2 * HALF - 1.25) / 2
+export const AVENUE_LANES: readonly [number, number] = [-HALF + AVENUE_LANE_W / 2, -HALF + (AVENUE_LANE_W * 3) / 2]
+/** A lane offset by index: 0 a street's lane (LANE), 1 an avenue's inner lane, 2 its outer lane. */
+export const LANE_OFFSETS: readonly number[] = [LANE, AVENUE_LANES[0], AVENUE_LANES[1]]
 
 /** A sampled pose: position (studs) and unit heading on the ground plane. */
 export interface Pose {
@@ -92,26 +102,34 @@ const KAPPA = 0.5523
 
 /**
  * A car's path through one road cell, entering while heading `din` and leaving heading `dout`, in
- * the cell's own frame (origin at its centre). It starts in the right-hand lane at the side it
- * enters by and ends in the right-hand lane of the side it leaves by: a straight, a tight right
- * turn, a wide left turn, or a U-turn (dout = opposite of din, a dead end) back out the way it came.
+ * the cell's own frame (origin at its centre). It starts `offIn` to the right of the centre of the side
+ * it enters by and ends `offOut` to the right of the centre of the side it leaves by (see
+ * LANE_OFFSETS): a straight (an S-bend when the offsets differ), a right turn, a left turn, or a U-turn
+ * (dout = opposite of din, a dead end) back out the way it came. Turns are quarter ellipses round the
+ * corner where the entry and exit lanes meet.
  */
-function buildLaneCurve(din: Dir, dout: Dir): Polyline {
+function buildLaneCurve(din: Dir, dout: Dir, offIn = LANE, offOut = LANE): Polyline {
   const r0 = rightOf(din)
   const r1 = rightOf(dout)
-  const p0x = -DX[din] * HALF + DX[r0] * LANE
-  const p0z = -DZ[din] * HALF + DZ[r0] * LANE
-  const p3x = DX[dout] * HALF + DX[r1] * LANE
-  const p3z = DZ[dout] * HALF + DZ[r1] * LANE
-  let k: number
-  if (dout === din) k = (2 * HALF) / 3
-  else if (dout === r0) k = KAPPA * (HALF - LANE)
-  else if (dout === leftOf(din)) k = KAPPA * (HALF + LANE)
-  else k = HALF * 1.2 // U-turn: loops in towards the cell centre and back
-  const p1x = p0x + DX[din] * k
-  const p1z = p0z + DZ[din] * k
-  const p2x = p3x - DX[dout] * k
-  const p2z = p3z - DZ[dout] * k
+  const p0x = -DX[din] * HALF + DX[r0] * offIn
+  const p0z = -DZ[din] * HALF + DZ[r0] * offIn
+  const p3x = DX[dout] * HALF + DX[r1] * offOut
+  const p3z = DZ[dout] * HALF + DZ[r1] * offOut
+  // Handle lengths along the entry heading (k0) and back from the exit (k1).
+  let k0: number
+  let k1: number
+  if (dout === din) k0 = k1 = (2 * HALF) / 3
+  else if (dout === r0) {
+    k0 = KAPPA * (HALF - offOut)
+    k1 = KAPPA * (HALF - offIn)
+  } else if (dout === leftOf(din)) {
+    k0 = KAPPA * (HALF + offOut)
+    k1 = KAPPA * (HALF + offIn)
+  } else k0 = k1 = HALF * 1.2 // U-turn: loops in towards the cell centre and back
+  const p1x = p0x + DX[din] * k0
+  const p1z = p0z + DZ[din] * k0
+  const p2x = p3x - DX[dout] * k1
+  const p2z = p3z - DZ[dout] * k1
   const xs: number[] = []
   const zs: number[] = []
   for (let i = 0; i <= LANE_SAMPLES; i++) {
@@ -126,11 +144,19 @@ function buildLaneCurve(din: Dir, dout: Dir): Polyline {
   return polyline(xs, zs)
 }
 
+const N_OFF = LANE_OFFSETS.length
 const LANE_CURVES: Polyline[] = []
-for (let din = 0; din < 4; din++) for (let dout = 0; dout < 4; dout++) LANE_CURVES.push(buildLaneCurve(din as Dir, dout as Dir))
+for (let din = 0; din < 4; din++)
+  for (let dout = 0; dout < 4; dout++)
+    for (let i = 0; i < N_OFF; i++)
+      for (let o = 0; o < N_OFF; o++) LANE_CURVES.push(buildLaneCurve(din as Dir, dout as Dir, LANE_OFFSETS[i], LANE_OFFSETS[o]))
 
-/** The shared lane curve for entering heading `din` and leaving heading `dout` (never mutate it). */
-export const laneCurve = (din: Dir, dout: Dir): Polyline => LANE_CURVES[din * 4 + dout]
+/**
+ * The shared lane curve for entering heading `din` in lane `offIn` and leaving heading `dout` in lane
+ * `offOut` (indexes into LANE_OFFSETS; default: a street's lane). Never mutate it.
+ */
+export const laneCurve = (din: Dir, dout: Dir, offIn = 0, offOut = 0): Polyline =>
+  LANE_CURVES[((din * 4 + dout) * N_OFF + offIn) * N_OFF + offOut]
 
 /** Centre of cell (cx, cz) in studs. */
 export const cellCenter = (c: number): number => (c + 0.5) * CELL
