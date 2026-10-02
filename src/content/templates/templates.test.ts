@@ -14,6 +14,10 @@ const MAX_BRICKS: Record<string, number> = {
   house_small: 120, house_blue: 220, house_tall: 220,
   restaurant: 220, garage: 220, fire_station: 220, police_station: 220,
   robot: 120, rocket: 250, police_hq: 300, skyscraper: 400,
+  // Living City: town shops ≤ 250, towers ≤ 400, park props ≤ 60, vehicles ≤ 80.
+  sushi_restaurant: 250, bakery: 250, toy_shop: 250, grocery: 250, apartment: 400, office_tower: 400,
+  fountain: 60, playground: 60, flower_bed: 60, pine_tree: 60, round_tree: 60,
+  train_engine: 80, train_carriage: 80, bus: 80, taxi: 80,
 }
 
 const top = (b: Brick) => b.y + PART_BY_ID[b.p].h
@@ -28,7 +32,7 @@ const stepOf = (t: Template, b: Brick) => t.steps.findIndex((step) => step.inclu
 const MAX_STEP_SIZE = 6
 
 describe('templates', () => {
-  it('ships the Phase 1 templates with unique ids, easiest first', () => {
+  it('ships the templates with unique ids, easiest first', () => {
     const ids = TEMPLATES.map((t) => t.id)
     expect(new Set(ids).size).toBe(ids.length)
     expect([...ids].sort()).toEqual(Object.keys(MAX_BRICKS).sort())
@@ -71,7 +75,8 @@ describe('templates', () => {
           expect(b.z + fz).toBeLessThanOrEqual(t.baseplate.d)
         }
         if (t.kind === 'building') expect(t.bricks.length).toBeLessThanOrEqual(400)
-        if (t.kind === 'vehicle') expect(t.bricks.length).toBeLessThanOrEqual(60)
+        if (t.kind === 'vehicle') expect(t.bricks.length).toBeLessThanOrEqual(80)
+        if (t.kind === 'prop') expect(t.bricks.length).toBeLessThanOrEqual(120)
       })
     })
   }
@@ -259,5 +264,79 @@ describe('templates', () => {
     expect(getTemplate('police_hq')?.tags).toContain('police')
     expect(getTemplate('police_car')?.tags).toContain('police')
     expect(getTemplate('fire_truck')?.tags).toContain('fire')
+  })
+
+  describe('living city', () => {
+    const kinds: Record<string, [Template['kind'], number, number]> = {
+      sushi_restaurant: ['building', 16, 16], bakery: ['building', 16, 16], toy_shop: ['building', 16, 16],
+      grocery: ['building', 16, 16], apartment: ['building', 16, 16], office_tower: ['building', 16, 16],
+      fountain: ['prop', 8, 8], playground: ['prop', 8, 8], flower_bed: ['prop', 8, 8], pine_tree: ['prop', 8, 8],
+      round_tree: ['prop', 8, 8], train_engine: ['vehicle', 8, 16], train_carriage: ['vehicle', 8, 16],
+      bus: ['vehicle', 8, 16], taxi: ['vehicle', 8, 16],
+    }
+    const extent = (t: Template, axis: 'x' | 'z') => {
+      const lo = Math.min(...t.bricks.map((b) => b[axis]))
+      const hi = Math.max(...t.bricks.map((b) => b[axis] + footprint(PART_BY_ID[b.p], b.r)[axis === 'x' ? 'fx' : 'fz']))
+      return hi - lo
+    }
+
+    it('has the town templates with their kind and plate size', () => {
+      for (const [id, [kind, w, d]] of Object.entries(kinds)) {
+        const t = getTemplate(id)
+        expect(t, id).toBeDefined()
+        expect(t!.kind, id).toBe(kind)
+        expect([t!.baseplate.w, t!.baseplate.d], id).toEqual([w, d])
+      }
+    })
+
+    it('shops: a printed sign board, a shopkeeper and an awning; the sushi restaurant has its chef and fish', () => {
+      for (const [id, board] of [
+        ['sushi_restaurant', 'board_sushi_1x6'], ['bakery', 'board_bakery_1x6'], ['toy_shop', 'board_toys_1x6'], ['grocery', 'board_grocery_1x6'],
+      ]) {
+        const t = getTemplate(id)!
+        expect(t.tags, id).toContain('shop')
+        expect(t.bricks.some((b) => b.p === board), id).toBe(true)
+        expect(t.bricks.filter((b) => b.p === 'slope_2x2' && b.r === 2).length, id).toBeGreaterThanOrEqual(6)
+        expect(figures(t).length, id).toBeGreaterThanOrEqual(2)
+      }
+      const sushi = getTemplate('sushi_restaurant')!
+      expect(sushi.tags).toContain('restaurant')
+      expect(figures(sushi).filter((f) => f.fig?.hat === 'chef')).toHaveLength(1)
+      expect(sushi.bricks.filter((b) => b.p === 'print_fish_1x1').length).toBeGreaterThanOrEqual(4)
+    })
+
+    it('towers: the apartment has balconies on six floors, the office tower is a stepped glass tower', () => {
+      const apt = getTemplate('apartment')!
+      expect(new Set(apt.bricks.filter((b) => b.p === 'fence_1x4').map((b) => b.y)).size).toBeGreaterThanOrEqual(5)
+      expect(Math.max(...apt.bricks.map(top))).toBeGreaterThanOrEqual(60)
+      const office = getTemplate('office_tower')!
+      const glass = office.bricks.filter((b) => b.p.startsWith('window_') && PART_BY_ID[b.p].h === 9)
+      expect(new Set(glass.map((b) => b.y)).size).toBeGreaterThanOrEqual(8)
+      expect(Math.max(...office.bricks.map(top))).toBeLessThanOrEqual(MAX_HEIGHT_PLATES)
+    })
+
+    it('trains: tagged train, at most 6 studs wide and 12-16 long, on wheels on the ground', () => {
+      for (const id of ['train_engine', 'train_carriage']) {
+        const t = getTemplate(id)!
+        expect(t.tags, id).toContain('train')
+        expect(extent(t, 'x'), id).toBeLessThanOrEqual(6)
+        expect(extent(t, 'z'), id).toBeGreaterThanOrEqual(12)
+        expect(extent(t, 'z'), id).toBeLessThanOrEqual(16)
+        const wheels = t.bricks.filter((b) => b.p === 'wheel_small')
+        expect(wheels.length, id).toBeGreaterThanOrEqual(4)
+        expect(wheels.every((w) => w.y === 0), id).toBe(true)
+      }
+      expect(TEMPLATES.filter((t) => t.tags.includes('train')).map((t) => t.id).sort()).toEqual(['train_carriage', 'train_engine'])
+    })
+
+    it('bus and taxi: road vehicles (not trains) that fit a city cell across', () => {
+      for (const id of ['bus', 'taxi']) {
+        const t = getTemplate(id)!
+        expect(t.tags, id).not.toContain('train')
+        expect(extent(t, 'x'), id).toBeLessThanOrEqual(8)
+        expect(t.bricks.filter((b) => b.p === 'wheel_small').every((w) => w.y === 0), id).toBe(true)
+      }
+      expect(getTemplate('taxi')!.bricks.some((b) => b.p === 'board_taxi_1x2')).toBe(true)
+    })
   })
 })

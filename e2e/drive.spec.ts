@@ -320,6 +320,11 @@ test('drive: a vehicle blueprint without wheels cannot be picked', async ({ page
   await expect(card).toBeDisabled()
   await expect(card.getByTestId('veh-needs-wheels')).toBeVisible()
   await expect(page.getByTestId('veh-tpl:car')).toBeEnabled()
+  // Road vehicles only: the bus and the taxi drive, trains stay on their rails.
+  await expect(page.getByTestId('veh-tpl:bus')).toBeEnabled()
+  await expect(page.getByTestId('veh-tpl:taxi')).toBeEnabled()
+  await expect(page.getByTestId('veh-tpl:train_engine')).toHaveCount(0)
+  await expect(page.getByTestId('veh-tpl:train_carriage')).toHaveCount(0)
 })
 
 const blueprint = (id: string, bricks: unknown[]) => {

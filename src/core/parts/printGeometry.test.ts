@@ -79,6 +79,36 @@ describe('getPrintGeometry', () => {
     }
   })
 
+  it('prints a sign board on both big faces, upright, at the print aspect, reading left to right from each side', () => {
+    for (const part of PARTS.filter((p) => p.id.startsWith('board_'))) {
+      const g = getPrintGeometry(part.id)!
+      expect(g, part.id).not.toBeNull()
+      g.computeBoundingBox()
+      const bb = g.boundingBox!
+      const H = platesToWorld(part.h)
+      expect(bb.max.x - bb.min.x, part.id).toBeLessThanOrEqual(part.w)
+      expect(bb.max.y - bb.min.y, part.id).toBeLessThanOrEqual(H)
+      expect((bb.max.x - bb.min.x) / (bb.max.y - bb.min.y), part.id).toBeCloseTo(2, 4)
+      const p = attr(g, 'position')
+      const n = attr(g, 'normal')
+      const uv = attr(g, 'uv')
+      const { u0, u1, v1 } = printUv(part.print!)
+      let front = 0, back = 0
+      for (let i = 0; i < p.count; i++) {
+        const side = Math.sign(n.getZ(i))
+        expect(Math.abs(n.getZ(i)), part.id).toBeCloseTo(1, 6)
+        expect(Math.sign(p.getZ(i)), part.id).toBe(side)
+        if (side > 0) back++
+        else front++
+        if (p.getY(i) > 0) expect(uv.getY(i), part.id).toBeCloseTo(v1, 6)
+        // The viewer's left on that side is the print's left edge (u0).
+        const leftOfViewer = side > 0 ? p.getX(i) < 0 : p.getX(i) > 0
+        expect(uv.getX(i), part.id).toBeCloseTo(leftOfViewer ? u0 : u1, 6)
+      }
+      expect([front, back], part.id).toEqual([6, 6])
+    }
+  })
+
   it('puts the computer screen on the front (+Z) of the monitor, inside the part', () => {
     const part = getPart('computer_1x2')
     const g = getPrintGeometry('computer_1x2')!

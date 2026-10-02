@@ -12,7 +12,7 @@ import { getFigureGeometry } from './figureGeometry'
  * Each part is a single non-indexed BufferGeometry with flat-shaded `position` + `normal`.
  */
 
-const INSET = 0.01 // body shrink per side, leaves a gap between neighbours
+export const INSET = 0.01 // body shrink per side, leaves a gap between neighbours
 const SEGMENTS = 12 // cylinders / cones / spheres
 const STUD_RADIUS = 0.3
 const STUD_HEIGHT = 0.17

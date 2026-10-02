@@ -36,6 +36,7 @@ const SHAPE_EMOJI: Partial<Record<PartShape, string>> = {
 const PRINT_EMOJI: Record<string, string> = {
   police: '🚓', fire: '🚒', clock: '🕙', stop: '🛑', arrow: '➡️', menu: '📋', screen: '🖥️',
   robot_eyes: '🤖', number_112: '🔢', heart: '❤️', star: '⭐',
+  sushi: '🍣', bakery: '🥐', toys: '🧸', grocery: '🍎', taxi: '🚕', fish: '🐟',
 }
 
 const ICON = 44
