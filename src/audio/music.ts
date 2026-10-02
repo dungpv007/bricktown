@@ -20,8 +20,13 @@ import { currentAudioContext, onAudioStateChange } from './context'
  */
 
 export const MUSIC_URL = `${import.meta.env.BASE_URL}audio/music.m4a`
-/** Music level (0..1) under the sound effects. */
-export const MUSIC_VOLUME = 0.35
+/** Loudest music level (0..1, under the sound effects): the volume slider's top. The default 0.5 gives 0.35. */
+export const MUSIC_MAX = 0.7
+/** The gain the music plays at for a volume setting `volume` (0..1). */
+export const musicLevel = (volume: number): number => MUSIC_MAX * Math.min(1, Math.max(0, volume))
+const currentLevel = (): number => musicLevel(useApp.getState().musicVolume)
+/** Time constant (s) of the glide to a new volume: quick, but no zipper noise. */
+const VOLUME_GLIDE = 0.05
 const FADE_IN = 1.5
 const FADE_OUT = 0.3
 /** While ducked the music plays at this fraction of its level. */
@@ -103,9 +108,9 @@ function tryPlay(): void {
     const t = c.currentTime
     fade.gain.cancelScheduledValues(t)
     fade.gain.setValueAtTime(Math.max(0.0001, fade.gain.value), t)
-    fade.gain.linearRampToValueAtTime(MUSIC_VOLUME, t + FADE_IN)
+    fade.gain.linearRampToValueAtTime(currentLevel(), t + FADE_IN)
   } else {
-    el.volume = MUSIC_VOLUME // plain element: no fades or ducking
+    el.volume = currentLevel() // plain (iOS ignores it) element: no fades or ducking
   }
   playing = true
   try {
@@ -134,6 +139,29 @@ function pause(): void {
     }, FADE_OUT * 1000)
   } else {
     el.pause()
+  }
+}
+
+/**
+ * Glides the running music to the current volume setting, without restarting it. A no-op while
+ * nothing plays (a pending fade-out or pause must not be undone: the next play starts at the new level).
+ */
+function applyVolume(): void {
+  try {
+    const el = element
+    if (!playing || !el) return
+    const c = currentAudioContext()
+    if (fade && c && chainCtx === c) {
+      const t = c.currentTime
+      const g = fade.gain
+      g.cancelScheduledValues(t)
+      g.setValueAtTime(g.value, t)
+      g.setTargetAtTime(currentLevel(), t, VOLUME_GLIDE)
+    } else if (!routed) {
+      el.volume = currentLevel() // plain element; read-only on iOS, where routing is used anyway
+    }
+  } catch {
+    /* ignore */
   }
 }
 
@@ -221,6 +249,7 @@ export function installMusic(): void {
   })
   useApp.subscribe((s, prev) => {
     if (s.musicOn !== prev.musicOn) sync()
+    if (s.musicVolume !== prev.musicVolume) applyVolume()
   })
 }
 

@@ -16,6 +16,10 @@ export interface AppState {
   musicOn: boolean
   /** Sound effects on. */
   sfxOn: boolean
+  /** Background music volume, 0..1 (the 🎵 toggle stays the on/off switch). */
+  musicVolume: number
+  /** Sound effects volume, 0..1. */
+  sfxVolume: number
   /** Workshop colour picker folded into one button, per device class (unset: see `colorsCollapsed`). */
   colorsCollapsed: Partial<Record<DeviceClass, boolean>>
   setMode: (mode: Mode) => void
@@ -24,12 +28,22 @@ export interface AppState {
   setSlot: (slotId: SlotId) => void
   setMusicOn: (on: boolean) => void
   setSfxOn: (on: boolean) => void
+  setMusicVolume: (volume: number) => void
+  setSfxVolume: (volume: number) => void
   setColorsCollapsed: (deviceClass: DeviceClass, collapsed: boolean) => void
 }
 
 /** Whether the colour picker is folded on `deviceClass`: the kid's choice, else folded on portrait phones only. */
 export const colorsCollapsed = (s: Pick<AppState, 'colorsCollapsed'>, deviceClass: DeviceClass): boolean =>
   s.colorsCollapsed[deviceClass] ?? deviceClass === 'phonePortrait'
+
+export const DEFAULT_VOLUME = 0.5
+
+/** A volume clamped to 0..1; anything that is not a finite number becomes `fallback`. */
+export function normalizeVolume(value: unknown, fallback: number = DEFAULT_VOLUME): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.min(1, Math.max(0, value))
+}
 
 const noopStorage: StateStorage = {
   getItem: () => null,
@@ -62,7 +76,7 @@ const LANGS: readonly Lang[] = ['vi', 'en']
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal']
 const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
 
-type Prefs = Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'colorsCollapsed'>
+type Prefs = Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'musicVolume' | 'sfxVolume' | 'colorsCollapsed'>
 
 /**
  * Keeps only persisted preference values that are valid; anything else falls back to defaults.
@@ -80,6 +94,9 @@ export function sanitizePrefs(persisted: unknown): Partial<Prefs> {
   const sfxOn = typeof p.sfxOn === 'boolean' ? p.sfxOn : legacyOn
   if (musicOn !== undefined) out.musicOn = musicOn
   if (sfxOn !== undefined) out.sfxOn = sfxOn
+  // Saves from before the volume sliders have neither field: the defaults apply.
+  if (typeof p.musicVolume === 'number' && Number.isFinite(p.musicVolume)) out.musicVolume = normalizeVolume(p.musicVolume)
+  if (typeof p.sfxVolume === 'number' && Number.isFinite(p.sfxVolume)) out.sfxVolume = normalizeVolume(p.sfxVolume)
   if (typeof p.colorsCollapsed === 'object' && p.colorsCollapsed !== null) {
     const saved = p.colorsCollapsed as Record<string, unknown>
     const kept: Partial<Record<DeviceClass, boolean>> = {}
@@ -98,6 +115,8 @@ export const useApp = create<AppState>()(
       difficulty: 'easy',
       musicOn: true,
       sfxOn: true,
+      musicVolume: DEFAULT_VOLUME,
+      sfxVolume: DEFAULT_VOLUME,
       colorsCollapsed: {},
       setMode: (mode) => set({ mode }),
       setLang: (lang) => set({ lang }),
@@ -105,6 +124,8 @@ export const useApp = create<AppState>()(
       setSlot: (slotId) => set({ slotId }),
       setMusicOn: (musicOn) => set({ musicOn }),
       setSfxOn: (sfxOn) => set({ sfxOn }),
+      setMusicVolume: (volume) => set({ musicVolume: normalizeVolume(volume) }),
+      setSfxVolume: (volume) => set({ sfxVolume: normalizeVolume(volume) }),
       setColorsCollapsed: (deviceClass, collapsed) =>
         set((s) => ({ colorsCollapsed: { ...s.colorsCollapsed, [deviceClass]: collapsed } })),
     }),
@@ -117,6 +138,8 @@ export const useApp = create<AppState>()(
         slotId: s.slotId,
         musicOn: s.musicOn,
         sfxOn: s.sfxOn,
+        musicVolume: s.musicVolume,
+        sfxVolume: s.sfxVolume,
         colorsCollapsed: s.colorsCollapsed,
       }),
       merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),

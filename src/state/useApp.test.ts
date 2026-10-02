@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { colorsCollapsed, sanitizePrefs, useApp } from './useApp'
+import { colorsCollapsed, DEFAULT_VOLUME, normalizeVolume, sanitizePrefs, useApp } from './useApp'
 
 describe('sanitizePrefs', () => {
   it('keeps valid persisted values including the slot and both sound toggles', () => {
@@ -38,6 +38,40 @@ describe('sanitizePrefs', () => {
   })
 })
 
+describe('volumes', () => {
+  it('default to 0.5 (an old save without them loads unchanged)', () => {
+    expect(DEFAULT_VOLUME).toBe(0.5)
+    expect(useApp.getState().musicVolume).toBe(0.5)
+    expect(useApp.getState().sfxVolume).toBe(0.5)
+    expect(sanitizePrefs({ lang: 'en', musicOn: false })).toEqual({ lang: 'en', musicOn: false })
+    const merged = useApp.persist.getOptions().merge?.({ lang: 'en', musicOn: false }, useApp.getState())
+    expect(merged).toMatchObject({ musicVolume: 0.5, sfxVolume: 0.5 })
+  })
+  it('are clamped to 0..1 and non-numbers fall back to the default', () => {
+    expect(normalizeVolume(0.3)).toBe(0.3)
+    expect(normalizeVolume(-1)).toBe(0)
+    expect(normalizeVolume(7)).toBe(1)
+    expect(normalizeVolume('0.2')).toBe(0.5)
+    expect(normalizeVolume(NaN)).toBe(0.5)
+    expect(normalizeVolume(Infinity)).toBe(0.5)
+    expect(normalizeVolume(null, 0.8)).toBe(0.8)
+    expect(sanitizePrefs({ musicVolume: 0.2, sfxVolume: 3 })).toEqual({ musicVolume: 0.2, sfxVolume: 1 })
+    expect(sanitizePrefs({ musicVolume: -4 })).toEqual({ musicVolume: 0 })
+    expect(sanitizePrefs({ musicVolume: '0.2', sfxVolume: null })).toEqual({})
+    expect(sanitizePrefs({ musicVolume: NaN })).toEqual({})
+  })
+  it('the setters store a clamped value', () => {
+    const { setMusicVolume, setSfxVolume } = useApp.getState()
+    setMusicVolume(0.8)
+    setSfxVolume(2)
+    expect(useApp.getState().musicVolume).toBe(0.8)
+    expect(useApp.getState().sfxVolume).toBe(1)
+    setMusicVolume(-1)
+    expect(useApp.getState().musicVolume).toBe(0)
+    useApp.setState({ musicVolume: 0.5, sfxVolume: 0.5 })
+  })
+})
+
 describe('colour picker collapse', () => {
   it('defaults to collapsed on portrait phones only, and remembers a choice per device class', () => {
     const initial = useApp.getState().colorsCollapsed
@@ -55,7 +89,7 @@ describe('colour picker collapse', () => {
 
 describe('useApp persistence config', () => {
   const opts = useApp.persist.getOptions()
-  it('persists slotId, lang, difficulty, the two sound toggles and the colour picker state only', () => {
+  it('persists slotId, lang, difficulty, the two sound toggles, their volumes and the colour picker state only', () => {
     const state = useApp.getState()
     expect(opts.partialize?.(state)).toEqual({
       lang: 'vi',
@@ -63,6 +97,8 @@ describe('useApp persistence config', () => {
       slotId: 1,
       musicOn: true,
       sfxOn: true,
+      musicVolume: 0.5,
+      sfxVolume: 0.5,
       colorsCollapsed: {},
     })
   })

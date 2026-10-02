@@ -70,6 +70,25 @@ test('music and sound-effect toggles switch independently and persist across a r
   expect((await track).ok()).toBe(true)
 })
 
+test('the music volume set in the Sound dialog persists across a reload and the toggles stay in sync', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('audio-settings').click()
+  const slider = page.getByTestId('music-volume')
+  await expect(slider).toBeDisabled() // music starts off in the e2e storage state
+  await page.getByTestId('audio-music-on').click()
+  await expect(page.getByTestId('audio-music-on')).toHaveAttribute('aria-pressed', 'true')
+  await expect(slider).toBeEnabled()
+  await slider.fill('20')
+  await expect(slider).toHaveValue('20')
+  await page.getByTestId('audio-settings-close').click()
+  await expect(page.getByTestId('audio-settings-dialog')).toBeHidden()
+  await expect(page.getByTestId('music-toggle')).toHaveAttribute('aria-pressed', 'true') // the menu button followed
+  await page.reload()
+  await page.getByTestId('audio-settings').click()
+  await expect(page.getByTestId('music-volume')).toHaveValue('20')
+  await expect(page.getByTestId('sfx-volume')).toHaveValue('50') // untouched: the default
+})
+
 test.describe('install tip', () => {
   useFlags('bricktown-onboarded-v2')
 

@@ -6,6 +6,7 @@ import { snap } from '../audio/sfx'
 import { useApp } from '../state/useApp'
 import { useShareImport } from '../state/useShareImport'
 import { useT, type TKey } from './i18n'
+import AudioSettings from './AudioSettings'
 import InstallHint from './InstallHint'
 import MenuBackdrop from './MenuBackdrop'
 import Onboarding, { onboardingPending } from './Onboarding'
@@ -32,6 +33,7 @@ export default function MainMenu() {
   const setSfxOn = useApp((s) => s.setSfxOn)
   const saveWarning = usePersistStatus(persistWarning)
   const [slotsOpen, setSlotsOpen] = useState(false)
+  const [audioOpen, setAudioOpen] = useState(false)
   const [touring, setTouring] = useState(onboardingPending)
   // The share import dialogs (picker, preview, "added!") sit over the menu too: hold the town still under them.
   const importing = useShareImport((s) => s.pickerOpen || s.incoming !== null || s.done !== null)
@@ -77,7 +79,7 @@ export default function MainMenu() {
           aria-label={t('importShared')}
           onClick={() => useShareImport.getState().openPicker()}
         >
-          📥 {t('importShared')}
+          📥 <span className="bt-menu-import-label">{t('importShared')}</span>
         </button>
         <button
           className="bt-btn"
@@ -104,6 +106,14 @@ export default function MainMenu() {
         >
           {sfxOn ? '🔊' : '🔇'}
         </button>
+        <button
+          className="bt-btn"
+          data-testid="audio-settings"
+          aria-label={t('soundSettings')}
+          onClick={() => setAudioOpen(true)}
+        >
+          🎚️
+        </button>
         {saveWarning && (
           <span
             className="bt-warning"
@@ -116,6 +126,7 @@ export default function MainMenu() {
         )}
       </div>
       <InstallHint />
+      {audioOpen && <AudioSettings onClose={() => setAudioOpen(false)} />}
       {slotsOpen && <SlotMenu onClose={() => setSlotsOpen(false)} />}
       <Onboarding onDone={() => setTouring(false)} />
     </div>

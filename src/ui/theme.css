@@ -2540,3 +2540,120 @@ form.bt-dialog,
     grid-column: 1 / -1;
   }
 }
+
+/* ---------- Sound settings dialog: on/off + a big volume slider per sound ---------- */
+.bt-audio-panel {
+  width: min(100%, 560px);
+}
+
+.bt-audio-row {
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--bt-s));
+  padding: calc(14px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.bt-audio-toggle {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+}
+
+.bt-audio-icon {
+  font-size: calc(30px * var(--bt-s));
+  line-height: 1;
+}
+
+.bt-audio-state {
+  padding: calc(2px * var(--bt-s)) calc(10px * var(--bt-s));
+  border-radius: calc(12px * var(--bt-s));
+  background: rgba(27, 42, 65, 0.12);
+  font-size: max(12px, calc(16px * var(--bt-s)));
+}
+
+.bt-audio-slider {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+  font-size: calc(28px * var(--bt-s));
+  line-height: 1;
+}
+
+.bt-audio-slider[data-disabled='true'] {
+  opacity: 0.45;
+}
+
+/* The slider: a fat rounded track that fills up to the thumb, and a big round thumb (>= 44px on a phone). */
+.bt-range {
+  --bt-thumb: max(44px, calc(60px * var(--bt-s)));
+  --bt-track: calc(28px * var(--bt-s));
+  --bt-range-fill: calc(var(--bt-thumb) / 2 + (100% - var(--bt-thumb)) * var(--bt-range-pct, 0.5));
+  flex: 1;
+  min-width: 0;
+  height: var(--bt-thumb);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.bt-range:disabled {
+  cursor: default;
+}
+
+.bt-range::-webkit-slider-runnable-track {
+  height: var(--bt-track);
+  border-radius: var(--bt-track);
+  background: linear-gradient(to right, var(--bt-green) var(--bt-range-fill), var(--bt-white) var(--bt-range-fill));
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.18);
+}
+
+.bt-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: var(--bt-thumb);
+  height: var(--bt-thumb);
+  margin-top: calc((var(--bt-track) - var(--bt-thumb)) / 2);
+  border: calc(6px * var(--bt-s)) solid var(--bt-white);
+  border-radius: 50%;
+  background: var(--bt-yellow);
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-range::-moz-range-track {
+  height: var(--bt-track);
+  border-radius: var(--bt-track);
+  background: linear-gradient(to right, var(--bt-green) var(--bt-range-fill), var(--bt-white) var(--bt-range-fill));
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.18);
+}
+
+.bt-range::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--bt-thumb);
+  height: var(--bt-thumb);
+  border: calc(6px * var(--bt-s)) solid var(--bt-white);
+  border-radius: 50%;
+  background: var(--bt-yellow);
+  box-shadow: var(--bt-shadow);
+}
+
+.bt-range:focus-visible {
+  outline: 3px solid var(--bt-ink);
+  outline-offset: 2px;
+  border-radius: var(--bt-thumb);
+}
+
+/* Narrow phones: the main menu's import button keeps only its 📥 (its name stays in aria-label) so the
+   settings row, with the 🎚️ button, still fits on one line. */
+@media (max-width: 480px) {
+  .bt-menu-import-label {
+    display: none;
+  }
+}

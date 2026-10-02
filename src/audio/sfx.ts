@@ -188,6 +188,8 @@ export const SOUNDS: Record<SoundName, Sound> = {
 }
 
 const MASTER_GAIN = 0.35
+/** Master gain for a sound-effects volume `volume` (0..1): the default 0.5 gives MASTER_GAIN. */
+export const sfxMasterGain = (volume: number): number => MASTER_GAIN * 2 * Math.min(1, Math.max(0, volume))
 const ATTACK = 0.005
 const RELEASE = 0.05
 /**
@@ -216,7 +218,7 @@ function output(): { c: AudioContext; out: GainNode } | null {
   if (!c) return null
   if (!master || masterCtx !== c) {
     master = c.createGain()
-    master.gain.value = MASTER_GAIN
+    master.gain.value = sfxMasterGain(useApp.getState().sfxVolume)
     master.connect(c.destination)
     masterCtx = c
     noise = null
@@ -224,6 +226,16 @@ function output(): { c: AudioContext; out: GainNode } | null {
   }
   return { c, out: master }
 }
+
+// Follows the volume slider live (the engine hum goes through the master too, so it follows as well).
+useApp.subscribe((s, prev) => {
+  if (s.sfxVolume === prev.sfxVolume || !master || !masterCtx) return
+  try {
+    master.gain.setTargetAtTime(sfxMasterGain(s.sfxVolume), masterCtx.currentTime, 0.02)
+  } catch {
+    /* ignore */
+  }
+})
 
 /** One second of white noise, shared by every noise voice. */
 function noiseBuffer(c: AudioContext): AudioBuffer {

@@ -13,6 +13,7 @@ import {
   resetAudioForTests,
   snap,
   soundLength,
+  sfxMasterGain,
   SOUNDS,
   startEngine,
   success,
@@ -45,6 +46,8 @@ class FakeAudioContext {
   static created = 0
   static started = 0
   static last: FakeAudioContext | null = null
+  /** Every gain node made, in order: the first one is the sound-effects master. */
+  static gains: FakeNode[] = []
   state = 'suspended'
   currentTime = 0
   sampleRate = 8000
@@ -57,7 +60,11 @@ class FakeAudioContext {
     FakeAudioContext.created++
     FakeAudioContext.last = this
   }
-  createGain = () => new FakeNode()
+  createGain = () => {
+    const node = new FakeNode()
+    FakeAudioContext.gains.push(node)
+    return node
+  }
   createOscillator = () => new FakeNode()
   createBiquadFilter = () => new FakeNode()
   createBufferSource = () => new FakeNode()
@@ -80,14 +87,40 @@ beforeEach(() => {
   FakeAudioContext.created = 0
   FakeAudioContext.started = 0
   FakeAudioContext.last = null
+  FakeAudioContext.gains = []
   g.AudioContext = FakeAudioContext
   resetAudioForTests()
-  useApp.setState({ sfxOn: true, musicOn: true })
+  useApp.setState({ sfxOn: true, musicOn: true, sfxVolume: 0.5 })
 })
 afterEach(() => {
   delete g.AudioContext
   resetAudioForTests()
-  useApp.setState({ sfxOn: true, musicOn: true })
+  useApp.setState({ sfxOn: true, musicOn: true, sfxVolume: 0.5 })
+})
+
+describe('sfx volume', () => {
+  it('maps the slider to the master gain: 0.5 is the original level, 0 silent, 1 double', () => {
+    expect(sfxMasterGain(0.5)).toBeCloseTo(0.35)
+    expect(sfxMasterGain(0)).toBe(0)
+    expect(sfxMasterGain(1)).toBeCloseTo(0.7)
+    expect(sfxMasterGain(2)).toBeCloseTo(0.7)
+    expect(sfxMasterGain(-1)).toBe(0)
+  })
+
+  it('creates the master at the saved volume and follows later changes live', () => {
+    useApp.getState().setSfxVolume(1)
+    snap()
+    const master = FakeAudioContext.gains[0]
+    expect(master.gain.value).toBeCloseTo(0.7)
+    useApp.getState().setSfxVolume(0.25)
+    expect(master.gain.setTargetAtTime).toHaveBeenCalledTimes(1)
+    expect(master.gain.setTargetAtTime.mock.calls[0][0]).toBeCloseTo(0.175)
+  })
+
+  it('leaves the master alone while no sound was made yet', () => {
+    useApp.getState().setSfxVolume(0.9)
+    expect(FakeAudioContext.created).toBe(0)
+  })
 })
 
 describe('sfx', () => {

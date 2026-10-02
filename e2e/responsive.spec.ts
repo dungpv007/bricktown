@@ -108,6 +108,70 @@ async function expectTidy(page: Page, screen: string) {
 
 const devHandle = (page: Page) => page.waitForFunction(() => (window as unknown as { __bt?: unknown }).__bt !== undefined)
 
+/** The main menu's settings row sits on one line: every button of it has (about) the same top edge. */
+async function expectMenuRowOneLine(page: Page) {
+  const tops = await page.evaluate(() => {
+    const row = document.querySelector('[data-testid="music-toggle"]')?.parentElement
+    return [...(row?.querySelectorAll('button') ?? [])].map((b) => ({
+      id: b.getAttribute('data-testid'),
+      top: Math.round(b.getBoundingClientRect().top),
+      right: Math.round(b.getBoundingClientRect().right),
+    }))
+  })
+  expect(tops.map((t) => t.id)).toContain('audio-settings')
+  expect(Math.max(...tops.map((t) => t.top)) - Math.min(...tops.map((t) => t.top)), `menu row wraps: ${JSON.stringify(tops)}`).toBeLessThanOrEqual(2)
+}
+
+/** The Sound dialog is open: its panel is on screen, nothing in it overlaps, and the sliders are fat enough to grab. */
+async function expectAudioDialogFits(page: Page) {
+  const r = await page.evaluate(() => {
+    const box = (el: Element) => {
+      const b = el.getBoundingClientRect()
+      return { x: b.x, y: b.y, w: b.width, h: b.height }
+    }
+    const panel = document.querySelector('[data-testid="audio-settings-dialog"] .bt-panel')
+    if (!panel) return null
+    const parts = [...panel.querySelectorAll('button, input[type="range"]')].map((e) => ({
+      name: e.getAttribute('data-testid') ?? e.tagName,
+      ...box(e),
+    }))
+    return { panel: box(panel), parts, scrolls: panel.scrollHeight > panel.clientHeight + 1, vw: innerWidth, vh: innerHeight }
+  })
+  expect(r, 'audio dialog is open').not.toBeNull()
+  if (!r) return
+  expect(r.panel.x).toBeGreaterThanOrEqual(-1)
+  expect(r.panel.y).toBeGreaterThanOrEqual(-1)
+  expect(r.panel.x + r.panel.w).toBeLessThanOrEqual(r.vw + 1)
+  expect(r.panel.y + r.panel.h).toBeLessThanOrEqual(r.vh + 1)
+  expect(r.scrolls, 'the dialog fits without scrolling').toBe(false)
+  for (const a of r.parts) {
+    expect(a.x, a.name).toBeGreaterThanOrEqual(r.panel.x - 1)
+    expect(a.x + a.w, a.name).toBeLessThanOrEqual(r.panel.x + r.panel.w + 1)
+    expect(a.h, `${a.name} is a big touch target`).toBeGreaterThanOrEqual(44)
+  }
+  for (let i = 0; i < r.parts.length; i++) {
+    for (let j = i + 1; j < r.parts.length; j++) {
+      const a = r.parts[i]
+      const b = r.parts[j]
+      const ix = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+      const iy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+      expect(ix > 1 && iy > 1, `${a.name} overlaps ${b.name}`).toBe(false)
+    }
+  }
+}
+
+/** Opens the Sound dialog on the menu, checks it, and closes it with a backdrop tap. */
+async function checkAudioDialog(page: Page) {
+  await page.getByTestId('audio-settings').click()
+  await expect(page.getByTestId('audio-settings-dialog')).toBeVisible()
+  // Music is off in the e2e storage state: switch it on so the slider is live.
+  await page.getByTestId('audio-music-on').click()
+  await expect(page.getByTestId('music-volume')).toBeEnabled()
+  await expectAudioDialogFits(page)
+  await page.getByTestId('audio-settings-dialog').click({ position: { x: 4, y: 4 } })
+  await expect(page.getByTestId('audio-settings-dialog')).toBeHidden()
+}
+
 for (const [width, height] of [
   [412, 891],
   [891, 412],
@@ -118,6 +182,8 @@ for (const [width, height] of [
     await page.goto('/')
     await expect(page.getByTestId('main-menu')).toBeVisible()
     await expectTidy(page, 'menu')
+    await expectMenuRowOneLine(page)
+    await checkAudioDialog(page)
 
     // Workshop with a selected brick (the action bar), then with the colour picker toggled.
     await page.getByTestId('menu-workshop').click()
@@ -175,3 +241,11 @@ for (const [width, height] of [
     await expectTidy(page, 'maze drive')
   })
 }
+
+test('tablet 1080×810: the menu row stays on one line and the Sound dialog fits', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('main-menu')).toBeVisible()
+  await expectTidy(page, 'menu')
+  await expectMenuRowOneLine(page)
+  await checkAudioDialog(page)
+})
