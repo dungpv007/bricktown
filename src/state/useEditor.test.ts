@@ -16,6 +16,28 @@ beforeEach(() => {
   useEditor.setState({ rot: 0 })
 })
 
+describe('useEditor part selection', () => {
+  it('togglePart selects a part, clears it when tapped again, and switches to another', () => {
+    ed().togglePart('brick_2x2')
+    expect(ed().partId).toBe('brick_2x2')
+    ed().togglePart('brick_2x2')
+    expect(ed().partId).toBeNull()
+    ed().togglePart('brick_1x1')
+    ed().togglePart('brick_2x2')
+    expect(ed().partId).toBe('brick_2x2')
+  })
+
+  it('place with no part chosen adds nothing, and setPart (a drag) selects again', () => {
+    ed().setPart(null)
+    ed().place(0, 0, 0)
+    expect(bricks()).toHaveLength(0)
+    expect(ed().lastError).toBeNull()
+    ed().setPart('brick_2x4')
+    ed().place(0, 0, 0)
+    expect(bricks()).toHaveLength(1)
+  })
+})
+
 describe('useEditor place/undo/redo', () => {
   it('places a brick with current part, color and rotation', () => {
     ed().place(1, 0, 2)

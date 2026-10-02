@@ -258,10 +258,10 @@ function dropAnchor(hit: PickHit, part: PartDef, r: Rot, movingId?: string): Anc
 }
 
 /** Where the preview's part would go, for the editor's current part and rotation. */
-function previewAnchor(p: Preview | null, partId: string, rot: Rot): Anchor | null {
+function previewAnchor(p: Preview | null, partId: string | null, rot: Rot): Anchor | null {
   if (!p) return null
   if (p.kind === 'move') return p.hit ? dropAnchor(p.hit, getPart(p.brick.p), p.brick.r, p.brick.id) : null
-  return dropAnchor(p.hit, getPart(partId), rot)
+  return partId === null ? null : dropAnchor(p.hit, getPart(partId), rot)
 }
 
 const samePreview = (a: Preview | null, b: Preview | null): boolean => {
@@ -391,6 +391,11 @@ function WorkshopWorld() {
     tapPlate: (hit) => {
       const ed = useEditor.getState()
       ed.setPlateResize(false)
+      // No part chosen: a tap on the plate places nothing and just deselects, like a tap on the sky.
+      if (ed.partId === null) {
+        ed.deselect()
+        return
+      }
       const a = dropAnchor(hit, getPart(ed.partId), ed.rot)
       ed.place(a.x, a.y, a.z)
       if (useEditor.getState().lastError === null) {
@@ -431,7 +436,7 @@ function WorkshopWorld() {
     hover: (hit) => {
       if (draggingId !== null) return
       // Only the empty plate previews a quick-place: a tap on a brick selects it.
-      setPreview(hit && !hit.brick ? { kind: 'part', hit } : null)
+      setPreview(hit && !hit.brick && useEditor.getState().partId !== null ? { kind: 'part', hit } : null)
     },
   })
 
@@ -451,6 +456,10 @@ function WorkshopWorld() {
           return
         }
         const ed = useEditor.getState()
+        if (ed.partId === null) {
+          setPreview(null)
+          return
+        }
         const a = dropAnchor(hit, getPart(ed.partId), ed.rot)
         ed.place(a.x, a.y, a.z)
         if (useEditor.getState().lastError === null) {
@@ -467,7 +476,7 @@ function WorkshopWorld() {
   // `bricks` is not read inside, but a drop settles differently once the model changes (see `dropAnchor`).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const anchor = useMemo(() => previewAnchor(preview, partId, rot), [preview, partId, rot, bricks])
-  const ghostPart = moving ? moving.p : partId
+  const ghostPart = moving ? moving.p : (partId ?? 'brick_1x1') // hidden while no part is chosen (no preview then)
   const ghostRot = moving ? moving.r : rot
   const ghostFig = moving ? moving.fig : fig
 
