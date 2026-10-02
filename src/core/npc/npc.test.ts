@@ -382,3 +382,43 @@ describe('npc pedestrians', () => {
     expect(sim.trains).toHaveLength(1)
   })
 })
+
+describe('placed cars (the kid\'s vehicles on the roads)', () => {
+  const vsize = (source: string) => (source === 'car' ? { w: 8, d: 16, vehicle: true } : { w: 8, d: 8 })
+  // A loop of streets: cars can drive round and round.
+  const loop = [...row(2, 2, 10), ...row(8, 2, 10), ...col(2, 3, 7), ...col(10, 3, 7)]
+  const withCar = city({
+    roads: loop,
+    placements: [
+      { id: 'mine', source: 'car', cx: 5, cz: 2, rot: 3, fit: 0.3125 },
+      { id: 'house', source: 'house', cx: 5, cz: 4, rot: 0 },
+    ],
+  })
+
+  it('lists vehicle placements on a road cell, heading the way they face', () => {
+    const net = buildNetwork(withCar, vsize)
+    expect(net.placed).toHaveLength(1)
+    expect(net.placed[0]).toMatchObject({ id: 'mine', cell: net.roads.index.get(roadKey(5, 2)), dir: 1 })
+    expect(net.placed[0].length).toBeCloseTo(5)
+  })
+  it('drives a placed car along the lanes with the others; a held one leaves the traffic', () => {
+    const sim = new NpcSim({ seed: 5 })
+    sim.setNetwork(buildNetwork(withCar, vsize))
+    expect(sim.placedCount()).toBe(1)
+    const car = sim.cars.find((c) => c.placed === 'mine')!
+    expect(car.hx).toBeCloseTo(1) // facing E, as placed
+    const start = { x: car.x, z: car.z }
+    const cells = new Set<string>()
+    run(sim, 20, () => cells.add(roadKey(cellOf(car.x), cellOf(car.z))))
+    expect(Math.hypot(car.x - start.x, car.z - start.z)).toBeGreaterThan(1)
+    for (const k of cells) expect(loop).toContain(k) // never off the road
+    expect(cells.size).toBeGreaterThan(4)
+    sim.setHeld(new Set(['mine']))
+    expect(sim.placedCount()).toBe(0)
+    sim.setHeld(new Set())
+    expect(sim.placedCount()).toBe(1)
+    // Its placement removed: the car goes too.
+    sim.setNetwork(buildNetwork({ ...withCar, placements: [] }, vsize))
+    expect(sim.placedCount()).toBe(0)
+  })
+})

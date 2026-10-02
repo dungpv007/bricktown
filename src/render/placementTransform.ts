@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { bakedGeometries, type BakedModel } from '../core/bake'
-import { scaleOf } from '../core/city'
+import { drawScale } from '../core/city'
 import { placementCenter } from '../core/cityPlan'
 import type { Box } from '../core/drive'
 import type { Baseplate, CityPlacement } from '../core/types'
@@ -19,11 +19,11 @@ const tmpScale = new THREE.Matrix4()
  */
 export function placementMatrix(
   target: THREE.Matrix4,
-  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's'>,
+  p: Pick<CityPlacement, 'cx' | 'cz' | 'rot' | 's' | 'fit'>,
   baseplate: Baseplate,
 ): THREE.Matrix4 {
   const { x, z } = placementCenter(p, baseplate)
-  const k = scaleOf(p)
+  const k = drawScale(p)
   const angle = (p.rot * Math.PI) / 2
   // world = R * k * (v - modelCentre) + footprintCentre
   tmpOffset.set((-baseplate.w / 2) * k, 0, (-baseplate.d / 2) * k).applyAxisAngle(Y_AXIS, angle)

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { bakedGeometries } from '../../core/bake'
-import { scaleOf } from '../../core/city'
+import { drawScale } from '../../core/city'
 import type { Baseplate, Blueprint, CityPlacement } from '../../core/types'
 import { selectionGlowMaterial, selectionRimMaterial } from '../../render/materials'
 import { bakedModelBox, placementMatrix } from '../../render/placementTransform'
@@ -42,7 +42,7 @@ export default function PlacementHighlight({ placement, blueprints, sizeOf, shak
 
   const source = placement?.source ?? null
   // The rim is drawn in model space and then scaled with the model: keep it as thick on screen.
-  const k = placement ? scaleOf(placement) : 1
+  const k = placement ? drawScale(placement) : 1
   const resolved = useMemo(() => (source === null ? null : resolveRenderable(source, { blueprints })), [source, blueprints])
   const model = useMemo(() => {
     if (!resolved) return null

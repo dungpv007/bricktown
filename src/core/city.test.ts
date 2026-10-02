@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AVENUE_LANE_STUDS,
   CELL,
+  STREET_LANE_STUDS,
   addPlacement,
   addRoads,
   canPlaceInCity,
@@ -11,8 +13,10 @@ import {
   removePlacement,
   rotatePlacement,
   scalePlacement,
+  settleVehicle,
+  type SourceSize,
 } from './city'
-import { duplicateCell, planMove } from './cityPlan'
+import { duplicateCell, planMove, planPlacement } from './cityPlan'
 import type { Baseplate, CityPlacement, CityState } from './types'
 
 const SIZES: Record<string, Baseplate> = {
@@ -244,5 +248,79 @@ describe('scaled placements', () => {
     expect(rotatePlacement(city, 'a', sizeOf)!.placements[0]).toEqual(big('a', 'wide', 2, 2, 2, 1))
     expect(duplicateCell(city, city.placements[0], sizeOf)).toEqual({ cx: 4, cz: 2 })
     expect(planMove(city, city.placements[0], 160, 160, sizeOf)).toMatchObject({ cx: 18, cz: 16, s: 2, error: null })
+  })
+})
+
+describe('vehicles on roads', () => {
+  // Vehicles point their nose along the plate depth: `car` is 8 wide (the car template), `kid` a
+  // 16-wide kid-built truck.
+  const VSIZES: Record<string, SourceSize> = {
+    car: { w: 8, d: 16, vehicle: true },
+    kid: { w: 16, d: 24, vehicle: true },
+    house: { w: 8, d: 8 },
+  }
+  const vsize = (source: string): SourceSize => VSIZES[source]
+  // A street along Z at x = 2 (z 0..7) and an avenue along X at z = 9..10 (x 0..11).
+  const street = Array.from({ length: 8 }, (_, z) => `2,${z}`)
+  const avenue = Array.from({ length: 12 }, (_, x) => [`${x},9`, `${x},10`]).flat()
+  const town = (extra: Partial<CityState> = {}): CityState => ({ size: 12, roads: [...street, ...avenue], placements: [], ...extra })
+
+  it('lets a vehicle cover road cells and refuses a building there', () => {
+    const city = town()
+    expect(canPlaceInCity(city, place('v', 'car', 2, 3), vsize)).toBeNull()
+    expect(canPlaceInCity(city, place('v', 'car', 1, 3, 1), vsize)).toBeNull() // road + grass
+    expect(canPlaceInCity(city, place('h', 'house', 2, 3), vsize)).toBe('road')
+  })
+  it('refuses a vehicle on rails, water and other placements', () => {
+    const city = town({ rails: ['5,3'], terrain: { water: ['6,6'], pavement: ['7,7'], sand: [] } })
+    expect(canPlaceInCity(city, place('v', 'car', 5, 2), vsize)).toBe('rail')
+    expect(canPlaceInCity(city, place('v', 'car', 6, 5), vsize)).toBe('water')
+    expect(canPlaceInCity(city, place('v', 'car', 7, 6), vsize)).toBeNull() // pavement is fine
+    const parked = { ...city, placements: [place('a', 'car', 2, 3)] }
+    expect(canPlaceInCity(parked, place('b', 'car', 2, 4), vsize)).toBe('overlap')
+    expect(canPlaceInCity(parked, place('h', 'house', 2, 4), vsize)).toBe('overlap')
+  })
+  it('shrinks a vehicle wider than a lane to the lane: a street and an avenue', () => {
+    const city = town()
+    const car = settleVehicle(city, place('v', 'car', 2, 3), vsize)
+    expect(car.fit).toBeCloseTo(STREET_LANE_STUDS / 8, 4)
+    expect(8 * car.fit!).toBeLessThanOrEqual(STREET_LANE_STUDS)
+    expect(placementCells(car, VSIZES.car)).toEqual({ cw: 1, cd: 1 })
+    const kid = settleVehicle(city, { ...place('k', 'kid', 1, 2), s: 2 }, vsize)
+    expect(kid.s).toBe(2) // the size multiplier is kept; the fit does the shrinking
+    expect(kid.fit).toBeCloseTo(STREET_LANE_STUDS / 32, 4)
+    const onAvenue = settleVehicle(city, place('k', 'kid', 4, 9, 1), vsize)
+    expect(onAvenue.fit).toBeCloseTo(AVENUE_LANE_STUDS / 16, 4)
+    // Off the road: full size, no fit.
+    expect(settleVehicle(city, place('v', 'car', 6, 3), vsize)).toEqual(place('v', 'car', 6, 3))
+  })
+  it('turns a vehicle along the road and snaps it into the road; settling twice changes nothing', () => {
+    const city = town()
+    // Dropped across the street (rot 1, 2 x 1 cells) with its centre on the street: turned along it.
+    const across = settleVehicle(city, place('v', 'car', 1, 4, 1), vsize)
+    expect(across.rot % 2).toBe(0)
+    expect(across.cx).toBe(2)
+    expect(settleVehicle(city, across, vsize)).toBe(across)
+    // The avenue along X: a car facing N turns to face its half's traffic.
+    const av = settleVehicle(city, place('v', 'car', 5, 9), vsize)
+    expect(av.rot % 2).toBe(1)
+    expect(av.cz === 9 || av.cz === 10).toBe(true)
+    expect(settleVehicle(city, av, vsize)).toBe(av)
+    // A dropped car (planPlacement) lands on the road it was dropped on, along it.
+    const plan = planPlacement(city, 'car', 2.5 * CELL, 4.5 * CELL, vsize)
+    expect(plan).toMatchObject({ cx: 2, cz: 4, error: null })
+    expect(plan.rot % 2).toBe(0)
+    expect(plan.fit).toBeLessThan(1)
+  })
+  it('gives a vehicle moved off the road its size back, and refuses growing it on the road', () => {
+    const city = town({ placements: [settleVehicle(town(), place('v', 'car', 2, 3), vsize)] })
+    const moved = movePlacement(city, 'v', 6, 3, vsize)
+    expect(moved?.placements[0]).toEqual(place('v', 'car', 6, 3))
+    expect(scalePlacement(city, 'v', 2, vsize)).toEqual({ city: null, error: 'road' })
+    const back = movePlacement(moved!, 'v', 2, 3, vsize)
+    expect(back?.placements[0].fit).toBeLessThan(1)
+    // Rotating on a street turns it round (still along the street).
+    const turned = rotatePlacement(city, 'v', vsize)
+    expect(turned?.placements[0].rot).toBe((city.placements[0].rot + 2) % 4)
   })
 })

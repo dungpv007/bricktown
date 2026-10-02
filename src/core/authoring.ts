@@ -757,7 +757,7 @@ function checkCity(raw: Loose, opts: AuthoringOptions, rep: Report, now: number)
   const sizeOf = (source: string): SourceSize => {
     if (source.startsWith('tpl:')) return opts.templateSize?.(source.slice(4)) ?? { w: CELL, d: CELL }
     const bp = byId.get(source)
-    return bp ? sourceSize(bp.baseplate, bp.tags) : { w: CELL, d: CELL }
+    return bp ? sourceSize(bp.baseplate, bp.tags, bp.kind, bp.bricks) : { w: CELL, d: CELL }
   }
   const city: CityState = { size, roads, placements: [] }
   if (rails.length) city.rails = rails

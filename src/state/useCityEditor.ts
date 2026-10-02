@@ -13,12 +13,12 @@ import {
 } from '../core/city'
 import { brushLine, type RoadBrush } from '../core/avenues'
 import { currentCity } from '../core/cities'
-import { clampCell, duplicateCell, planPlacement, type Cell } from '../core/cityPlan'
+import { clampCell, duplicatePlacement, planPlacement, type Cell } from '../core/cityPlan'
 import { newId } from '../core/ids'
 import { eraseRails, eraseRoads, paintRails, paintRoads } from '../core/rails'
 import { paintRoadLine } from '../core/roads'
 import { paintTerrain, type TerrainBrush } from '../core/terrain'
-import type { CityState } from '../core/types'
+import type { CityPlacement, CityState } from '../core/types'
 import { makeSizeOf, resolveRenderable } from '../render/sources'
 import { onCityReplaced } from './cityReplaced'
 import { createHistory } from './history'
@@ -89,8 +89,11 @@ export interface CityEditorState {
    * Leaves road mode; a refused drop leaves nothing selected.
    */
   dropSource: (source: string, x: number, z: number) => void
-  /** Moves a placement to min-corner cell (cx, cz); rejected (it stays) when it does not fit there. */
-  movePlacement: (id: string, cx: number, cz: number) => void
+  /**
+   * Moves a placement to min-corner cell (cx, cz); rejected (it stays) when it does not fit there.
+   * `fitted`: the turn and road fit of the `planMove` preview (a vehicle settled on a road).
+   */
+  movePlacement: (id: string, cx: number, cz: number, fitted?: Pick<CityPlacement, 'rot' | 'fit'>) => void
   rotateSelected: () => void
   /**
    * Makes the selected model one size bigger (+1) or smaller (-1), x1..x10, growing in place (one
@@ -154,7 +157,14 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
       reject(plan.error)
       return
     }
-    const placement = { id: newId('pl'), source, cx: plan.cx, cz: plan.cz, rot: plan.rot }
+    const placement: CityPlacement = {
+      id: newId('pl'),
+      source,
+      cx: plan.cx,
+      cz: plan.cz,
+      rot: plan.rot,
+      ...(plan.fit === undefined ? {} : { fit: plan.fit }),
+    }
     if (commit(before, addPlacement(before, placement, sizes), 'overlap', sfx.thunk)) set({ selectedPlacementId: placement.id })
   }
 
@@ -243,13 +253,14 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
       placeAt(source, x, z)
     },
 
-    movePlacement: (id, cx, cz) => {
+    movePlacement: (id, cx, cz, fitted) => {
       const before = city()
       const p = before.placements.find((q) => q.id === id)
       if (!p) return
       set({ selectedPlacementId: id })
-      if (p.cx === cx && p.cz === cz) return // put back where it was: nothing to undo
-      commit(before, movePlacement(before, id, cx, cz, sizeOf()), 'overlap', sfx.thunk)
+      const same = p.cx === cx && p.cz === cz && (!fitted || (fitted.rot === p.rot && fitted.fit === p.fit))
+      if (same) return // put back where it was: nothing to undo
+      commit(before, movePlacement(before, id, cx, cz, sizeOf(), fitted), 'overlap', sfx.thunk)
     },
 
     rotateSelected: () => {
@@ -281,8 +292,7 @@ export const useCityEditor = create<CityEditorState>()((set, get) => {
       }
       const before = city()
       const sizes = sizeOf()
-      const cell = duplicateCell(before, p, sizes)
-      const copy = cell && { ...p, id: newId('pl'), ...cell }
+      const copy = duplicatePlacement(before, p, newId('pl'), sizes)
       if (commit(before, copy && addPlacement(before, copy, sizes), 'overlap', sfx.thunk) && copy) {
         set({ selectedPlacementId: copy.id })
       }

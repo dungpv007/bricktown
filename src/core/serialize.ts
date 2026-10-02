@@ -1,6 +1,6 @@
 import { PLATE_MAX } from './baseplate'
 import { DEFAULT_CITY_SIZE, FIRST_CITY_ID, MAX_CITIES, emptyCity, sanitizeCityName } from './cities'
-import { MIN_SCALE, normalizeScale } from './city'
+import { isFit, MIN_SCALE, normalizeScale } from './city'
 import { COLORS } from './colors'
 import { newId } from './ids'
 import { MINIFIG_PART, parseFig } from './figures'
@@ -322,12 +322,15 @@ function normalizeCity(city: Record<string, unknown>, defaultSize: number): City
   }
 }
 
-/** A placement as stored, with its size multiplier made safe (see `normalizeScale`); x1 drops it. */
+/**
+ * A placement as stored, with its size multiplier made safe (see `normalizeScale`; x1 drops it) and
+ * its road fit kept only when valid (`isFit`; anything else, or 1, drops it).
+ */
 function normalizePlacement(p: unknown): CityPlacement {
-  if (!isRecord(p) || !('s' in p)) return p as unknown as CityPlacement
-  const { s, ...rest } = p
+  if (!isRecord(p) || (!('s' in p) && !('fit' in p))) return p as unknown as CityPlacement
+  const { s, fit, ...rest } = p
   const scale = normalizeScale(s)
-  return (scale === MIN_SCALE ? rest : { ...rest, s: scale }) as unknown as CityPlacement
+  return { ...rest, ...(scale === MIN_SCALE ? {} : { s: scale }), ...(isFit(fit) ? { fit } : {}) } as unknown as CityPlacement
 }
 
 /**
