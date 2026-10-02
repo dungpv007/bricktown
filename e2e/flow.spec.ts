@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { flushAutosave, savedSlotData } from './support'
+import { cityCanvasBox, flushAutosave, savedSlotData } from './support'
 
 interface Saved {
   guided: unknown
@@ -48,29 +48,20 @@ test('whole journey: build a tree, place it on a road in the city, drive, reload
   await page.getByTestId('menu-city').click()
   const canvas = page.getByTestId('mode-city').locator('canvas')
   await expect(canvas).toBeVisible()
-  const box = (await canvas.boundingBox())!
+  const box = await cityCanvasBox(page)
   const cx = box.x + box.width / 2
   const cy = box.y + box.height / 2
   await page.getByTestId('city-road-mode').click()
-  // The canvas may still be sizing itself right after it appears: repeat the (idempotent) drag until it paints.
-  await expect
-    .poll(async () => {
-      await page.mouse.move(cx - 120, cy)
-      await page.mouse.down()
-      await page.mouse.move(cx, cy, { steps: 8 })
-      await page.mouse.move(cx + 120, cy, { steps: 8 })
-      await page.mouse.up()
-      return (await liveData(page)).city.roads.length
-    })
-    .toBeGreaterThan(3)
+  await page.mouse.move(cx - 120, cy)
+  await page.mouse.down()
+  await page.mouse.move(cx, cy, { steps: 8 })
+  await page.mouse.move(cx + 120, cy, { steps: 8 })
+  await page.mouse.up()
+  expect((await liveData(page)).city.roads.length).toBeGreaterThan(3)
   await page.getByTestId('city-road-mode').click() // back to selecting and placing
   await page.getByTestId(`src-${treeId}`).click()
-  await expect
-    .poll(async () => {
-      if ((await liveData(page)).city.placements.length === 0) await page.mouse.click(cx, cy + 90)
-      return (await liveData(page)).city.placements.map((p) => p.source)
-    })
-    .toEqual([treeId])
+  await page.mouse.click(cx, cy + 90)
+  expect((await liveData(page)).city.placements.map((p) => p.source)).toEqual([treeId])
 
   // Drive: the tree is not a vehicle; take the car and hold gas until it has moved.
   await page.getByTestId('back').click()
