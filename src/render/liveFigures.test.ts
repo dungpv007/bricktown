@@ -19,4 +19,14 @@ describe('liveFigureKeys', () => {
     const keys = liveFigureKeys(data([], { templateId: tpl.id, step: 0, placed: [] }), DEFAULT_FIG)
     for (const b of tpl.bricks.filter(isFigure)) expect(keys.has(figKey(figOf(b)))).toBe(true)
   })
+
+  it('holds every figure of a Guided build from a template shared with steps', () => {
+    const tpl = TEMPLATES.find((t) => t.bricks.some(isFigure))!
+    const shared = { ...tpl, id: 'shared_abc123', bricks: [figure('f1', 'robber')] }
+    const keys = liveFigureKeys(
+      { ...data([], { templateId: shared.id, step: 0, placed: [] }), sharedTemplates: [shared] },
+      DEFAULT_FIG,
+    )
+    expect(keys.has(figKey(figPreset('robber')))).toBe(true)
+  })
 })

@@ -33,10 +33,12 @@ export default function MainMenu() {
   const saveWarning = usePersistStatus(persistWarning)
   const [slotsOpen, setSlotsOpen] = useState(false)
   const [touring, setTouring] = useState(onboardingPending)
+  // The share import dialogs (picker, preview, "added!") sit over the menu too: hold the town still under them.
+  const importing = useShareImport((s) => s.pickerOpen || s.incoming !== null || s.done !== null)
 
   return (
     <div className="bt-screen bt-menu" data-testid="main-menu">
-      <MenuBackdrop paused={slotsOpen || touring} />
+      <MenuBackdrop paused={slotsOpen || touring || importing} />
       <h1 className="bt-title">{t('appTitle')}</h1>
       <div className="bt-cards bt-menu-cards">
         {CARDS.map((c) => (
