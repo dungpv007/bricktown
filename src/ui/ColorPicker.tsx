@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { COLORS, colorMaterialKind, type MaterialKind } from '../core/colors'
-import { useApp } from '../state/useApp'
+import { colorsCollapsed, useApp } from '../state/useApp'
 import { useEditor } from '../state/useEditor'
 import { useGame } from '../state/useGame'
+import { currentDeviceClass, useDeviceClass } from '../state/deviceClass'
+import { useT } from './i18n'
 
 const KIND_ORDER: MaterialKind[] = ['opaque', 'trans', 'metal']
 
@@ -13,6 +15,13 @@ const SWATCH_CLASS: Record<MaterialKind, string> = {
   opaque: 'bt-swatch',
   trans: 'bt-swatch bt-swatch-trans',
   metal: 'bt-swatch bt-swatch-metal',
+}
+
+/** The look of the folded picker's colour dot (the swatch look without the swatch's size and border). */
+const DOT_CLASS: Record<MaterialKind, string> = {
+  opaque: 'bt-colors-dot',
+  trans: 'bt-colors-dot bt-swatch-trans',
+  metal: 'bt-colors-dot bt-swatch-metal',
 }
 
 /** Pixels of slack before the column counts as scrolled to the end. */
@@ -41,8 +50,8 @@ const HINT_CLASS = 'bt-colors-hint'
 const HINT_MS = 1600
 
 /**
- * Each `hintColors()` (the action bar's 🎨) makes the column pulse for a moment and scrolls the
- * pressed swatch into view, so kids find where recolouring happens.
+ * Each `hintColors()` (the action bar's 🎨) unfolds the picker if it is folded, makes it pulse for
+ * a moment and scrolls the pressed swatch into view, so kids find where recolouring happens.
  */
 function useColorHint(ref: RefObject<HTMLElement | null>, enabled: boolean) {
   useEffect(() => {
@@ -51,10 +60,16 @@ function useColorHint(ref: RefObject<HTMLElement | null>, enabled: boolean) {
     const unsubscribe = useEditor.subscribe((s, prev) => {
       const el = ref.current
       if (!el || s.colorHintSeq === prev.colorHintSeq) return
+      const app = useApp.getState()
+      const deviceClass = currentDeviceClass()
+      if (colorsCollapsed(app, deviceClass)) app.setColorsCollapsed(deviceClass, false)
       el.classList.remove(HINT_CLASS)
       void el.offsetWidth // restart the animation on repeated hints
       el.classList.add(HINT_CLASS)
-      el.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      // After the swatches of an unfolded picker are drawn.
+      requestAnimationFrame(() =>
+        el.querySelector('[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }),
+      )
       if (timer !== null) clearTimeout(timer)
       timer = setTimeout(() => el.classList.remove(HINT_CLASS), HINT_MS)
     })
@@ -75,9 +90,14 @@ function useSelectedColor(enabled: boolean): number | null {
  * Right column of big colour swatches (two wide, scrolls when they do not all fit, with a cue).
  * With `recolorsSelection` (Workshop), a swatch recolours the selected brick while one is
  * selected (and becomes the colour for new bricks too); otherwise it sets the colour of new bricks.
+ * The round button on top showing the current colour folds the column away (and back); folded or
+ * not is remembered per device class, folded by default on portrait phones.
  */
 export default function ColorPicker({ recolorsSelection = false }: { recolorsSelection?: boolean }) {
+  const t = useT()
   const lang = useApp((s) => s.lang)
+  const deviceClass = useDeviceClass()
+  const collapsed = useApp((s) => colorsCollapsed(s, deviceClass))
   const color = useEditor((s) => s.color)
   const selectedColor = useSelectedColor(recolorsSelection)
   const current = selectedColor ?? color
@@ -89,9 +109,24 @@ export default function ColorPicker({ recolorsSelection = false }: { recolorsSel
   const panel = useRef<HTMLDivElement>(null)
   const more = useMoreBelow(panel)
   useColorHint(panel, recolorsSelection)
+  const currentHex = COLORS[current]?.hex ?? '#ffffff'
   return (
-    <div ref={panel} className="bt-colors bt-hud-panel" role="group">
-      {PICKER_COLORS.map((c) => (
+    <div ref={panel} className="bt-colors bt-hud-panel" role="group" aria-label={t('colorPicker')} data-collapsed={collapsed}>
+      <button
+        className="bt-btn bt-colors-toggle"
+        data-testid="colors-toggle"
+        aria-label={t('colorPicker')}
+        aria-expanded={!collapsed}
+        onClick={() => useApp.getState().setColorsCollapsed(deviceClass, !collapsed)}
+      >
+        <span
+          className={DOT_CLASS[colorMaterialKind(current)]}
+          style={{ '--bt-swatch-color': currentHex } as CSSProperties}
+          aria-hidden="true"
+        />
+        <span className="bt-colors-caret" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+      </button>
+      {!collapsed && PICKER_COLORS.map((c) => (
         <button
           key={c.id}
           className={SWATCH_CLASS[colorMaterialKind(c.id)]}
@@ -102,7 +137,7 @@ export default function ColorPicker({ recolorsSelection = false }: { recolorsSel
           onClick={() => pick(c.id)}
         />
       ))}
-      {more && (
+      {!collapsed && more && (
         <div className="bt-colors-more" data-testid="colors-more" aria-hidden="true">
           <span>▼</span>
         </div>

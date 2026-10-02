@@ -1,10 +1,11 @@
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { hornKindForSource } from '../../audio/horns'
 import { useEngineHum } from '../../audio/useEngineHum'
 import VirtualJoystick from '../../input/VirtualJoystick'
 import { DRIVE_KEYS, releaseOnInterruption, useDriveInput, type Pedal } from '../../state/useDriveInput'
 import { useDriveStatus } from '../../state/useDriveStatus'
 import { useGame } from '../../state/useGame'
+import { useDeviceClass } from '../../state/deviceClass'
 import { useT, type TKey } from '../../ui/i18n'
 
 interface ButtonProps {
@@ -124,6 +125,47 @@ function DriveStatusProbe() {
   )
 }
 
+const ROTATE_HINT_KEY = 'bricktown-rotate-hint-seen'
+/** How long the turn-sideways hint stays when it is not tapped away. */
+const ROTATE_HINT_MS = 8000
+
+const rotateHintSeen = () => {
+  try {
+    return localStorage.getItem(ROTATE_HINT_KEY) === '1'
+  } catch {
+    return true // no storage: better never than every time
+  }
+}
+
+/**
+ * Portrait phones, once ever: a small "turn the phone sideways" note under the top bar. Gone after a
+ * tap or a few seconds; never in the way of the controls.
+ */
+function RotateHint() {
+  const t = useT()
+  const portraitPhone = useDeviceClass() === 'phonePortrait'
+  const [hidden, setHidden] = useState(rotateHintSeen)
+  const show = portraitPhone && !hidden
+  useEffect(() => {
+    if (!show) return
+    try {
+      localStorage.setItem(ROTATE_HINT_KEY, '1')
+    } catch {
+      /* storage blocked: shown again next time */
+    }
+    const timer = window.setTimeout(() => setHidden(true), ROTATE_HINT_MS)
+    return () => window.clearTimeout(timer)
+  }, [show])
+  if (!show) return null
+  return (
+    <button className="bt-btn bt-rotate-hint" data-testid="rotate-hint" onClick={() => setHidden(true)}>
+      <span aria-hidden="true">📱↻</span>
+      <span>{t('rotateHint')}</span>
+      <span aria-hidden="true">✕</span>
+    </button>
+  )
+}
+
 /** The horn matches the vehicle (police / fire siren, truck air horn, car beep). */
 function useHornKind(source: string) {
   const blueprints = useGame((s) => s.data.blueprints)
@@ -154,6 +196,7 @@ export default function DriveUI({
   return (
     <div className="bt-drive-ui" data-testid="drive-ui">
       <DriveStatusProbe />
+      <RotateHint />
       <button className="bt-btn bt-icon-btn bt-drive-change" data-testid="drive-change" aria-label={t('driveChange')} onClick={onChangeVehicle}>
         🚙
       </button>

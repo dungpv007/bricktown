@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware'
+import { DEVICE_CLASSES, type DeviceClass } from './deviceClass'
 
 export type Mode = 'menu' | 'workshop' | 'guided' | 'city' | 'drive' | 'maze' | 'mazeDrive'
 export type Lang = 'vi' | 'en'
@@ -15,13 +16,20 @@ export interface AppState {
   musicOn: boolean
   /** Sound effects on. */
   sfxOn: boolean
+  /** Workshop colour picker folded into one button, per device class (unset: see `colorsCollapsed`). */
+  colorsCollapsed: Partial<Record<DeviceClass, boolean>>
   setMode: (mode: Mode) => void
   setLang: (lang: Lang) => void
   setDifficulty: (difficulty: Difficulty) => void
   setSlot: (slotId: SlotId) => void
   setMusicOn: (on: boolean) => void
   setSfxOn: (on: boolean) => void
+  setColorsCollapsed: (deviceClass: DeviceClass, collapsed: boolean) => void
 }
+
+/** Whether the colour picker is folded on `deviceClass`: the kid's choice, else folded on portrait phones only. */
+export const colorsCollapsed = (s: Pick<AppState, 'colorsCollapsed'>, deviceClass: DeviceClass): boolean =>
+  s.colorsCollapsed[deviceClass] ?? deviceClass === 'phonePortrait'
 
 const noopStorage: StateStorage = {
   getItem: () => null,
@@ -54,7 +62,7 @@ const LANGS: readonly Lang[] = ['vi', 'en']
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'normal']
 const SLOT_IDS: readonly SlotId[] = [1, 2, 3]
 
-type Prefs = Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn'>
+type Prefs = Pick<AppState, 'lang' | 'difficulty' | 'slotId' | 'musicOn' | 'sfxOn' | 'colorsCollapsed'>
 
 /**
  * Keeps only persisted preference values that are valid; anything else falls back to defaults.
@@ -72,6 +80,12 @@ export function sanitizePrefs(persisted: unknown): Partial<Prefs> {
   const sfxOn = typeof p.sfxOn === 'boolean' ? p.sfxOn : legacyOn
   if (musicOn !== undefined) out.musicOn = musicOn
   if (sfxOn !== undefined) out.sfxOn = sfxOn
+  if (typeof p.colorsCollapsed === 'object' && p.colorsCollapsed !== null) {
+    const saved = p.colorsCollapsed as Record<string, unknown>
+    const kept: Partial<Record<DeviceClass, boolean>> = {}
+    for (const c of DEVICE_CLASSES) if (typeof saved[c] === 'boolean') kept[c] = saved[c] as boolean
+    out.colorsCollapsed = kept
+  }
   return out
 }
 
@@ -84,17 +98,27 @@ export const useApp = create<AppState>()(
       difficulty: 'easy',
       musicOn: true,
       sfxOn: true,
+      colorsCollapsed: {},
       setMode: (mode) => set({ mode }),
       setLang: (lang) => set({ lang }),
       setDifficulty: (difficulty) => set({ difficulty }),
       setSlot: (slotId) => set({ slotId }),
       setMusicOn: (musicOn) => set({ musicOn }),
       setSfxOn: (sfxOn) => set({ sfxOn }),
+      setColorsCollapsed: (deviceClass, collapsed) =>
+        set((s) => ({ colorsCollapsed: { ...s.colorsCollapsed, [deviceClass]: collapsed } })),
     }),
     {
       name: 'bricktown-prefs',
       storage: createJSONStorage(safeStorage),
-      partialize: (s): Prefs => ({ lang: s.lang, difficulty: s.difficulty, slotId: s.slotId, musicOn: s.musicOn, sfxOn: s.sfxOn }),
+      partialize: (s): Prefs => ({
+        lang: s.lang,
+        difficulty: s.difficulty,
+        slotId: s.slotId,
+        musicOn: s.musicOn,
+        sfxOn: s.sfxOn,
+        colorsCollapsed: s.colorsCollapsed,
+      }),
       merge: (persisted, current) => ({ ...current, ...sanitizePrefs(persisted) }),
     },
   ),

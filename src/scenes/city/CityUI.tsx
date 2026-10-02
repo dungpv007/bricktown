@@ -14,6 +14,7 @@ import ConfirmDialog from '../../ui/ConfirmDialog'
 import ErrorBadge from '../../ui/ErrorBadge'
 import { useT, type TKey } from '../../ui/i18n'
 import ShareDialog from '../../ui/share/ShareDialog'
+import TopRight from '../../ui/TopRight'
 import { useThumbnail } from '../../ui/useThumbnail'
 
 /** Left column, top: road mode (with its eraser while on), then undo / redo. */
@@ -267,12 +268,12 @@ export default function CityUI() {
 
   return (
     <div className="bt-city-ui">
-      <div className="bt-topright">
+      <TopRight>
         <ShareCity />
         <button className="bt-btn bt-city-drive" data-testid="city-drive" aria-label={t('menuDrive')} onClick={() => setMode('drive')}>
           <span aria-hidden="true">🚗</span> {t('menuDrive')}
         </button>
-      </div>
+      </TopRight>
       <div className="bt-city-left">
         <CityToolbar />
         {selected && <CityActionBar editable={editable} drawable={drawable} onEdit={onEdit} />}

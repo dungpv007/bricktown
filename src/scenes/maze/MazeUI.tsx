@@ -5,6 +5,7 @@ import { useApp } from '../../state/useApp'
 import { MAZE_NAME_MAX, currentMaze, useMazeEditor, useShownMaze, type MazeEditError, type MazeTool } from '../../state/useMazeEditor'
 import ErrorBadge from '../../ui/ErrorBadge'
 import { useT, type TKey } from '../../ui/i18n'
+import TopRight from '../../ui/TopRight'
 import { DIFFICULTIES, DIFFICULTY_KEY, MAZE_SIZES, SizeIcon } from './mazeChoices'
 
 const TOOLS: Array<{ tool: MazeTool; icon: string; labelKey: TKey }> = [
@@ -70,7 +71,7 @@ function DriveCorner({ problem }: { problem: PlayabilityError | null }) {
   const t = useT()
   const setMode = useApp((s) => s.setMode)
   return (
-    <div className="bt-topright">
+    <TopRight>
       {problem === null ? (
         <span className="bt-maze-status bt-maze-ok" data-testid="maze-status" data-status="ok" role="status" aria-label={t('mazePlayable')}>
           ✅
@@ -90,7 +91,7 @@ function DriveCorner({ problem }: { problem: PlayabilityError | null }) {
       >
         <span aria-hidden="true">🚗</span> {t('menuDrive')}
       </button>
-    </div>
+    </TopRight>
   )
 }
 

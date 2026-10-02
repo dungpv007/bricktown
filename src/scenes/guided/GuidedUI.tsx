@@ -7,6 +7,7 @@ import { useGuided } from '../../state/useGuided'
 import ConfirmDialog from '../../ui/ConfirmDialog'
 import Confetti from '../../ui/Confetti'
 import { useT } from '../../ui/i18n'
+import TopRight from '../../ui/TopRight'
 import GuidedTray from './GuidedTray'
 
 
@@ -135,12 +136,12 @@ export default function GuidedUI({ onBrowse }: { onBrowse: () => void }) {
   return (
     <div className="bt-workshop-ui bt-guided-ui" data-easy={easy}>
       <StepNav total={template.steps.length} />
-      <div className="bt-topright">
+      <TopRight>
         <DifficultyToggle />
         <button className="bt-btn bt-icon-btn" data-testid="guided-list" aria-label={t('guidedList')} onClick={onBrowse}>
           📋
         </button>
-      </div>
+      </TopRight>
       <GuidedTray template={template} guided={guided} />
     </div>
   )

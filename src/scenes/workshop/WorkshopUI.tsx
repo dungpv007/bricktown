@@ -13,6 +13,7 @@ import { useT, type TKey } from '../../ui/i18n'
 import PartPalette from '../../ui/PartPalette'
 import SaveBlueprintDialog from '../../ui/SaveBlueprintDialog'
 import Toolbar from '../../ui/Toolbar'
+import TopRight from '../../ui/TopRight'
 import PlateColorButton from './PlateColorButton'
 
 interface ModelOption {
@@ -168,7 +169,7 @@ export default function WorkshopUI() {
 
   return (
     <div className="bt-workshop-ui">
-      <div className="bt-topright">
+      <TopRight>
         <PlateResizeToggle />
         <PlateColorButton />
         <button
@@ -196,7 +197,7 @@ export default function WorkshopUI() {
         >
           📄
         </button>
-      </div>
+      </TopRight>
       <Toolbar />
       <ColorPicker recolorsSelection />
       <PartPalette dragToPlace />

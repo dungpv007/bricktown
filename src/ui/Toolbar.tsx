@@ -1,4 +1,5 @@
 import { useEditor } from '../state/useEditor'
+import { useDeviceClass } from '../state/deviceClass'
 import { useT, type TKey } from './i18n'
 
 type Action = 'rotate' | 'recolor' | 'duplicate' | 'delete' | 'deselect'
@@ -22,11 +23,20 @@ const run = (action: Action) => {
   }
 }
 
-/** What can be done to the selected brick; shown only while a brick is selected. 🎨 points at the colour swatches. */
+/**
+ * What can be done to the selected brick; shown only while a brick is selected. 🎨 points at the
+ * colour swatches. A column under undo / redo on tablets, a row above the palette on phones.
+ */
 function ActionBar() {
   const t = useT()
+  const phone = useDeviceClass() !== 'tablet'
   return (
-    <div className="bt-actionbar bt-hud-panel" role="toolbar" aria-orientation="vertical" data-testid="action-bar">
+    <div
+      className="bt-actionbar bt-hud-panel"
+      role="toolbar"
+      aria-orientation={phone ? 'horizontal' : 'vertical'}
+      data-testid="action-bar"
+    >
       {ACTIONS.map(({ action, icon, labelKey }) => (
         <button
           key={action}
@@ -42,9 +52,10 @@ function ActionBar() {
   )
 }
 
-/** Left column: undo / redo, then the actions for the selected brick (when there is one). */
+/** Left column (a row on portrait phones): undo / redo, then the actions for the selected brick (when there is one). */
 export default function Toolbar() {
   const t = useT()
+  const portraitPhone = useDeviceClass() === 'phonePortrait'
   const undo = useEditor((s) => s.undo)
   const redo = useEditor((s) => s.redo)
   const canUndo = useEditor((s) => s.canUndo)
@@ -53,7 +64,7 @@ export default function Toolbar() {
 
   return (
     <>
-      <div className="bt-toolbar bt-hud-panel" role="toolbar" aria-orientation="vertical">
+      <div className="bt-toolbar bt-hud-panel" role="toolbar" aria-orientation={portraitPhone ? 'horizontal' : 'vertical'}>
         <button className="bt-btn bt-icon-btn" data-testid="undo" aria-label={t('toolUndo')} disabled={!canUndo} onClick={undo}>
           ↶
         </button>

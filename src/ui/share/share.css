@@ -10,14 +10,14 @@
 }
 
 .bt-share {
-  width: min(100%, 760px);
+  width: min(100%, calc(760px * var(--bt-s)));
 }
 
 .bt-share-name {
   max-width: 100%;
   margin: 0;
   overflow: hidden;
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
   font-weight: 800;
   text-align: center;
   text-overflow: ellipsis;
@@ -29,7 +29,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: calc(20px * var(--bt-s));
   width: 100%;
 }
 
@@ -37,9 +37,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(300px, 100%);
+  width: min(calc(300px * var(--bt-s)), 100%);
   aspect-ratio: 1;
-  border-radius: 20px;
+  border-radius: calc(20px * var(--bt-s));
   background: #f3f6fa;
 }
 
@@ -47,14 +47,14 @@
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 16px;
+  border-radius: calc(16px * var(--bt-s));
 }
 
 .bt-share-side {
   display: flex;
-  flex: 1 1 280px;
+  flex: 1 1 calc(280px * var(--bt-s));
   flex-direction: column;
-  gap: 14px;
+  gap: calc(14px * var(--bt-s));
   min-width: 0;
 }
 
@@ -62,14 +62,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 20px;
+  gap: calc(8px * var(--bt-s));
+  font-size: calc(20px * var(--bt-s));
 }
 
 .bt-share-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(calc(110px * var(--bt-s)), 1fr));
+  gap: calc(12px * var(--bt-s));
 }
 
 .bt-share-act {
@@ -77,14 +77,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 96px;
-  padding: 8px 10px;
-  font-size: 18px;
+  gap: calc(4px * var(--bt-s));
+  min-height: calc(96px * var(--bt-s));
+  padding: calc(8px * var(--bt-s)) calc(10px * var(--bt-s));
+  font-size: calc(18px * var(--bt-s));
 }
 
 .bt-share-act-icon {
-  font-size: 36px;
+  font-size: calc(36px * var(--bt-s));
   line-height: 1;
 }
 
@@ -95,10 +95,10 @@
 
 .bt-share-hint {
   margin: 0;
-  padding: 8px 14px;
-  border-radius: 16px;
+  padding: calc(8px * var(--bt-s)) calc(14px * var(--bt-s));
+  border-radius: calc(16px * var(--bt-s));
   background: #fff6cc;
-  font-size: 17px;
+  font-size: calc(17px * var(--bt-s));
   font-weight: 700;
   text-align: center;
 }
@@ -106,18 +106,18 @@
 /* 🔗 on a library card or a maze card: the top-left corner (🗑️ has the top-right one). */
 .bt-share-chip {
   position: absolute;
-  top: 4px;
-  left: 4px;
+  top: calc(4px * var(--bt-s));
+  left: calc(4px * var(--bt-s));
   width: var(--bt-touch);
   height: var(--bt-touch);
   padding: 0;
   border-radius: 50%;
-  font-size: 28px;
+  font-size: calc(28px * var(--bt-s));
 }
 
 .bt-maze-own .bt-share-chip {
-  top: -10px;
-  left: -10px;
+  top: calc(-10px * var(--bt-s));
+  left: calc(-10px * var(--bt-s));
 }
 
 .bt-share-chip-off {
@@ -127,19 +127,19 @@
 /* ---------- Import ---------- */
 
 .bt-import {
-  width: min(100%, 520px);
+  width: min(100%, calc(520px * var(--bt-s)));
 }
 
 .bt-import-thumb {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 220px;
-  height: 220px;
+  width: calc(220px * var(--bt-s));
+  height: calc(220px * var(--bt-s));
   object-fit: contain;
-  border-radius: 20px;
+  border-radius: calc(20px * var(--bt-s));
   background: linear-gradient(#cfeaf7, #eaf6e4);
-  font-size: 96px;
+  font-size: calc(96px * var(--bt-s));
 }
 
 .bt-import-thumb-maze {
@@ -150,14 +150,14 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: calc(10px * var(--bt-s));
 }
 
 .bt-import-count {
-  padding: 6px 14px;
+  padding: calc(6px * var(--bt-s)) calc(14px * var(--bt-s));
   border-radius: 999px;
   background: #eef3f8;
-  font-size: 20px;
+  font-size: calc(20px * var(--bt-s));
   font-weight: 800;
 }
 
@@ -166,7 +166,7 @@
 }
 
 .bt-import-yes {
-  min-width: 160px;
+  min-width: calc(160px * var(--bt-s));
 }
 
 .bt-import-go {
@@ -175,24 +175,24 @@
 }
 
 .bt-import-error-icon {
-  font-size: 72px;
+  font-size: calc(72px * var(--bt-s));
   line-height: 1;
 }
 
 .bt-import-picker {
-  width: min(100%, 520px);
+  width: min(100%, calc(520px * var(--bt-s)));
 }
 
 .bt-import-paste {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: calc(10px * var(--bt-s));
   width: 100%;
-  font-size: 32px;
+  font-size: calc(32px * var(--bt-s));
 }
 
 .bt-import-paste .bt-input {
-  font-size: 18px;
+  font-size: calc(18px * var(--bt-s));
 }
 
 .bt-hidden-input {
@@ -201,11 +201,11 @@
 
 /* "Vượt 42s?" on an imported maze card. */
 .bt-maze-challenge {
-  padding: 2px 10px;
+  padding: 2px calc(10px * var(--bt-s));
   border-radius: 999px;
   background: var(--bt-yellow);
   color: var(--bt-ink);
-  font-size: 16px;
+  font-size: calc(16px * var(--bt-s));
   font-weight: 800;
 }
 
@@ -216,12 +216,12 @@
 
 /* Guided picker: models friends shared with build steps; one or two keep the card width of the grid below. */
 .bt-guided-shared-grid {
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--bt-s)), 1fr));
 }
 
 .bt-guided-shared-title {
-  margin: 8px 0 0;
-  font-size: 26px;
+  margin: calc(8px * var(--bt-s)) 0 0;
+  font-size: calc(26px * var(--bt-s));
   color: var(--bt-white);
   text-shadow: 0 3px 0 var(--bt-blue);
 }
