@@ -34,8 +34,9 @@ function ChaseCamera({ target, length }: { target: RefObject<THREE.Group | null>
   const camera = useThree((s) => s.camera)
   const heading = useRef(new THREE.Vector3(0, 0, -1))
   const placed = useRef(false)
-  const distance = Math.max(20, length * 2.6)
-  const height = distance * 0.55
+  // Pulled well back and up, so a kid sees the streets around the car, not just its bumper.
+  const distance = Math.max(34, length * 4.2)
+  const height = distance * 0.9 // steeper: buildings beside the road block the view less
   const desired = useMemo(() => new THREE.Vector3(), [])
   const look = useMemo(() => new THREE.Vector3(), [])
 
@@ -49,7 +50,7 @@ function ChaseCamera({ target, length }: { target: RefObject<THREE.Group | null>
 
     const h = heading.current
     desired.set(tmpPos.x - h.x * distance, tmpPos.y + height, tmpPos.z - h.z * distance)
-    look.set(tmpPos.x + h.x * distance * 0.5, tmpPos.y, tmpPos.z + h.z * distance * 0.5)
+    look.set(tmpPos.x + h.x * distance * 0.3, tmpPos.y, tmpPos.z + h.z * distance * 0.3)
     if (placed.current) camera.position.lerp(desired, 1 - Math.exp(-FOLLOW_RATE * dt))
     else camera.position.copy(desired)
     placed.current = true

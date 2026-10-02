@@ -4,7 +4,7 @@ import * as THREE from 'three'
 
 const SHADOW_MAP_SIZE = 2048
 /** Half-size of the shadow box that travels with the car. */
-const SHADOW_EXTENT = 45
+const SHADOW_EXTENT = 70 // covers the wider chase view
 const SUN_OFFSET = new THREE.Vector3(30, 60, 20)
 
 const tmpPos = new THREE.Vector3()
