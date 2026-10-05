@@ -226,6 +226,7 @@ Rotate a figure with `r` to face a direction: r=0 faces +z (front, the camera), 
 
 ```
 tpl:apartment building 16x16 (2x2 cells)
+tpl:arcade building 16x16 (2x2 cells)
 tpl:bakery building 16x16 (2x2 cells)
 tpl:bench prop 8x8 (1x1 cells)
 tpl:bus vehicle 8x16 (1x2 cells)

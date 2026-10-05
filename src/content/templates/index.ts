@@ -1,5 +1,6 @@
 import type { Template } from '../../core/types'
 import { apartment } from './apartment'
+import { arcade } from './arcade'
 import { bakery } from './bakery'
 import { bench } from './bench'
 import { bus } from './bus'
@@ -35,7 +36,7 @@ import { tree } from './tree'
 import { truck } from './truck'
 
 const ALL: Template[] = [
-  apartment, bakery, bench, bus, bushFlowers, car, fireStation, fireTruck, flowerBed, fountain,
+  apartment, arcade, bakery, bench, bus, bushFlowers, car, fireStation, fireTruck, flowerBed, fountain,
   garage, grocery, houseBlue, houseSmall, houseTall, lamp, officeTower, pineTree, playground,
   policeCar, policeHq, policeStation, restaurant, robot, rocket, roundTree, skyscraper,
   sushiRestaurant, taxi, toyShop, trainCarriage, trainEngine, tree, truck,

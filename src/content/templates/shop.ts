@@ -10,6 +10,8 @@ export const SHOP = { X0: 1, X1: 14, Z0: 3, Z1: 14 } as const
 /** Seven courses on the sides (y = 1..21); the front and back have six, their awning is the seventh. */
 const COURSES = 7
 const ROOF_Y = 1 + COURSES * 3
+/** The flat roof's height (plates): a caller's own roof sign stands on it. */
+export const SHOP_ROOF_Y = ROOF_Y
 const GLASS = 15
 
 export interface ShopLook {
@@ -19,8 +21,8 @@ export interface ShopLook {
   awning: [number, number]
   roof: number
   door: number
-  /** A `board_*` part and the board's colour (it frames the print). */
-  board: [string, number]
+  /** A `board_*` part and the board's colour (it frames the print); none: the roof stays clear for the caller's own sign. */
+  board?: [string, number]
 }
 
 /** Floor plates of the shop (y = 0): call first, before the furniture. */
@@ -64,5 +66,5 @@ export function shopShell(b: Builder, look: ShopLook): void {
 
   // Flat roof, and the sign board on it above the door.
   b.plates(ROOF_Y, X0, Z0, X1, Z1, look.roof)
-  b.add(look.board[0], 5, ROOF_Y + 1, Z0 + 1, 0, look.board[1])
+  if (look.board) b.add(look.board[0], 5, ROOF_Y + 1, Z0 + 1, 0, look.board[1])
 }

@@ -8,6 +8,7 @@ Templates tagged `water` must sit on (or across) water; all others on dry land.
 | id | name (en) | tên (vi) | kind | baseplate | cells | bricks | tags |
 |---|---|---|---|---|---|---|---|
 | `tpl:apartment` | Apartment block | Chung cư | building | 16 x 16 | 2 x 2 | 324 | house, tower, apartment |
+| `tpl:arcade` | Arcade | Khu trò chơi | building | 16 x 16 | 2 x 2 | 139 | shop, arcade |
 | `tpl:bakery` | Bakery | Tiệm bánh | building | 16 x 16 | 2 x 2 | 127 | shop, bakery |
 | `tpl:bench` | Park bench | Ghế dài | prop | 8 x 8 | 1 x 1 | 6 | street, furniture |
 | `tpl:bus` | Bus | Xe buýt | vehicle | 8 x 16 | 1 x 2 | 64 | vehicle, bus |

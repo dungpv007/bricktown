@@ -15,7 +15,7 @@ const MAX_BRICKS: Record<string, number> = {
   restaurant: 220, garage: 220, fire_station: 220, police_station: 220,
   robot: 120, rocket: 250, police_hq: 300, skyscraper: 400,
   // Living City: town shops ≤ 250, towers ≤ 400, park props ≤ 60, vehicles ≤ 80.
-  sushi_restaurant: 250, bakery: 250, toy_shop: 250, grocery: 250, apartment: 400, office_tower: 400,
+  sushi_restaurant: 250, bakery: 250, toy_shop: 250, grocery: 250, arcade: 250, apartment: 400, office_tower: 400,
   fountain: 60, playground: 60, flower_bed: 60, pine_tree: 60, round_tree: 60,
   train_engine: 80, train_carriage: 80, bus: 80, taxi: 80,
 }
@@ -269,7 +269,7 @@ describe('templates', () => {
   describe('living city', () => {
     const kinds: Record<string, [Template['kind'], number, number]> = {
       sushi_restaurant: ['building', 16, 16], bakery: ['building', 16, 16], toy_shop: ['building', 16, 16],
-      grocery: ['building', 16, 16], apartment: ['building', 16, 16], office_tower: ['building', 16, 16],
+      grocery: ['building', 16, 16], arcade: ['building', 16, 16], apartment: ['building', 16, 16], office_tower: ['building', 16, 16],
       fountain: ['prop', 8, 8], playground: ['prop', 8, 8], flower_bed: ['prop', 8, 8], pine_tree: ['prop', 8, 8],
       round_tree: ['prop', 8, 8], train_engine: ['vehicle', 8, 16], train_carriage: ['vehicle', 8, 16],
       bus: ['vehicle', 8, 16], taxi: ['vehicle', 8, 16],
@@ -303,6 +303,14 @@ describe('templates', () => {
       expect(sushi.tags).toContain('restaurant')
       expect(figures(sushi).filter((f) => f.fig?.hat === 'chef')).toHaveLength(1)
       expect(sushi.bricks.filter((b) => b.p === 'print_fish_1x1').length).toBeGreaterThanOrEqual(4)
+    })
+
+    it('arcade: claw machines with glass boxes, game cabinets, an attendant and a kid', () => {
+      const t = getTemplate('arcade')!
+      expect(t.tags).toEqual(expect.arrayContaining(['shop', 'arcade']))
+      expect(t.bricks.filter((b) => b.c === 15 && b.p === 'brick_2x2').length).toBeGreaterThanOrEqual(4)
+      expect(t.bricks.filter((b) => b.p === 'computer_1x2').length).toBeGreaterThanOrEqual(2)
+      expect(figures(t)).toHaveLength(2)
     })
 
     it('towers: the apartment has balconies on six floors, the office tower is a stepped glass tower', () => {
