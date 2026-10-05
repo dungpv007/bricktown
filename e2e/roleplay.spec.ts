@@ -69,12 +69,12 @@ test('roleplay: the 🎮 menu card opens the game picker, the sticker book and t
   await page.getByTestId('menu-play').click()
   const hub = page.getByTestId('play-hub')
   await expect(hub).toBeVisible()
-  for (const id of ['sushi', 'bakery', 'grocery', 'rescue']) await expect(page.getByTestId(`play-game-${id}`)).toBeVisible()
+  for (const id of ['sushi', 'bakery', 'grocery', 'rescue', 'claw']) await expect(page.getByTestId(`play-game-${id}`)).toBeVisible()
 
   await page.getByTestId('play-tab-stickers').click()
   await expect(page.getByTestId('sticker-book')).toBeVisible()
-  await expect(page.getByTestId('sticker-book').locator('.bt-sticker')).toHaveCount(24)
-  await expect(page.getByTestId('sticker-count')).toContainText('0 / 24')
+  await expect(page.getByTestId('sticker-book').locator('.bt-sticker')).toHaveCount(27)
+  await expect(page.getByTestId('sticker-count')).toContainText('0 / 27')
 
   await page.getByTestId('play-tab-shop').click()
   await expect(page.getByTestId('play-shop')).toBeVisible()

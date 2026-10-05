@@ -1,8 +1,9 @@
 import type { LocalizedText } from '../core/types'
+import { PRIZE_COUNT } from './claw/prizes'
 import type { GameId, GameStats, PlayData } from './types'
 
 /**
- * The 🏅 sticker book: 24 collectible stickers, each earned by a milestone over the kid's play data.
+ * The 🏅 sticker book: 27 collectible stickers, each earned by a milestone over the kid's play data.
  * Ids are stable (they are saved); only ever append. Pure: the menu reads it without 3D code.
  */
 export interface Sticker {
@@ -15,8 +16,11 @@ export interface Sticker {
   earned: (play: PlayData) => boolean
 }
 
-/** The four role-play games of the plan (the dev-only `demo` never earns game stickers). */
-export const REAL_GAMES: readonly GameId[] = ['sushi', 'bakery', 'grocery', 'rescue']
+/** The role-play games (the dev-only `demo` never earns game stickers). */
+export const REAL_GAMES: readonly GameId[] = ['sushi', 'bakery', 'grocery', 'rescue', 'claw']
+
+/** Claw machine prize kinds the kid owns. */
+const prizeKinds = (play: PlayData): number => play.prizes?.length ?? 0
 
 const ZERO: GameStats = { rounds: 0, customers: 0, perfect: 0, coins: 0 }
 
@@ -79,6 +83,10 @@ export const STICKERS: Sticker[] = [
   { id: 'rescue_first', icon: '🧑‍🚒', name: { vi: 'Lính cứu hỏa dũng cảm', en: 'Brave firefighter' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue_fire').rounds >= 1 },
   { id: 'rescue_5', icon: '👮', name: { vi: 'Cảnh sát siêu đẳng', en: 'Super police' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue_police').rounds >= 1 },
   { id: 'rescue_perfect', icon: '🦸', name: { vi: 'Anh hùng thành phố', en: 'City hero' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue').rounds >= 5 },
+  // Claw machine: the first prize, six kinds, the whole collection (see play/claw/prizes).
+  { id: 'claw_first', icon: '🧸', name: { vi: 'Món quà đầu tiên', en: 'First prize' }, game: 'claw', earned: (p) => prizeKinds(p) >= 1 },
+  { id: 'claw_6', icon: '🕹️', name: { vi: 'Sáu món quà', en: 'Six prizes' }, game: 'claw', earned: (p) => prizeKinds(p) >= 6 },
+  { id: 'claw_all', icon: '🏆', name: { vi: 'Đủ bộ quà', en: 'Every prize' }, game: 'claw', earned: (p) => prizeKinds(p) >= PRIZE_COUNT },
 ]
 
 export const STICKER_BY_ID: Record<string, Sticker> = Object.fromEntries(STICKERS.map((s) => [s.id, s]))

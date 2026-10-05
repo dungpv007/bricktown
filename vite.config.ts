@@ -35,6 +35,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webp,wasm,json}'], // webp: the main menu's poster
+        // Game models (the claw machine's prizes) are not part of the install: fetched when a game opens.
+        globIgnores: ['models/**'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // Background music is optional: not part of the install, cached the first time it plays (one
         // whole-file fetch, see src/audio/music.ts) and served offline from then on.
@@ -43,6 +45,12 @@ export default defineConfig({
             urlPattern: /\/audio\/[^/]+\.m4a$/,
             handler: 'CacheFirst',
             options: { cacheName: 'bt-audio', expiration: { maxEntries: 2 } },
+          },
+          {
+            // 3D models a game loads when it opens (public/models/): cached the first time, offline after.
+            urlPattern: /\/models\/.+\.glb$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'bt-models', expiration: { maxEntries: 8 } },
           },
         ],
         // The first install controls the open page right away (offline after one visit); later versions
@@ -64,7 +72,8 @@ export default defineConfig({
             // (which also uses them) and drag three.js into the menu's first paint.
             { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler|zustand|use-sync-external-store)[\\/]/, priority: 40 },
             { name: 'rapier', test: /node_modules[\\/]@dimforge[\\/]/, priority: 30 },
-            { name: 'three', test: /node_modules[\\/](three|three-stdlib)[\\/]/, priority: 20 },
+            // Not the glTF loader: only the claw machine uses it, so it stays in that game's own chunk.
+            { name: 'three', test: /node_modules[\\/](three|three-stdlib)[\\/](?!examples[\\/]jsm[\\/]loaders[\\/]GLTFLoader)/, priority: 20 },
             { name: 'r3f', test: /node_modules[\\/]@react-three[\\/](fiber|drei)[\\/]/, priority: 10 },
           ],
         },

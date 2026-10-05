@@ -4,7 +4,7 @@
  */
 
 /**
- * A game's id. The planned games are `sushi`, `bakery`, `grocery`, `rescue`; `demo` proves the
+ * A game's id. The games are `sushi`, `bakery`, `grocery`, `rescue`, `claw`; `demo` proves the
  * framework (dev only). Kept a string so a game can land without touching this file.
  */
 export type GameId = string
@@ -34,6 +34,8 @@ export interface PlayData {
   unlocked: string[]
   /** Counters by game id. */
   stats?: Record<GameId, GameStats>
+  /** Claw machine prize kinds won (see play/claw/prizes), each once, in the order first won. */
+  prizes?: string[]
 }
 
 /** What a game reports when a round ends (see `finishRound` in play/usePlay). */

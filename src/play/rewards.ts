@@ -1,3 +1,4 @@
+import { normalizePrizes } from './claw/prizes'
 import { newStickers } from './stickers'
 import type { GameId, GameStats, PlayData, RoundResult } from './types'
 import { UNLOCKABLE_BY_ID } from './unlocks'
@@ -85,7 +86,7 @@ const count = (v: unknown, max = 1e9): number => (typeof v === 'number' ? clampI
 /**
  * `SaveData.play` as stored, made safe: undefined when absent or not an object (nothing earned);
  * coins clamped to 0..MAX_COINS; sticker and unlock lists keep distinct id-like strings; stats keep
- * id-like game keys with whole, non-negative counters.
+ * id-like game keys with whole, non-negative counters; claw prizes keep known kinds, each once.
  */
 export function normalizePlay(raw: unknown): PlayData | undefined {
   if (!isRecord(raw)) return undefined
@@ -98,5 +99,7 @@ export function normalizePlay(raw: unknown): PlayData | undefined {
     }
     if (Object.keys(stats).length > 0) out.stats = stats
   }
+  const prizes = normalizePrizes(raw.prizes)
+  if (prizes.length > 0) out.prizes = prizes
   return out
 }

@@ -24,5 +24,8 @@
 
 /audio/*
   Cache-Control: public, max-age=604800
+# Game models (not hashed): a week, like the music; the service worker keeps its own copy too.
+/models/*
+  Cache-Control: public, max-age=604800
 /menu-bg.webp
   Cache-Control: public, max-age=604800

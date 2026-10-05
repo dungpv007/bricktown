@@ -46,6 +46,8 @@ describe('rounds and stickers', () => {
     expect(play.stickers).toEqual(expect.arrayContaining(['customers_10', 'rounds_5', 'bakery_5']))
     expect(play.stickers).not.toContain('all_games')
     for (const g of ['sushi', 'grocery', 'rescue']) play = recordRound(play, g, { customers: 1, coins: 1 }).play
+    expect(play.stickers).not.toContain('all_games') // the claw machine is a role too
+    play = recordRound(play, 'claw', { customers: 1, coins: 0 }).play
     expect(play.stickers).toContain('all_games')
   })
 
@@ -56,9 +58,9 @@ describe('rounds and stickers', () => {
     expect(r.stickers).toEqual([])
   })
 
-  it('has about 24 stickers with unique ids', () => {
-    expect(STICKERS).toHaveLength(24)
-    expect(new Set(STICKERS.map((s) => s.id)).size).toBe(24)
+  it('has 27 stickers with unique ids', () => {
+    expect(STICKERS).toHaveLength(27)
+    expect(new Set(STICKERS.map((s) => s.id)).size).toBe(27)
   })
 })
 
@@ -136,6 +138,7 @@ describe('registry', () => {
     expect(gameForSource('tpl:bakery')?.id).toBe('bakery')
     expect(gameForSource('tpl:grocery')?.id).toBe('grocery')
     for (const t of ['fire_station', 'police_station', 'police_hq']) expect(gameForSource(`tpl:${t}`)?.id).toBe('rescue')
+    expect(gameForSource('tpl:arcade')?.id).toBe('claw')
     expect(gameForSource('tpl:house_small')).toBeUndefined()
     expect(gameForSource('tpl:__proto__')).toBeUndefined()
     expect(gameForSource('bp_sushi_restaurant')).toBeUndefined() // the kid's own blueprints offer no game

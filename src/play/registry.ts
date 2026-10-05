@@ -75,6 +75,15 @@ export const GAMES: readonly GameDef[] = [
   },
 
   {
+    id: 'claw',
+    icon: '🕹️',
+    name: { vi: 'Gắp thú', en: 'Claw machine' },
+    color: 'var(--bt-purple)',
+    templates: ['arcade'],
+    scene: lazyScene(() => import('./claw/ClawGame')),
+  },
+
+  {
     // Proves the framework end to end (tests, manual checks); never shown to kids in production.
     id: 'demo',
     icon: '🧪',

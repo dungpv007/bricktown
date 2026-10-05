@@ -1,0 +1,250 @@
+/* 🕹️ The claw machine game: the stage, its HUD (🏆 and the tries), the pad and the big red button. */
+.bt-claw {
+  position: absolute;
+  inset: 0;
+}
+
+.bt-claw-hud {
+  display: flex;
+  align-items: center;
+  gap: calc(10px * var(--bt-s));
+}
+
+.bt-btn.bt-claw-trophy {
+  pointer-events: auto;
+  font-size: calc(24px * var(--bt-s));
+  font-weight: 800;
+  background: var(--bt-yellow);
+  animation: bt-claw-bump 0.45s ease-out;
+}
+
+@keyframes bt-claw-bump {
+  0% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.bt-claw-tokens {
+  display: flex;
+  gap: calc(6px * var(--bt-s));
+  padding: calc(8px * var(--bt-s)) calc(12px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(26px * var(--bt-s));
+  line-height: 1;
+}
+
+.bt-claw-token[data-used='true'] {
+  opacity: 0.22;
+  filter: grayscale(1);
+}
+
+/* The controls: the pad bottom-left, the big red button bottom-right. */
+.bt-claw-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(14px * var(--bt-s) + var(--bt-safe-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 calc(18px * var(--bt-s));
+  pointer-events: none;
+}
+
+.bt-claw-pad {
+  display: grid;
+  grid-template-columns: repeat(3, var(--bt-claw-key));
+  grid-template-rows: repeat(3, var(--bt-claw-key));
+  grid-template-areas:
+    '. u .'
+    'l . r'
+    '. d .';
+  --bt-claw-key: calc(var(--bt-touch) * 1.15);
+  pointer-events: auto;
+}
+
+.bt-btn.bt-claw-dir {
+  width: var(--bt-claw-key);
+  height: var(--bt-claw-key);
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  font-size: calc(30px * var(--bt-s));
+  background: rgba(255, 255, 255, 0.92);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.bt-claw-dir-u {
+  grid-area: u;
+}
+
+.bt-claw-dir-l {
+  grid-area: l;
+}
+
+.bt-claw-dir-r {
+  grid-area: r;
+}
+
+.bt-claw-dir-d {
+  grid-area: d;
+}
+
+.bt-btn.bt-claw-drop {
+  width: calc(var(--bt-touch) * 2.2);
+  height: calc(var(--bt-touch) * 2.2);
+  padding: 0;
+  border-radius: 50%;
+  border: calc(6px * var(--bt-s)) solid #fff;
+  background: radial-gradient(circle at 35% 30%, #ff7a6b, #e3000b 55%, #9c0008);
+  box-shadow:
+    0 calc(6px * var(--bt-s)) 0 #7a0006,
+    var(--bt-shadow);
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.bt-btn.bt-claw-drop:active:not(:disabled) {
+  transform: translateY(calc(5px * var(--bt-s)));
+  box-shadow:
+    0 calc(1px * var(--bt-s)) 0 #7a0006,
+    var(--bt-shadow);
+}
+
+.bt-btn.bt-claw-drop:disabled,
+.bt-btn.bt-claw-dir:disabled {
+  opacity: 0.45;
+}
+
+/* The prize popping up: its name under it (the 3D prize is drawn by the canvas). */
+.bt-claw-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.bt-claw-reveal-name {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+  padding: calc(10px * var(--bt-s)) calc(26px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(34px * var(--bt-s));
+  font-weight: 800;
+  white-space: nowrap;
+  animation: bt-claw-name 0.4s ease-out;
+}
+
+@keyframes bt-claw-name {
+  0% {
+    transform: translateX(-50%) scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/* A duplicate prize turned into coins. */
+.bt-claw-toast {
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  z-index: 6;
+  transform: translateX(-50%);
+  padding: calc(10px * var(--bt-s)) calc(22px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: var(--bt-yellow);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(30px * var(--bt-s));
+  font-weight: 800;
+  pointer-events: none;
+  animation: bt-claw-toast 2.2s ease-out forwards;
+}
+
+@keyframes bt-claw-toast {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  12%,
+  80% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-16px);
+  }
+}
+
+.bt-claw-won {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(10px * var(--bt-s));
+  font-size: calc(54px * var(--bt-s));
+  line-height: 1.1;
+}
+
+/* The prize cabinet's title and ←. */
+.bt-claw-cabinet-ui {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(16px * var(--bt-s) + var(--bt-safe-bottom));
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(18px * var(--bt-s));
+}
+
+.bt-claw-cabinet-title {
+  padding: calc(10px * var(--bt-s)) calc(22px * var(--bt-s));
+  border-radius: var(--bt-radius);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--bt-shadow);
+  font-size: calc(30px * var(--bt-s));
+  font-weight: 800;
+}
+
+.bt-claw-loading-icon {
+  animation: bt-claw-wiggle 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes bt-claw-wiggle {
+  0% {
+    transform: rotate(-12deg);
+  }
+  100% {
+    transform: rotate(12deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-btn.bt-claw-trophy,
+  .bt-claw-reveal-name,
+  .bt-claw-loading-icon {
+    animation: none;
+  }
+}
+
+.bt-btn.bt-claw-trophy:disabled {
+  opacity: 1;
+}
