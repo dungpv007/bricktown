@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { pop, snap, thunk, whoosh } from '../../audio/sfx'
 import { useFrameRequest } from '../../render/frameDriver'
-import { CHUTE, clampClaw, type PitPrize, type TryOutcome } from './logic'
+import { CHUTE, clampClaw, nearestPrize, type PitPrize, type TryOutcome } from './logic'
 import { MACHINE_D, MACHINE_W, PIT_FLOOR, ROOF_UNDERSIDE } from './machine'
 
 /**
@@ -47,6 +47,19 @@ const CABLE = new THREE.CylinderGeometry(0.05, 0.05, 1, 8)
 const RAIL = new THREE.CylinderGeometry(0.12, 0.12, 1, 10)
 const CARRIAGE = new THREE.BoxGeometry(1, 0.4, 1)
 const TIP_AT = new THREE.Vector3(0, -1.3, 0.2)
+
+/**
+ * The aiming aids' looks. Drawn over everything (no depth test), so the marker still shows when it is
+ * under a prize: where it sits among the prizes is what tells the kid how deep the claw is.
+ */
+const aid = (color: string, opacity: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false })
+const MARKER = new THREE.RingGeometry(0.32, 0.62, 32)
+const MARKER_ON = aid('#ffe14d', 0.95)
+const MARKER_OFF = aid('#c9ced6', 0.7)
+const LASER_ON = aid('#ff5a4d', 0.55)
+const LASER_OFF = aid('#c9ced6', 0.35)
+const HALO = new THREE.RingGeometry(1.0, 1.25, 40)
+const HALO_MATERIAL = aid('#ffe14d', 0.85)
 
 /** Stage lengths (s); the carry home depends on the distance (see `travelTime`). */
 const DUR = { down: 1.0, close: 0.35, up: 1.0, open: 0.3, fall: 0.45, idle: 1 } as const
@@ -137,13 +150,20 @@ export interface ClawRigProps {
   onChute: (prize: PitPrize) => void
   /** A miss or a slip is over (the claw is home again). */
   onDone: () => void
+  /** The prizes in the pit (for the aiming aids). */
+  pile: readonly PitPrize[]
+  /** Aiming now: show the floor marker, the laser and the prize a drop would grab. */
+  showAim: boolean
 }
 
 /** The gantry, carriage, cable and claw, and their animation. */
-export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone }: ClawRigProps) {
+export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone, pile, showAim }: ClawRigProps) {
   const carriage = useRef<THREE.Group>(null)
   const bridge = useRef<THREE.Group>(null)
   const cable = useRef<THREE.Mesh>(null)
+  const marker = useRef<THREE.Mesh>(null)
+  const laser = useRef<THREE.Mesh>(null)
+  const halo = useRef<THREE.Mesh>(null)
   const claw = useRef<THREE.Group>(null)
   const open = useRef(OPEN * 0.6)
   const hubY = useRef(REST_Y)
@@ -293,6 +313,25 @@ export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone }: ClawRigPr
       cable.current.position.set(x, (top + bottom) / 2, z)
       cable.current.scale.y = Math.max(0.01, top - bottom)
     }
+    // The aiming aids: a ring on the pit floor right under the claw and a laser down to it (they
+    // show how deep the claw is among the prizes), and a halo round the prize a drop would grab.
+    const target = showAim ? nearestPrize(pile, x, z) : null
+    if (marker.current) {
+      marker.current.visible = showAim
+      marker.current.position.set(x, PIT_FLOOR + 0.04, z)
+      marker.current.material = target ? MARKER_ON : MARKER_OFF
+    }
+    if (laser.current) {
+      laser.current.visible = showAim
+      const top = hubY.current - 1.2
+      laser.current.position.set(x, (top + PIT_FLOOR) / 2, z)
+      laser.current.scale.y = Math.max(0.01, top - PIT_FLOOR)
+      laser.current.material = target ? LASER_ON : LASER_OFF
+    }
+    if (halo.current) {
+      halo.current.visible = target !== null
+      if (target) halo.current.position.set(target.x, PIT_FLOOR + 0.06, target.z)
+    }
   })
 
   return (
@@ -308,6 +347,9 @@ export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone }: ClawRigPr
         <mesh geometry={CARRIAGE} material={ACCENT} scale={[0.9, 1, 0.9]} />
       </group>
       <mesh ref={cable} geometry={CABLE} material={DARK_METAL} />
+      <mesh ref={marker} geometry={MARKER} material={MARKER_OFF} rotation={[-Math.PI / 2, 0, 0]} renderOrder={10} visible={false} />
+      <mesh ref={laser} geometry={CABLE} material={LASER_OFF} renderOrder={10} visible={false} />
+      <mesh ref={halo} geometry={HALO} material={HALO_MATERIAL} rotation={[-Math.PI / 2, 0, 0]} renderOrder={9} visible={false} />
       <group ref={claw} scale={1.15}>
         <ClawModel open={open} />
       </group>

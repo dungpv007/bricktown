@@ -12,6 +12,9 @@ import {
   nearestPrize,
   newClawRound,
   pickKinds,
+  isGuaranteed,
+  MERCY_AFTER,
+  SLIP_CHANCE,
   resolveTry,
   roundOver,
   seededRng,
@@ -19,7 +22,7 @@ import {
   type ClawRound,
   type PitPrize,
 } from './logic'
-import { DUPLICATE_COINS, PRIZES, PRIZE_COUNT, normalizePrizes } from './prizes'
+import { DUPLICATE_COINS, GIFT_CONTENTS, GIFT_LOOKS, PRIZES, PRIZE_BY_ID, PRIZE_COUNT, isPrizeId, normalizePrizes } from './prizes'
 
 const prize = (id: number, x: number, z: number, kind = 'bunny'): PitPrize => ({ id, kind, x, z, rot: 0 })
 const PILE = [prize(0, -3, 0, 'bunny'), prize(1, 0, 0, 'cat'), prize(2, 3, -2, 'panda')]
@@ -41,39 +44,35 @@ describe('claw machine rules', () => {
     expect(resolveTry(newClawRound(), PILE, 0, 3.4, never)).toEqual({ type: 'miss' })
   })
 
-  it('never slips on the first try', () => {
-    const out = resolveTry(newClawRound(), PILE, 0, 0, always)
-    expect(out).toMatchObject({ type: 'grab', slip: false })
+  it('a grab may slip on any try, a miss never does', () => {
+    expect(resolveTry(newClawRound(), PILE, 0, 0, always)).toMatchObject({ type: 'grab', slip: true })
+    expect(resolveTry(newClawRound(), PILE, 0, 0, never)).toMatchObject({ type: 'grab', slip: false })
+    expect(resolveTry(newClawRound(), PILE, 0, 3.4, always)).toEqual({ type: 'miss' })
   })
 
-  it('slips at most once a round, and the try after a slip is guaranteed anywhere', () => {
-    let round: ClawRound = applyTry(newClawRound(), resolveTry(newClawRound(), PILE, 0, 0, always))
-    expect(round.won).toEqual(['cat'])
-    const slip = resolveTry(round, PILE, 0, 0, always)
-    expect(slip).toMatchObject({ type: 'grab', slip: true })
-    round = applyTry(round, slip)
-    expect(round).toMatchObject({ used: 2, won: ['cat'], slipped: true, guaranteed: true })
-    // Guaranteed: grabs even far from every prize, and does not slip.
-    const sure = resolveTry(round, PILE, PIT.minX, PIT.maxZ, always)
-    expect(sure).toMatchObject({ type: 'grab', slip: false })
-    round = applyTry(round, sure)
-    expect(round.guaranteed).toBe(false)
-    // No second slip, however unlucky.
-    expect(resolveTry(round, PILE, 0, 0, always)).toMatchObject({ slip: false })
-  })
-
-  it('does not slip on the last try (its guarantee would be lost)', () => {
-    const round: ClawRound = { used: MAX_TRIES - 1, won: [], slipped: false, guaranteed: false }
-    expect(resolveTry(round, PILE, 0, 0, always)).toMatchObject({ slip: false })
-  })
-
-  it('slips about a quarter of the time', () => {
+  it('slips about one grab in five', () => {
     const rng = seededRng(7)
     let slips = 0
-    const round: ClawRound = { used: 1, won: [], slipped: false, guaranteed: false }
-    for (let i = 0; i < 2000; i++) if ((resolveTry(round, PILE, 0, 0, rng) as { slip?: boolean }).slip) slips++
-    expect(slips / 2000).toBeGreaterThan(0.2)
-    expect(slips / 2000).toBeLessThan(0.3)
+    for (let i = 0; i < 4000; i++) if ((resolveTry(newClawRound(), PILE, 0, 0, rng) as { slip?: boolean }).slip) slips++
+    expect(SLIP_CHANCE).toBe(0.2)
+    expect(slips / 4000).toBeGreaterThan(0.17)
+    expect(slips / 4000).toBeLessThan(0.23)
+  })
+
+  it('mercy: after two slips in a row the next grab holds; misses do not break the run, a hold resets it', () => {
+    let round: ClawRound = newClawRound()
+    for (let i = 0; i < MERCY_AFTER; i++) {
+      expect(isGuaranteed(round)).toBe(false)
+      round = applyTry(round, resolveTry(round, PILE, 0, 0, always))
+    }
+    expect(round).toMatchObject({ used: 2, won: [], streak: 2 })
+    round = applyTry(round, { type: 'miss' })
+    expect(isGuaranteed(round)).toBe(true)
+    const sure = resolveTry(round, PILE, 0, 0, always)
+    expect(sure).toMatchObject({ type: 'grab', slip: false })
+    round = applyTry(round, sure)
+    expect(round).toMatchObject({ won: ['cat'], streak: 0 })
+    expect(resolveTry(round, PILE, 0, 0, always)).toMatchObject({ slip: true })
   })
 
   it('a round is five tries, misses count too', () => {
@@ -100,22 +99,49 @@ describe('claw machine rules', () => {
       expect(p.z).toBeGreaterThanOrEqual(PIT.minZ)
       expect(p.z).toBeLessThanOrEqual(PIT.maxZ)
     }
-    const owned = PRIZES.slice(0, 6).map((p) => p.id)
+    const owned = PRIZES.slice(0, 5).map((p) => p.id)
     const kinds = pickKinds(seededRng(1), owned, 6000)
     const unowned = kinds.filter((k) => !owned.includes(k)).length / kinds.length
-    expect(unowned).toBeGreaterThan(0.7) // 6 kinds x 3 vs 6 x 1: about 0.75
+    expect(unowned).toBeGreaterThan(0.7) // 5 kinds x 3 vs 5 x 1: about 0.75
+  })
+
+  it('about a third of the pile are gift boxes, each hiding an animal or a car', () => {
+    let gifts = 0
+    let total = 0
+    for (let seed = 1; seed <= 200; seed++) {
+      for (const p of makePile(seededRng(seed), [])) {
+        total++
+        if (!p.gift) continue
+        gifts++
+        expect(GIFT_LOOKS).toContain(p.gift)
+        expect(GIFT_CONTENTS).toContain(p.kind)
+        expect(PRIZE_BY_ID[p.kind].group).not.toBe('toy')
+      }
+    }
+    expect(gifts / total).toBeGreaterThan(0.25)
+    expect(gifts / total).toBeLessThan(0.35)
+    // Inside a gift: kinds not owned yet come up more often too.
+    const owned = GIFT_CONTENTS.slice(0, 4)
+    const inside = pickKinds(seededRng(3), owned, 4000, GIFT_CONTENTS)
+    expect(inside.every((k) => GIFT_CONTENTS.includes(k))).toBe(true)
+    expect(inside.filter((k) => !owned.includes(k)).length / inside.length).toBeGreaterThan(0.7)
   })
 })
 
 describe('prize cabinet', () => {
-  it('has 12 kinds with unique ids', () => {
-    expect(PRIZE_COUNT).toBe(12)
-    expect(new Set(PRIZES.map((p) => p.id)).size).toBe(12)
+  it('has 10 kinds with unique ids: 6 animals, 2 cars, a ball and a star (gifts are boxes, not kinds)', () => {
+    expect(PRIZE_COUNT).toBe(10)
+    expect(new Set(PRIZES.map((p) => p.id)).size).toBe(10)
+    expect(PRIZES.filter((p) => p.group === 'animal')).toHaveLength(6)
+    expect(PRIZES.filter((p) => p.group === 'car')).toHaveLength(2)
+    for (const look of GIFT_LOOKS) expect(isPrizeId(look)).toBe(false)
   })
 
   it('normalises the saved prizes: known kinds only, each once', () => {
     expect(normalizePrizes(['cat', 'cat', 'dragon', 3, '__proto__', 'star'])).toEqual(['cat', 'star'])
     expect(normalizePrizes('cat')).toEqual([])
+    // Gift boxes were kinds once: such saves drop them harmlessly.
+    expect(normalizePrizes(['gift_box', 'bunny', 'gift_round'])).toEqual(['bunny'])
     expect(normalizePlay({ coins: 1, stickers: [], unlocked: [], prizes: ['panda', 'nope', 'panda'] })?.prizes).toEqual(['panda'])
     expect(normalizePlay({ coins: 1, stickers: [], unlocked: [] })).not.toHaveProperty('prizes')
   })
@@ -131,7 +157,7 @@ describe('prize cabinet', () => {
     expect(collectPrize(dup.play, 'dragon').play).toBe(dup.play)
   })
 
-  it('awards six kinds and the whole collection', () => {
+  it('awards the first prize, half the set (5) and the whole set (10)', () => {
     let play = emptyPlay()
     const earned: string[] = []
     for (const p of PRIZES) {
@@ -140,6 +166,6 @@ describe('prize cabinet', () => {
       play = r.play
     }
     expect(earned).toEqual(['claw_first', 'claw_6', 'claw_all'])
-    expect(play.prizes).toHaveLength(12)
+    expect(play.prizes).toHaveLength(10)
   })
 })

@@ -83,9 +83,10 @@ export const STICKERS: Sticker[] = [
   { id: 'rescue_first', icon: '🧑‍🚒', name: { vi: 'Lính cứu hỏa dũng cảm', en: 'Brave firefighter' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue_fire').rounds >= 1 },
   { id: 'rescue_5', icon: '👮', name: { vi: 'Cảnh sát siêu đẳng', en: 'Super police' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue_police').rounds >= 1 },
   { id: 'rescue_perfect', icon: '🦸', name: { vi: 'Anh hùng thành phố', en: 'City hero' }, game: 'rescue', earned: (p) => statsOf(p, 'rescue').rounds >= 5 },
-  // Claw machine: the first prize, six kinds, the whole collection (see play/claw/prizes).
+  // Claw machine: the first prize, half the set, the whole set (see play/claw/prizes; `claw_6` keeps
+  // its saved id from when the set had 12 kinds).
   { id: 'claw_first', icon: '🧸', name: { vi: 'Món quà đầu tiên', en: 'First prize' }, game: 'claw', earned: (p) => prizeKinds(p) >= 1 },
-  { id: 'claw_6', icon: '🕹️', name: { vi: 'Sáu món quà', en: 'Six prizes' }, game: 'claw', earned: (p) => prizeKinds(p) >= 6 },
+  { id: 'claw_6', icon: '🕹️', name: { vi: 'Năm món quà', en: 'Five prizes' }, game: 'claw', earned: (p) => prizeKinds(p) >= Math.ceil(PRIZE_COUNT / 2) },
   { id: 'claw_all', icon: '🏆', name: { vi: 'Đủ bộ quà', en: 'Every prize' }, game: 'claw', earned: (p) => prizeKinds(p) >= PRIZE_COUNT },
 ]
 

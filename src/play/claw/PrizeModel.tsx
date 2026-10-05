@@ -2,7 +2,7 @@ import { forwardRef, useMemo } from 'react'
 import type { ThreeElements } from '@react-three/fiber'
 import * as THREE from 'three'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { PRIZE_BY_ID } from './prizes'
+import { GIFT_LOOKS, PRIZE_BY_ID } from './prizes'
 
 /**
  * The prizes as smooth (non-LEGO) 3D models. Ten come from `public/models/claw/prizes.glb` (Kenney, CC0),
@@ -104,6 +104,7 @@ const FACING: Readonly<Record<string, number>> = { monster_truck: Math.PI - 0.7,
 type GroupProps = Omit<ThreeElements['group'], 'ref'>
 
 export interface PrizeModelProps extends GroupProps {
+  /** A prize kind or a gift look (`GIFT_LOOKS`). */
   kind: string
   /** The loaded prize file (see `loadPrizeModels`). */
   gltf: GLTF
@@ -127,17 +128,18 @@ function useGlbCopy(gltf: GLTF, kind: string, silhouette: boolean): THREE.Object
 
 /** One prize of `kind`, 1 stud tall-ish, standing on the group origin and facing +Z (the kid). */
 export const PrizeModel = forwardRef<THREE.Group, PrizeModelProps>(function PrizeModel({ kind, gltf, silhouette = false, ...group }, ref) {
-  const def = PRIZE_BY_ID[kind]
-  const copy = useGlbCopy(gltf, def?.model === 'glb' ? kind : '', silhouette)
+  // A prize kind, or a gift box's look (drawn from the same file).
+  const model = PRIZE_BY_ID[kind]?.model ?? ((GIFT_LOOKS as readonly string[]).includes(kind) ? 'glb' : undefined)
+  const copy = useGlbCopy(gltf, model === 'glb' ? kind : '', silhouette)
   return (
     <group ref={ref} {...group}>
-      {def?.model === 'glb' && copy && (
+      {model === 'glb' && copy && (
         <group rotation={[0, FACING[kind] ?? 0, 0]}>
           <primitive object={copy} dispose={null} />
         </group>
       )}
-      {def?.model === 'ball' && <mesh geometry={BALL.geometry} material={silhouette ? SILHOUETTE : BALL.material} rotation={[0.35, 0, 0.5]} position={[0, 0.5, 0]} dispose={null} />}
-      {def?.model === 'star' && (
+      {model === 'ball' && <mesh geometry={BALL.geometry} material={silhouette ? SILHOUETTE : BALL.material} rotation={[0.35, 0, 0.5]} position={[0, 0.5, 0]} dispose={null} />}
+      {model === 'star' && (
         <group dispose={null}>
           <mesh geometry={STAR.geometry} material={silhouette ? SILHOUETTE : STAR.material} dispose={null} />
           {!silhouette &&

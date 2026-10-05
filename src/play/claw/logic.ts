@@ -1,12 +1,13 @@
-import { PRIZES } from './prizes'
+import { GIFT_CONTENTS, GIFT_LOOKS, PRIZES, type GiftLook } from './prizes'
 
 /**
  * The claw machine's rules, pure (unit-tested; the scene only animates what they decide):
  * - the claw moves over the prize pit inside fixed bounds;
  * - a drop grabs the prize nearest the claw when its top is within a generous radius (easy!);
- * - at most one fun "slip" per round (the prize falls back mid-lift): never on the first or last try,
- *   about one time in four; the try after a slip is guaranteed (it grabs the nearest prize wherever
- *   the claw is);
+ * - a grab slips one time in five (the prize falls back into the pit mid-lift), on any try; mercy:
+ *   after two slips in a row, the next grab holds for sure (misses in between do not break the run);
+ * - about a third of the pile are gift boxes, each hiding an animal or a car (weighted toward kinds
+ *   the kid does not own yet), opened at the prize door;
  * - a round ("ván") is five free tries.
  *
  * Units are the scene's (studs), relative to the middle of the pit floor; +z is toward the kid.
@@ -34,9 +35,12 @@ export const CHUTE = { x: 3.5, z: 2.5 } as const
 /** How close (studs, on the floor plane) the claw must be to a prize to grab it. */
 export const GRAB_RADIUS = 1.5
 export const MAX_TRIES = 5
-export const SLIP_CHANCE = 0.25
-/** The first try (1-based) that may slip. */
-export const SLIP_FROM_TRY = 2
+/** The chance a grab slips. */
+export const SLIP_CHANCE = 0.2
+/** After this many slips in a row, the next grab cannot slip. */
+export const MERCY_AFTER = 2
+/** About this share of the pile are gift boxes. */
+export const GIFT_SHARE = 0.3
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
@@ -54,6 +58,8 @@ export interface PitPrize {
   z: number
   /** Turn about the vertical axis (radians): mostly facing the kid. */
   rot: number
+  /** A gift box with this look: `kind` is what is inside (a surprise until it is opened). */
+  gift?: GiftLook
 }
 
 /** The pile's slots: a 4 x 3 grid, without the corner over the chute. */
@@ -68,31 +74,32 @@ export const PILE_SIZE = SLOTS.length
 /** How much likelier a kind the kid does not own yet comes up in the pile. */
 export const UNOWNED_WEIGHT = 3
 
-/** `count` prize kinds, weighted so kinds the kid does not own yet come up often. */
-export function pickKinds(rng: Rng, owned: readonly string[], count: number): string[] {
+const ALL_KINDS: readonly string[] = PRIZES.map((p) => p.id)
+
+/** `count` kinds out of `from` (all prize kinds by default), weighted so kinds not owned yet come up often. */
+export function pickKinds(rng: Rng, owned: readonly string[], count: number, from: readonly string[] = ALL_KINDS): string[] {
   const have = new Set(owned)
-  const weights = PRIZES.map((p) => (have.has(p.id) ? 1 : UNOWNED_WEIGHT))
+  const weights = from.map((id) => (have.has(id) ? 1 : UNOWNED_WEIGHT))
   const total = weights.reduce((s, w) => s + w, 0)
   const out: string[] = []
   for (let i = 0; i < count; i++) {
     let r = rng() * total
     let k = 0
-    while (k < PRIZES.length - 1 && r >= weights[k]) r -= weights[k++]
-    out.push(PRIZES[k].id)
+    while (k < from.length - 1 && r >= weights[k]) r -= weights[k++]
+    out.push(from[k])
   }
   return out
 }
 
-/** A fresh pile: every slot filled, with a little jitter and a slight random turn. */
+/** A fresh pile: every slot filled (about a third with gift boxes), a little jitter, a slight turn. */
 export function makePile(rng: Rng, owned: readonly string[]): PitPrize[] {
-  const kinds = pickKinds(rng, owned, SLOTS.length)
-  return SLOTS.map(([x, z], i) => ({
-    id: i,
-    kind: kinds[i],
-    x: x + (rng() - 0.5) * 0.5,
-    z: z + (rng() - 0.5) * 0.5,
-    rot: (rng() - 0.5) * 1.2,
-  }))
+  return SLOTS.map(([x, z], i) => {
+    const gift = rng() < GIFT_SHARE ? GIFT_LOOKS[Math.floor(rng() * GIFT_LOOKS.length)] : undefined
+    const [kind] = pickKinds(rng, owned, 1, gift ? GIFT_CONTENTS : ALL_KINDS)
+    const p: PitPrize = { id: i, kind, x: x + (rng() - 0.5) * 0.5, z: z + (rng() - 0.5) * 0.5, rot: (rng() - 0.5) * 1.2 }
+    if (gift) p.gift = gift
+    return p
+  })
 }
 
 /** The prize nearest (x, z) within `radius`, or null. */
@@ -115,13 +122,14 @@ export interface ClawRound {
   used: number
   /** Kinds won this round, in order. */
   won: string[]
-  /** The round's one slip has happened. */
-  slipped: boolean
-  /** The next try grabs for sure (it follows a slip). */
-  guaranteed: boolean
+  /** Slips in a row (a grab that holds ends the run; a miss does not). */
+  streak: number
 }
 
-export const newClawRound = (): ClawRound => ({ used: 0, won: [], slipped: false, guaranteed: false })
+export const newClawRound = (): ClawRound => ({ used: 0, won: [], streak: 0 })
+
+/** The next grab cannot slip (mercy after `MERCY_AFTER` slips in a row). */
+export const isGuaranteed = (round: ClawRound): boolean => round.streak >= MERCY_AFTER
 
 export const triesLeft = (round: ClawRound): number => Math.max(0, MAX_TRIES - round.used)
 export const roundOver = (round: ClawRound): boolean => round.used >= MAX_TRIES
@@ -131,11 +139,9 @@ export type TryOutcome = { type: 'miss' } | { type: 'grab'; prize: PitPrize; sli
 /** What a drop at (x, z) does. Pure: `rng` decides the slip. */
 export function resolveTry(round: ClawRound, pile: readonly PitPrize[], x: number, z: number, rng: Rng): TryOutcome {
   if (roundOver(round)) return { type: 'miss' }
-  const prize = nearestPrize(pile, x, z, round.guaranteed ? Infinity : GRAB_RADIUS)
+  const prize = nearestPrize(pile, x, z)
   if (!prize) return { type: 'miss' }
-  const tryNo = round.used + 1
-  const mayslip = !round.guaranteed && !round.slipped && tryNo >= SLIP_FROM_TRY && tryNo < MAX_TRIES
-  return { type: 'grab', prize, slip: mayslip && rng() < SLIP_CHANCE }
+  return { type: 'grab', prize, slip: !isGuaranteed(round) && rng() < SLIP_CHANCE }
 }
 
 /** The round after a try with `outcome`. */
@@ -145,8 +151,7 @@ export function applyTry(round: ClawRound, outcome: TryOutcome): ClawRound {
   return {
     used: round.used + 1,
     won: outcome.type === 'grab' && !slip ? [...round.won, outcome.prize.kind] : round.won,
-    slipped: round.slipped || slip,
-    guaranteed: slip,
+    streak: slip ? round.streak + 1 : outcome.type === 'grab' ? 0 : round.streak,
   }
 }
 

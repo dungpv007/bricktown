@@ -248,3 +248,60 @@
 .bt-btn.bt-claw-trophy:disabled {
   opacity: 1;
 }
+
+/* An opened gift: sparkles fly out from the middle of the screen. */
+.bt-claw-sparkle {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+}
+
+.bt-claw-sparkle > i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: -18px 0 0 -18px;
+  font-size: calc(36px * var(--bt-s));
+  font-style: normal;
+  line-height: 1;
+  opacity: 0;
+  animation: bt-claw-spark 0.9s ease-out forwards;
+}
+
+@keyframes bt-claw-spark {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--bt-spark-a)) translateY(0) scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--bt-spark-a)) translateY(calc(-180px * var(--bt-s))) scale(1.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-claw-sparkle > i {
+    animation-duration: 0.01s;
+  }
+}
+
+/* The frame over the top-down view (drawn by the canvas in the same rect, see TopView.tsx). */
+.bt-claw-topview {
+  position: absolute;
+  top: 90px;
+  right: 16px;
+  z-index: 4;
+  width: clamp(140px, 24vw, 260px);
+  aspect-ratio: 11.6 / 9.6;
+  box-sizing: border-box;
+  border: 4px solid #fff;
+  border-radius: 10px;
+  box-shadow: var(--bt-shadow);
+  pointer-events: none;
+}
+
+@media (max-width: 599.98px) {
+  .bt-claw-topview {
+    top: 150px;
+  }
+}

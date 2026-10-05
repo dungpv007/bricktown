@@ -1,4 +1,4 @@
-import { Component, Suspense, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
+import { Component, Suspense, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -33,6 +33,7 @@ import { BUTTON_AT, BUTTON_CAP, BUTTON_COLLAR, CABINET_COLORS, FRONT_PANE, JOYST
 import { PrizeLoadError, PrizeModel, forgetPrizeModels, loadPrizeModels } from './PrizeModel'
 import { PRIZE_BY_ID, PRIZE_COUNT } from './prizes'
 import { useClawT } from './strings'
+import TopView from './TopView'
 import './claw.css'
 
 /**
@@ -40,7 +41,9 @@ import './claw.css'
  * room; the kid moves the claw over the prize pit (hold ◀ ▶ ▲ ▼, or the arrow keys) and presses the
  * big red button (or Space). The claw drops, closes, lifts and carries the prize to the chute; it
  * comes out of the prize door, the kid taps it, it pops up big with confetti and its name and flies
- * to the 🏆 prize cabinet. Five free tries a round; easy grabs, one fun slip at most (see logic.ts).
+ * to the 🏆 prize cabinet. Gift boxes hide an animal or a car and open at the door. Five free tries a
+ * round; easy grabs, one in five slips back (see logic.ts). Aiming aids: a ring and a laser under the
+ * claw, a halo round the prize a drop would grab, and a top-down view in the corner.
  * A kind the kid already owns turns into coins.
  *
  * The prizes are smooth 3D models (Kenney, CC0) fetched only when this game opens.
@@ -51,7 +54,7 @@ type Vec3 = [number, number, number]
 const MACHINE_CAMERA: StageCamera = { position: [0, 12.5, 31], target: [0, 6.8, 0], fov: 40, fitWidth: 22 }
 /** Portrait phones: just the machine across the screen, a little lower (the pad sits under it). */
 const MACHINE_CAMERA_TALL: StageCamera = { position: [0, 12.5, 31], target: [0, 5.6, 0], fov: 40, fitWidth: 14.5 }
-const CABINET_CAMERA_TALL: StageCamera = { ...CABINET_CAMERA, fitWidth: 15.5 }
+const CABINET_CAMERA_TALL: StageCamera = { ...CABINET_CAMERA, fitWidth: 18.5 }
 const PORTRAIT = '(max-aspect-ratio: 4/5)'
 
 function usePortrait(): boolean {
@@ -67,6 +70,8 @@ function usePortrait(): boolean {
 /** How long the prize shows big before flying to the cabinet, and the flight (ms). */
 const REVEAL_MS = 1700
 const FLY_MS = 600
+/** A gift box wobbles this long before it opens (ms). */
+const GIFT_MS = 1300
 
 /** Page coordinates of a world point (for the e2e hook). */
 type Project = (p: Vec3) => { x: number; y: number }
@@ -207,7 +212,7 @@ function PitItem({ prize, gltf, groups }: { prize: PitPrize; gltf: GLTF; groups:
   }, [prize, groups])
   return (
     <group ref={ref}>
-      <PrizeModel kind={prize.kind} gltf={gltf} scale={PRIZE_SIZE} rotation={[0, prize.rot, 0]} />
+      <PrizeModel kind={prize.gift ?? prize.kind} gltf={gltf} scale={PRIZE_SIZE} rotation={[0, prize.rot, 0]} />
     </group>
   )
 }
@@ -236,32 +241,47 @@ function TrayPrize({ kind, gltf, onTap }: { kind: string; gltf: GLTF; onTap: () 
   )
 }
 
+type RevealStage = 'box' | 'show' | 'fly'
+
+/** The sparkles bursting out of an opened gift (CSS spreads them around the middle). */
+const SPARKS = Array.from({ length: 10 }, (_, i) => (
+  <i key={i} style={{ '--bt-spark-a': `${i * 36}deg` } as CSSProperties}>
+    ✨
+  </i>
+))
+
+/** Grows from 0 to 1 over `k` in 0..1 with a little overshoot. */
+const popIn = (k: number) => (k >= 1 ? 1 : Math.sin(k * Math.PI * 0.75) / Math.sin(Math.PI * 0.75))
+
 /**
- * The prize popping up big in front of the camera, spinning; then (`flying`) shrinking toward the
- * 🏆 button on screen.
+ * The prize popping up big in front of the camera, spinning; then (`fly`) shrinking toward the 🏆
+ * button on screen. A gift box comes first (`box`): it pops up and wobbles harder and harder, then
+ * (`show`) its lid flies off, the box shrinks away and the animal or car inside rises out of it.
  */
-function RevealPrize({ kind, gltf, flying, target }: { kind: string; gltf: GLTF; flying: boolean; target: () => { x: number; y: number } | null }) {
-  const g = useRef<THREE.Group>(null)
+function RevealPrize({ kind, gift, stage, gltf, target }: { kind: string; gift?: string; stage: RevealStage; gltf: GLTF; target: () => { x: number; y: number } | null }) {
+  const wrap = useRef<THREE.Group>(null)
+  const box = useRef<THREE.Group>(null)
+  const inner = useRef<THREE.Group>(null)
+  const lid = useRef<{ o: THREE.Object3D; y: number } | null>(null)
   const camera = useThree((s) => s.camera)
   const el = useThree((s) => s.gl.domElement)
-  const t = useRef(0)
-  const fly = useRef(0)
+  const clock = useRef({ box: 0, show: 0, fly: 0 })
   useFrameRequest(true)
   useFrame((_, delta) => {
-    const grp = g.current
-    if (!grp) return
+    const w = wrap.current
+    if (!w) return
     const dt = Math.min(delta, 0.05)
-    t.current += dt
+    const c = clock.current
+    if (stage === 'box') c.box += dt
+    else c.show += dt
+    if (stage === 'fly') c.fly = Math.min(1, c.fly + dt / (FLY_MS / 1000))
     camera.getWorldDirection(rDir)
     // In front of the camera, a little under the middle.
     rPos.copy(camera.position).addScaledVector(rDir, 9)
     rPos.y -= 1.4
-    const k = Math.min(1, t.current / 0.45)
-    const overshoot = k < 1 ? Math.sin(k * Math.PI * 0.75) / Math.sin(Math.PI * 0.75) : 1
-    let scale = 3.2 * overshoot
-    if (flying) {
-      fly.current = Math.min(1, fly.current + dt / (FLY_MS / 1000))
-      const f = fly.current * fly.current
+    let scale = 3.2
+    if (stage === 'fly') {
+      const f = c.fly * c.fly
       const tp = target()
       if (tp) {
         const r = el.getBoundingClientRect()
@@ -271,13 +291,44 @@ function RevealPrize({ kind, gltf, flying, target }: { kind: string; gltf: GLTF;
       }
       scale *= 1 - f * 0.9
     }
-    grp.position.copy(rPos)
-    grp.scale.setScalar(Math.max(0.01, scale))
-    grp.rotation.y = Math.sin(t.current * 2.2) * 0.6
+    w.position.copy(rPos)
+    w.scale.setScalar(scale)
+    const b = box.current
+    if (b) {
+      if (!lid.current) {
+        const o = b.getObjectByName('lid')
+        if (o) lid.current = { o, y: o.position.y }
+      }
+      const k = Math.min(1, c.box / 0.35)
+      const shake = Math.min(1, Math.max(0, (c.box - 0.35) / 0.8))
+      b.rotation.z = stage === 'box' ? Math.sin(c.box * 22) * 0.14 * shake : 0
+      const away = Math.min(1, c.show / 0.45)
+      b.scale.setScalar(Math.max(0.001, popIn(k) * (1 - away)))
+      const l = lid.current
+      if (l) {
+        // The lid hops up (in the box's units) and tumbles off.
+        l.o.position.y = l.y + (stage === 'box' ? 0 : c.show * 3.2)
+        l.o.rotation.z = stage === 'box' ? 0 : c.show * 5
+      }
+    }
+    const i = inner.current
+    if (i) {
+      const k = gift ? (stage === 'box' ? 0 : Math.min(1, c.show / 0.5)) : Math.min(1, c.show / 0.45)
+      i.scale.setScalar(Math.max(0.001, popIn(k)))
+      i.position.y = gift ? (1 - Math.min(1, k)) * 0.25 : 0
+      i.rotation.y = Math.sin(c.show * 2.2) * 0.6
+    }
   })
   return (
-    <group ref={g} scale={0.01}>
-      <PrizeModel kind={kind} gltf={gltf} position={[0, 0, 0]} />
+    <group ref={wrap} scale={0.01}>
+      {gift && (
+        <group ref={box} scale={0.001}>
+          <PrizeModel kind={gift} gltf={gltf} />
+        </group>
+      )}
+      <group ref={inner} scale={0.001}>
+        <PrizeModel kind={kind} gltf={gltf} />
+      </group>
     </group>
   )
 }
@@ -394,9 +445,11 @@ type Phase = 'intro' | 'aim' | 'busy' | 'tray' | 'reveal' | 'summary'
 
 /** What the e2e test reads and drives (dev builds only). */
 interface ClawProbe {
-  state: () => { phase: Phase; tries: number; x: number; z: number; tray: string | null; owned: number; pile: Array<{ id: number; kind: string; x: number; z: number }> }
+  state: () => { phase: Phase; tries: number; x: number; z: number; tray: string | null; trayGift: string | null; owned: number; pile: Array<{ id: number; kind: string; gift: string | null; x: number; z: number }> }
   moveTo: (x: number, z: number) => boolean
   drop: () => boolean
+  /** Turns slips off (or back on), so a test's grab always holds. */
+  noSlip: (on: boolean) => void
   point: (name: 'tray' | 'button') => { x: number; y: number } | null
 }
 
@@ -416,8 +469,8 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
   const [round, setRound] = useState<ClawRound>(newClawRound)
   const [pile, setPile] = useState<PitPrize[]>(() => makePile(seededRng(roundSeed++), ownedPrizes(playOf(useGame.getState().data))))
   const [seq, setSeq] = useState<DropSeq | null>(null)
-  const [tray, setTray] = useState<{ kind: string; collect: CollectResult } | null>(null)
-  const [reveal, setReveal] = useState<{ kind: string; flying: boolean } | null>(null)
+  const [tray, setTray] = useState<{ kind: string; gift?: string; collect: CollectResult } | null>(null)
+  const [reveal, setReveal] = useState<{ kind: string; gift?: string; stage: RevealStage } | null>(null)
   const [toast, setToast] = useState<{ key: number; kind: string; coins: number } | null>(null)
   const [summary, setSummary] = useState<Summary | null>(null)
   const [pressed, setPressed] = useState(false)
@@ -432,6 +485,8 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
   const held = useRef(new Set<'l' | 'r' | 'u' | 'd'>())
   const keys = useRef(new Set<'l' | 'r' | 'u' | 'd'>())
   const groups = useRef(new Map<number, THREE.Group>())
+  /** What decides slips (the e2e hook can turn them off). */
+  const slipRng = useRef<() => number>(Math.random)
   const roundCoins = useRef(0)
   const roundStickers = useRef<string[]>([])
   const trophy = useRef<HTMLButtonElement>(null)
@@ -490,7 +545,7 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
     if (ph !== 'aim' || v !== 'machine' || roundOver(r)) return false
     // The pad goes disabled now: a held button may never see its pointerup (iPad), so let go here.
     releaseInput()
-    const outcome = resolveTry(r, p, clawLive.x, clawLive.z, Math.random)
+    const outcome = resolveTry(r, p, clawLive.x, clawLive.z, slipRng.current)
     const nextRound = applyTry(r, outcome)
     latest.current = { ...latest.current, phase: 'busy', round: nextRound }
     setRound(nextRound)
@@ -508,7 +563,7 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
     roundCoins.current += collect.coins
     roundStickers.current.push(...collect.stickers)
     setPile((p) => takeFromPile(p, prize.id))
-    setTray({ kind: prize.kind, collect })
+    setTray({ kind: prize.kind, gift: prize.gift, collect })
     if (collect.isNew) setArriving(prize.kind)
     setPhase('tray')
     success()
@@ -519,12 +574,20 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
   const takeTray = useCallback(() => {
     const cur = latest.current
     if (cur.phase !== 'tray' || !cur.tray) return false
-    const { kind, collect } = cur.tray
+    const { kind, gift, collect } = cur.tray
     latest.current = { ...cur, phase: 'reveal' }
     setTray(null)
-    setReveal({ kind, flying: false })
     setPhase('reveal')
-    later(() => setReveal({ kind, flying: true }), REVEAL_MS)
+    // A gift box first wobbles, then opens on what is inside.
+    const wait = gift ? GIFT_MS : 0
+    setReveal({ kind, gift, stage: gift ? 'box' : 'show' })
+    if (gift) {
+      later(() => {
+        setReveal({ kind, gift, stage: 'show' })
+        success()
+      }, GIFT_MS)
+    }
+    later(() => setReveal({ kind, gift, stage: 'fly' }), wait + REVEAL_MS)
     later(() => {
       setReveal(null)
       setArriving(null)
@@ -536,7 +599,7 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
         later(() => setToast(null), 2200)
       }
       next(latest.current.round)
-    }, REVEAL_MS + FLY_MS)
+    }, wait + REVEAL_MS + FLY_MS)
     return true
   }, [later, next])
 
@@ -595,8 +658,9 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
           x: clawLive.x,
           z: clawLive.z,
           tray: c.tray?.kind ?? null,
+          trayGift: c.tray?.gift ?? null,
           owned: ownedPrizes(playOf(useGame.getState().data)).length,
-          pile: c.pile.map((p) => ({ id: p.id, kind: p.kind, x: p.x, z: p.z })),
+          pile: c.pile.map((p) => ({ id: p.id, kind: p.kind, gift: p.gift ?? null, x: p.x, z: p.z })),
         }
       },
       moveTo: (x, z) => {
@@ -608,12 +672,14 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
         return true
       },
       drop,
+      noSlip: (on) => void (slipRng.current = on ? () => 0.99 : Math.random),
       point: (name) => (project.current ? project.current(name === 'tray' ? [TRAY[0], TRAY[1] + 0.8, TRAY[2]] : [BUTTON_AT[0], BUTTON_AT[1] + 1.4, BUTTON_AT[2]]) : null),
     }
     return () => void delete w.__btClaw
   }, [drop])
 
   const aiming = phase === 'aim' && view === 'machine'
+  const topView = view === 'machine' && (phase === 'aim' || phase === 'busy' || phase === 'tray')
   const trophyTarget = useCallback(() => {
     const r = trophy.current?.getBoundingClientRect()
     return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null
@@ -628,9 +694,10 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
           <Room />
           <Machine pressed={pressed} onButton={drop} buttonOn={aiming} />
           <Pit pile={pile} gltf={gltf} groups={groups} />
-          <ClawRig aiming={aiming && moving} seq={seq} prizeGroups={groups} onChute={onChute} onDone={onDone} />
-          {tray && <TrayPrize key={`${tray.kind}-${round.used}`} kind={tray.kind} gltf={gltf} onTap={takeTray} />}
-          {reveal && <RevealPrize kind={reveal.kind} gltf={gltf} flying={reveal.flying} target={trophyTarget} />}
+          <ClawRig aiming={aiming && moving} seq={seq} prizeGroups={groups} onChute={onChute} onDone={onDone} pile={pile} showAim={aiming} />
+          <TopView enabled={topView} />
+          {tray && <TrayPrize key={`${tray.kind}-${round.used}`} kind={tray.gift ?? tray.kind} gltf={gltf} onTap={takeTray} />}
+          {reveal && <RevealPrize key={round.used} kind={reveal.kind} gift={reveal.gift} stage={reveal.stage} gltf={gltf} target={trophyTarget} />}
           <HintHand at={[TRAY[0], TRAY[1] + 1.2, TRAY[2]]} active={phase === 'tray'} idleMs={2500} resetKey={round.used} />
           <HintHand at={[BUTTON_AT[0], BUTTON_AT[1] + 1.6, BUTTON_AT[2]]} active={phase === 'aim' && round.used === 0} idleMs={6000} resetKey={phase} />
           <Cabinet gltf={gltf} owned={shelf} />
@@ -646,12 +713,15 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
         </div>
       )}
 
+      {topView && <div className="bt-claw-topview" data-testid="claw-topview" aria-hidden="true" />}
+
       {view === 'machine' && (phase === 'aim' || phase === 'busy' || phase === 'tray' || phase === 'reveal') && <Controls enabled={phase === 'aim'} onDir={onDir} onDrop={drop} />}
 
       {reveal && (
-        <div className="bt-claw-reveal" data-testid="claw-reveal" aria-live="polite">
-          {!reveal.flying && <Confetti />}
-          {!reveal.flying && <span className="bt-claw-reveal-name">{PRIZE_BY_ID[reveal.kind]?.name[lang]}</span>}
+        <div className="bt-claw-reveal" data-testid="claw-reveal" data-stage={reveal.stage} data-kind={reveal.stage === 'box' ? '' : reveal.kind} aria-live="polite">
+          {reveal.stage === 'show' && reveal.gift && <span className="bt-claw-sparkle" aria-hidden="true">{SPARKS}</span>}
+          {reveal.stage === 'show' && <Confetti />}
+          {reveal.stage === 'show' && <span className="bt-claw-reveal-name">{PRIZE_BY_ID[reveal.kind]?.name[lang]}</span>}
         </div>
       )}
 
