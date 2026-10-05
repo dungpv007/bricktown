@@ -71,6 +71,10 @@ const FLY_MS = 600
 /** Page coordinates of a world point (for the e2e hook). */
 type Project = (p: Vec3) => { x: number; y: number }
 const tmp = new THREE.Vector3()
+/** Scratch vectors for the reveal's frame loop (no allocation per frame). */
+const rDir = new THREE.Vector3()
+const rPos = new THREE.Vector3()
+const rToward = new THREE.Vector3()
 
 function Projector({ onReady, onInvalidate }: { onReady: (project: Project) => void; onInvalidate: (invalidate: () => void) => void }) {
   const camera = useThree((s) => s.camera)
@@ -94,15 +98,20 @@ function Projector({ onReady, onInvalidate }: { onReady: (project: Project) => v
 }
 
 function useTimers(): (fn: () => void, ms: number) => void {
-  const timers = useRef<number[]>([])
+  const timers = useRef(new Set<number>())
   useEffect(() => {
-    const list = timers.current
+    const live = timers.current
     return () => {
-      for (const t of list) window.clearTimeout(t)
+      for (const t of live) window.clearTimeout(t)
+      live.clear()
     }
   }, [])
   return useCallback((fn: () => void, ms: number) => {
-    timers.current.push(window.setTimeout(fn, ms))
+    const id = window.setTimeout(() => {
+      timers.current.delete(id)
+      fn()
+    }, ms)
+    timers.current.add(id)
   }, [])
 }
 
@@ -243,25 +252,26 @@ function RevealPrize({ kind, gltf, flying, target }: { kind: string; gltf: GLTF;
     if (!grp) return
     const dt = Math.min(delta, 0.05)
     t.current += dt
-    const dir = camera.getWorldDirection(new THREE.Vector3())
-    const centre = camera.position.clone().add(dir.multiplyScalar(9))
+    camera.getWorldDirection(rDir)
+    // In front of the camera, a little under the middle.
+    rPos.copy(camera.position).addScaledVector(rDir, 9)
+    rPos.y -= 1.4
     const k = Math.min(1, t.current / 0.45)
     const overshoot = k < 1 ? Math.sin(k * Math.PI * 0.75) / Math.sin(Math.PI * 0.75) : 1
     let scale = 3.2 * overshoot
-    let pos = centre.clone().add(new THREE.Vector3(0, -1.4, 0))
     if (flying) {
       fly.current = Math.min(1, fly.current + dt / (FLY_MS / 1000))
       const f = fly.current * fly.current
       const tp = target()
       if (tp) {
         const r = el.getBoundingClientRect()
-        const ndc = new THREE.Vector3(((tp.x - r.left) / r.width) * 2 - 1, -((tp.y - r.top) / r.height) * 2 + 1, 0.5).unproject(camera)
-        const toward = ndc.sub(camera.position).normalize().multiplyScalar(9).add(camera.position)
-        pos = pos.lerp(toward, f)
+        rToward.set(((tp.x - r.left) / r.width) * 2 - 1, -((tp.y - r.top) / r.height) * 2 + 1, 0.5).unproject(camera)
+        rToward.sub(camera.position).normalize().multiplyScalar(9).add(camera.position)
+        rPos.lerp(rToward, f)
       }
       scale *= 1 - f * 0.9
     }
-    grp.position.copy(pos)
+    grp.position.copy(rPos)
     grp.scale.setScalar(Math.max(0.01, scale))
     grp.rotation.y = Math.sin(t.current * 2.2) * 0.6
   })
@@ -431,9 +441,9 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
   const onInvalidate = useCallback((f: () => void) => void (redraw.current = f), [])
 
   // The latest state for event handlers and the e2e hook (updated after each render).
-  const latest = useRef({ phase, round, pile, tray })
+  const latest = useRef({ phase, round, pile, tray, view })
   useEffect(() => {
-    latest.current = { phase, round, pile, tray }
+    latest.current = { phase, round, pile, tray, view }
   })
 
   const updateInput = useCallback(() => {
@@ -441,8 +451,16 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
     const L = clawLive
     L.ix = (dirs.has('r') ? 1 : 0) - (dirs.has('l') ? 1 : 0)
     L.iz = (dirs.has('d') ? 1 : 0) - (dirs.has('u') ? 1 : 0)
-    setMoving(dirs.size > 0)
+    // Frames only while the claw actually moves (opposite directions cancel out).
+    setMoving(L.ix !== 0 || L.iz !== 0)
   }, [])
+
+  /** Lets go of every direction (a drop, a new round, the window losing focus). */
+  const releaseInput = useCallback(() => {
+    held.current.clear()
+    keys.current.clear()
+    updateInput()
+  }, [updateInput])
 
   const onDir = useCallback(
     (dir: 'l' | 'r' | 'u' | 'd', on: boolean) => {
@@ -468,8 +486,10 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
   )
 
   const drop = useCallback(() => {
-    const { phase: ph, round: r, pile: p } = latest.current
-    if (ph !== 'aim' || roundOver(r)) return false
+    const { phase: ph, round: r, pile: p, view: v } = latest.current
+    if (ph !== 'aim' || v !== 'machine' || roundOver(r)) return false
+    // The pad goes disabled now: a held button may never see its pointerup (iPad), so let go here.
+    releaseInput()
     const outcome = resolveTry(r, p, clawLive.x, clawLive.z, Math.random)
     const nextRound = applyTry(r, outcome)
     latest.current = { ...latest.current, phase: 'busy', round: nextRound }
@@ -479,7 +499,7 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
     setPressed(true)
     later(() => setPressed(false), 220)
     return true
-  }, [later])
+  }, [later, releaseInput])
 
   // The prize went down the chute: it is the kid's now (saved at once), shown at the prize door.
   const onChute = useCallback((prize: PitPrize) => {
@@ -528,8 +548,7 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
     setSummary(null)
     setSeq(null)
     resetClawLive()
-    held.current.clear()
-    keys.current.clear()
+    releaseInput()
     setPhase('aim')
   }
 
@@ -552,11 +571,7 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
         updateInput()
       }
     }
-    const release = () => {
-      keys.current.clear()
-      held.current.clear()
-      updateInput()
-    }
+    const release = releaseInput
     window.addEventListener('keydown', onDown)
     window.addEventListener('keyup', onUp)
     window.addEventListener('blur', release)
@@ -565,7 +580,7 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
       window.removeEventListener('keyup', onUp)
       window.removeEventListener('blur', release)
     }
-  }, [drop, takeTray, updateInput])
+  }, [drop, takeTray, updateInput, releaseInput])
 
   // The e2e hook (dev only).
   useEffect(() => {
@@ -642,7 +657,9 @@ function ClawPlay({ gameId, onExit }: GameSceneProps) {
 
       {toast && (
         <div key={toast.key} className="bt-claw-toast" data-testid="claw-toast" role="status" aria-label={t('clawDuplicate')}>
-          <span aria-hidden="true">{PRIZE_BY_ID[toast.kind]?.icon} ✓ → 🪙 +{toast.coins}</span>
+          <span aria-hidden="true">
+            {PRIZE_BY_ID[toast.kind]?.icon} ✓{toast.coins > 0 ? ` → 🪙 +${toast.coins}` : ''}
+          </span>
         </div>
       )}
 

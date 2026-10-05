@@ -48,6 +48,10 @@ const RAIL = new THREE.CylinderGeometry(0.12, 0.12, 1, 10)
 const CARRIAGE = new THREE.BoxGeometry(1, 0.4, 1)
 const TIP_AT = new THREE.Vector3(0, -1.3, 0.2)
 
+/** Stage lengths (s); the carry home depends on the distance (see `travelTime`). */
+const DUR = { down: 1.0, close: 0.35, up: 1.0, open: 0.3, fall: 0.45, idle: 1 } as const
+const travelTime = (dist: number) => 0.45 + dist * 0.17
+
 const ease = (k: number) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2)
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 
@@ -109,9 +113,12 @@ interface Run {
   stage: Stage
   t: number
   outcome: TryOutcome
-  /** Where the drop started (and the claw went down). */
+  /** Where the drop started. */
   x0: number
   z0: number
+  /** Where the claw goes down (over the prize it grabs, or straight down on a miss). */
+  tx: number
+  tz: number
   /** How low the hub goes. */
   low: number
   /** The prize hanging from the claw, if any. */
@@ -157,6 +164,7 @@ export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone }: ClawRigPr
     const L = clawLive
     if (seq && finished !== seq.key && run.current?.key !== seq.key) {
       const grab = seq.outcome.type === 'grab'
+      const to = seq.outcome.type === 'grab' ? clampClaw(seq.outcome.prize.x, seq.outcome.prize.z) : { x: L.x, z: L.z }
       run.current = {
         key: seq.key,
         stage: 'down',
@@ -164,6 +172,8 @@ export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone }: ClawRigPr
         outcome: seq.outcome,
         x0: L.x,
         z0: L.z,
+        tx: to.x,
+        tz: to.z,
         low: grab ? PIT_FLOOR + PRIZE_SIZE + HOLD_GAP + 0.05 : PIT_FLOOR + 1.35,
         held: null,
         slip: null,
@@ -181,16 +191,20 @@ export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone }: ClawRigPr
       r.t += dt
       const grab = r.outcome.type === 'grab'
       const slips = r.outcome.type === 'grab' && r.outcome.slip
-      const dist = Math.hypot(CHUTE.x - r.x0, CHUTE.z - r.z0)
-      const travel = 0.45 + dist * 0.17
-      const dur: Record<Stage, number> = { down: 1.0, close: 0.35, up: 1.0, carry: travel, home: travel, open: 0.3, fall: 0.45, idle: 0 }
-      const k = Math.min(1, r.t / dur[r.stage])
+      const d = r.stage === 'carry' || r.stage === 'home' ? travelTime(Math.hypot(CHUTE.x - r.tx, CHUTE.z - r.tz)) : DUR[r.stage]
+      const k = Math.min(1, r.t / d)
       const e = ease(k)
       switch (r.stage) {
-        case 'down':
+        case 'down': {
+          // On the way down the claw also homes in on the prize it will grab (a generous grab
+          // never makes the prize jump to the claw).
+          const s = clampClaw(lerp(r.x0, r.tx, e), lerp(r.z0, r.tz, e))
+          L.x = s.x
+          L.z = s.z
           hubY.current = lerp(REST_Y, r.low, e)
           open.current = lerp(OPEN * 0.6, OPEN, Math.min(1, k * 3))
           break
+        }
         case 'close':
           open.current = lerp(OPEN, grab ? HOLD : SHUT, e)
           break
@@ -209,7 +223,7 @@ export function ClawRig({ aiming, seq, prizeGroups, onChute, onDone }: ClawRigPr
           break
         case 'carry':
         case 'home': {
-          const s = clampClaw(lerp(r.x0, CHUTE.x, e), lerp(r.z0, CHUTE.z, e))
+          const s = clampClaw(lerp(r.tx, CHUTE.x, e), lerp(r.tz, CHUTE.z, e))
           L.x = s.x
           L.z = s.z
           break

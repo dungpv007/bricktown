@@ -8,4 +8,4 @@ Made from these packs by Kenney (https://kenney.nl), licence CC0 1.0 (public dom
 Each model is a top-level node named by its prize id (see src/play/claw/prizes.ts), scaled to fit a
 1 x 1 x 1 box (centred on x/z, bottom at y = 0). Merged into one file with gltf-transform: textures
 embedded and deduplicated, vertices welded, attributes quantized (KHR_mesh_quantization, no decoder
-needed). The claw, the beach ball and the star are drawn in code.
+needed): see scripts/build-claw-models.mjs. The claw, the beach ball and the star are drawn in code.

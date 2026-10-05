@@ -50,7 +50,13 @@ export default defineConfig({
             // 3D models a game loads when it opens (public/models/): cached the first time, offline after.
             urlPattern: /\/models\/.+\.glb$/,
             handler: 'CacheFirst',
-            options: { cacheName: 'bt-models', expiration: { maxEntries: 8 } },
+            options: {
+              cacheName: 'bt-models',
+              expiration: { maxEntries: 8 },
+              // Only a real model: never an error page, nor the app shell a host may serve for a missing file.
+              cacheableResponse: { statuses: [200] },
+              plugins: [{ cacheWillUpdate: async ({ response }) => (response.headers.get('content-type')?.includes('text/html') ? null : response) }],
+            },
           },
         ],
         // The first install controls the open page right away (offline after one visit); later versions
