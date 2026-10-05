@@ -42,8 +42,12 @@ test('claw machine: steer over a gift box, grab it, open it at the door, and wha
   // The gift comes out of the prize door: tap it, it wobbles, opens, and shows what was inside.
   await expect(claw(page)).toHaveAttribute('data-phase', 'tray', { timeout: 15_000 })
   expect(await state(page)).toMatchObject({ tray: target.kind, trayGift: target.gift })
+  // (A prize that has only just appeared may not be drawn yet: then the tap is simply tried again.)
   const at = (await page.evaluate(() => (window as unknown as ClawWindow).__btClaw!.point('tray')))!
-  await page.mouse.click(at.x, at.y)
+  await expect(async () => {
+    await page.mouse.click(at.x, at.y)
+    await expect(page.getByTestId('claw-reveal')).toBeVisible({ timeout: 1500 })
+  }).toPass({ timeout: 15_000 })
   await expect(page.getByTestId('claw-reveal')).toHaveAttribute('data-stage', 'box')
   await expect(page.getByTestId('claw-reveal')).toHaveAttribute('data-stage', 'show')
   await expect(page.getByTestId('claw-reveal')).toHaveAttribute('data-kind', target.kind)

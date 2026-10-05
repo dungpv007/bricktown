@@ -1,5 +1,5 @@
-import { forwardRef, useMemo } from 'react'
-import type { ThreeElements } from '@react-three/fiber'
+import { forwardRef, useMemo, useRef } from 'react'
+import { useFrame, type ThreeElements } from '@react-three/fiber'
 import * as THREE from 'three'
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { GIFT_LOOKS, PRIZE_BY_ID } from './prizes'
@@ -98,8 +98,98 @@ const STAR = (() => {
   }
 })()
 
+/** A part of a procedural toy: a shared geometry and material, placed. */
+interface Part {
+  g: THREE.BufferGeometry
+  m: THREE.Material
+  p: [number, number, number]
+  r?: [number, number, number]
+  s?: [number, number, number]
+}
+
+const toyMat = (color: string) => new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.05 })
+const SPHERE = new THREE.SphereGeometry(0.5, 24, 16)
+const ROD = new THREE.CylinderGeometry(0.5, 0.5, 1, 14)
+const CAPSULE = new THREE.CapsuleGeometry(0.5, 1, 8, 20)
+const RED = toyMat('#e3000b')
+const YELLOW = toyMat('#ffcc1a')
+const WHITE = toyMat('#f4f4f4')
+const BLUE = toyMat('#2f7fe0')
+const GLASS = new THREE.MeshStandardMaterial({ color: '#9fdcff', roughness: 0.05, metalness: 0.3 })
+const DARK = toyMat('#2b2f38')
+
+/** A plump toy airplane (nose toward +Z, the kid): red body, yellow wings, white tail, a propeller. */
+const PLANE: Part[] = [
+  { g: CAPSULE, m: RED, p: [0, 0.42, 0], r: [Math.PI / 2, 0, 0], s: [0.34, 0.42, 0.34] },
+  { g: SPHERE, m: GLASS, p: [0, 0.56, 0.16], s: [0.24, 0.2, 0.3] },
+  { g: SPHERE, m: YELLOW, p: [0, 0.4, 0.04], s: [1, 0.07, 0.28] },
+  { g: SPHERE, m: YELLOW, p: [0, 0.46, -0.38], s: [0.46, 0.05, 0.16] },
+  { g: SPHERE, m: WHITE, p: [0, 0.6, -0.38], s: [0.05, 0.3, 0.2] },
+  { g: SPHERE, m: WHITE, p: [0, 0.42, 0.47], s: [0.12, 0.12, 0.08] },
+  { g: SPHERE, m: DARK, p: [0, 0.42, 0.52], s: [0.42, 0.06, 0.03] },
+  { g: ROD, m: DARK, p: [-0.12, 0.13, 0.08], s: [0.025, 0.2, 0.025] },
+  { g: ROD, m: DARK, p: [0.12, 0.13, 0.08], s: [0.025, 0.2, 0.025] },
+  { g: SPHERE, m: DARK, p: [-0.12, 0.06, 0.08], s: [0.12, 0.12, 0.06] },
+  { g: SPHERE, m: DARK, p: [0.12, 0.06, 0.08], s: [0.12, 0.12, 0.06] },
+]
+
+/** A round toy helicopter (nose toward +Z): blue body, a big glass bubble, skids, a tail rotor. */
+const HELI: Part[] = [
+  { g: SPHERE, m: BLUE, p: [0, 0.42, -0.02], s: [0.55, 0.5, 0.66] },
+  { g: SPHERE, m: GLASS, p: [0, 0.47, 0.17], s: [0.44, 0.38, 0.34] },
+  { g: ROD, m: BLUE, p: [0, 0.48, -0.5], r: [Math.PI / 2, 0, 0], s: [0.07, 0.5, 0.07] },
+  { g: SPHERE, m: YELLOW, p: [0, 0.56, -0.74], s: [0.04, 0.24, 0.12] },
+  { g: ROD, m: DARK, p: [-0.2, 0.03, 0.02], r: [Math.PI / 2, 0, 0], s: [0.035, 0.7, 0.035] },
+  { g: ROD, m: DARK, p: [0.2, 0.03, 0.02], r: [Math.PI / 2, 0, 0], s: [0.035, 0.7, 0.035] },
+  { g: ROD, m: DARK, p: [-0.16, 0.12, 0.02], r: [0, 0, 0.4], s: [0.025, 0.2, 0.025] },
+  { g: ROD, m: DARK, p: [0.16, 0.12, 0.02], r: [0, 0, -0.4], s: [0.025, 0.2, 0.025] },
+  { g: ROD, m: DARK, p: [0, 0.72, -0.02], s: [0.04, 0.12, 0.04] },
+]
+/** The main rotor (spun on the reveal): two long blades. */
+const ROTOR: Part[] = [
+  { g: SPHERE, m: DARK, p: [0, 0, 0], s: [1.0, 0.025, 0.08] },
+  { g: SPHERE, m: DARK, p: [0, 0, 0], r: [0, Math.PI / 2, 0], s: [1.0, 0.025, 0.08] },
+  { g: SPHERE, m: RED, p: [0, 0.02, 0], s: [0.1, 0.06, 0.1] },
+]
+
+function Parts({ parts, silhouette }: { parts: readonly Part[]; silhouette: boolean }) {
+  return (
+    <>
+      {parts.map((q, i) => (
+        <mesh key={i} geometry={q.g} material={silhouette ? SILHOUETTE : q.m} position={q.p} rotation={q.r} scale={q.s} dispose={null} />
+      ))}
+    </>
+  )
+}
+
+/** The helicopter; its rotor turns while `spin` (only when frames are drawn anyway: the reveal). */
+function Helicopter({ silhouette, spin }: { silhouette: boolean; spin: boolean }) {
+  const rotor = useRef<THREE.Group>(null)
+  useFrame((_, delta) => {
+    if (spin && rotor.current) rotor.current.rotation.y += Math.min(delta, 0.05) * 9
+  })
+  return (
+    <group dispose={null}>
+      <Parts parts={HELI} silhouette={silhouette} />
+      <group ref={rotor} position={[0, 0.79, -0.02]}>
+        <Parts parts={ROTOR} silhouette={silhouette} />
+      </group>
+    </group>
+  )
+}
+
 /** The cars face -Z in their file: turned to show the kid their front, three-quarters on. */
-const FACING: Readonly<Record<string, number>> = { monster_truck: Math.PI - 0.7, racer: Math.PI + 0.7 }
+const FACING: Readonly<Record<string, number>> = {
+  monster_truck: Math.PI - 0.7,
+  racer: Math.PI + 0.7,
+  // The car kit's vehicles too.
+  loader: 0.6,
+  garbage_truck: -0.6,
+  tractor: 0.6,
+  fire_truck: -0.6,
+  police_car: 0.6,
+  ambulance: -0.6,
+}
 
 type GroupProps = Omit<ThreeElements['group'], 'ref'>
 
@@ -110,6 +200,8 @@ export interface PrizeModelProps extends GroupProps {
   gltf: GLTF
   /** Drawn as a dark silhouette (not won yet). */
   silhouette?: boolean
+  /** Moving parts move (the helicopter's rotor), while frames are drawn anyway. */
+  spin?: boolean
 }
 
 /** A copy of one GLB prize node: shares geometry and materials with the loaded file. */
@@ -127,7 +219,7 @@ function useGlbCopy(gltf: GLTF, kind: string, silhouette: boolean): THREE.Object
 }
 
 /** One prize of `kind`, 1 stud tall-ish, standing on the group origin and facing +Z (the kid). */
-export const PrizeModel = forwardRef<THREE.Group, PrizeModelProps>(function PrizeModel({ kind, gltf, silhouette = false, ...group }, ref) {
+export const PrizeModel = forwardRef<THREE.Group, PrizeModelProps>(function PrizeModel({ kind, gltf, silhouette = false, spin = false, ...group }, ref) {
   // A prize kind, or a gift box's look (drawn from the same file).
   const model = PRIZE_BY_ID[kind]?.model ?? ((GIFT_LOOKS as readonly string[]).includes(kind) ? 'glb' : undefined)
   const copy = useGlbCopy(gltf, model === 'glb' ? kind : '', silhouette)
@@ -139,6 +231,16 @@ export const PrizeModel = forwardRef<THREE.Group, PrizeModelProps>(function Priz
         </group>
       )}
       {model === 'ball' && <mesh geometry={BALL.geometry} material={silhouette ? SILHOUETTE : BALL.material} rotation={[0.35, 0, 0.5]} position={[0, 0.5, 0]} dispose={null} />}
+      {model === 'plane' && (
+        <group rotation={[0, 0.5, 0]} dispose={null}>
+          <Parts parts={PLANE} silhouette={silhouette} />
+        </group>
+      )}
+      {model === 'helicopter' && (
+        <group rotation={[0, 0.5, 0]}>
+          <Helicopter silhouette={silhouette} spin={spin} />
+        </group>
+      )}
       {model === 'star' && (
         <group dispose={null}>
           <mesh geometry={STAR.geometry} material={silhouette ? SILHOUETTE : STAR.material} dispose={null} />

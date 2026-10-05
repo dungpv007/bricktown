@@ -6,13 +6,13 @@ import { PrizeModel } from './PrizeModel'
 import { PRIZES } from './prizes'
 
 /**
- * The 🏆 prize cabinet ("Tủ quà"): a brick-built display case with two glass shelves of five, one
+ * The 🏆 prize cabinet ("Tủ quà"): a brick-built display case with three glass shelves of six, one
  * place per prize kind. Won kinds stand there in colour; the others are dark silhouettes. It stands far
  * off to the side of the arcade room; the game turns its camera to it.
  */
 
-const COLS = 5
-const ROWS = 2
+const COLS = 6
+const ROWS = 3
 const CELL_W = 3
 const SIZE = 1.9
 const BROWN = 9
@@ -22,16 +22,16 @@ const GOLD = 29
 /** World: where the cabinet stands, and the camera looking at it. */
 export const CABINET_AT: [number, number, number] = [200, 0, 0]
 export const CABINET_CAMERA = {
-  position: [CABINET_AT[0], 6, 26] as [number, number, number],
-  target: [CABINET_AT[0], 3.5, 0] as [number, number, number],
+  position: [CABINET_AT[0], 7, 28] as [number, number, number],
+  target: [CABINET_AT[0], 5.0, 0] as [number, number, number],
   fov: 40,
-  fitWidth: 19,
+  fitWidth: 22,
 }
 
 /** The case's width (studs), its shelves' heights and its top (plates). */
 const W = COLS * CELL_W + 2
-const SHELF_Y = [0, 8]
-const TOP_Y = 16
+const SHELF_Y = [0, 8, 16]
+const TOP_Y = 24
 const DEPTH = 3
 
 /** 1-wide lengths the catalog has, longest first (a run of bricks or plates is cut into these). */
@@ -86,6 +86,10 @@ function slot(i: number): [number, number, number] {
   return [-(COLS * CELL_W) / 2 + CELL_W * (col + 0.5), (SHELF_Y[ROWS - 1 - row] + 1) * 0.4, 0.4]
 }
 
+/** On the shelves: the animals first, then the vehicles, then the ball and the star. */
+const GROUP_ORDER = { animal: 0, vehicle: 1, toy: 2 } as const
+const SHELF_ORDER = [...PRIZES].sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group])
+
 export interface CabinetProps {
   gltf: GLTF
   owned: readonly string[]
@@ -106,7 +110,7 @@ export default function Cabinet({ gltf, owned }: CabinetProps) {
         <meshStandardMaterial color="#4a3a7a" />
       </mesh>
       <BrickModel bricks={bricks} centered={false} position={[-W / 2, 0, -DEPTH / 2]} />
-      {PRIZES.map((p, i) => (
+      {SHELF_ORDER.map((p, i) => (
         <PrizeModel key={p.id} kind={p.id} gltf={gltf} silhouette={!have.has(p.id)} position={slot(i)} scale={SIZE} />
       ))}
       {/* The glass front. */}

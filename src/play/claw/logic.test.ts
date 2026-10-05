@@ -22,7 +22,7 @@ import {
   type ClawRound,
   type PitPrize,
 } from './logic'
-import { DUPLICATE_COINS, GIFT_CONTENTS, GIFT_LOOKS, PRIZES, PRIZE_BY_ID, PRIZE_COUNT, isPrizeId, normalizePrizes } from './prizes'
+import { DUPLICATE_COINS, GIFT_CONTENTS, GIFT_LOOKS, PRIZES, PRIZE_BY_ID, PRIZE_COUNT, VEHICLE_SHARE, isPrizeId, normalizePrizes } from './prizes'
 
 const prize = (id: number, x: number, z: number, kind = 'bunny'): PitPrize => ({ id, kind, x, z, rot: 0 })
 const PILE = [prize(0, -3, 0, 'bunny'), prize(1, 0, 0, 'cat'), prize(2, 3, -2, 'panda')]
@@ -105,7 +105,31 @@ describe('claw machine rules', () => {
     expect(unowned).toBeGreaterThan(0.7) // 5 kinds x 3 vs 5 x 1: about 0.75
   })
 
-  it('about a third of the pile are gift boxes, each hiding an animal or a car', () => {
+  it('vehicles are 60% of the draws, in the pit and inside gifts alike', () => {
+    let pitVehicles = 0
+    let pit = 0
+    let giftVehicles = 0
+    let gifts = 0
+    for (let seed = 1; seed <= 600; seed++) {
+      for (const p of makePile(seededRng(seed), PRIZES.slice(0, 4).map((q) => q.id))) {
+        const vehicle = PRIZE_BY_ID[p.kind].group === 'vehicle'
+        if (p.gift) {
+          gifts++
+          if (vehicle) giftVehicles++
+        } else {
+          pit++
+          if (vehicle) pitVehicles++
+        }
+      }
+    }
+    expect(VEHICLE_SHARE).toBe(0.6)
+    expect(pitVehicles / pit).toBeGreaterThan(0.57)
+    expect(pitVehicles / pit).toBeLessThan(0.63)
+    expect(giftVehicles / gifts).toBeGreaterThan(0.55)
+    expect(giftVehicles / gifts).toBeLessThan(0.65)
+  })
+
+  it('about a third of the pile are gift boxes, each hiding an animal or a vehicle', () => {
     let gifts = 0
     let total = 0
     for (let seed = 1; seed <= 200; seed++) {
@@ -129,11 +153,11 @@ describe('claw machine rules', () => {
 })
 
 describe('prize cabinet', () => {
-  it('has 10 kinds with unique ids: 6 animals, 2 cars, a ball and a star (gifts are boxes, not kinds)', () => {
-    expect(PRIZE_COUNT).toBe(10)
-    expect(new Set(PRIZES.map((p) => p.id)).size).toBe(10)
+  it('has 18 kinds with unique ids: 6 animals, 10 vehicles, a ball and a star (gifts are boxes, not kinds)', () => {
+    expect(PRIZE_COUNT).toBe(18)
+    expect(new Set(PRIZES.map((p) => p.id)).size).toBe(18)
     expect(PRIZES.filter((p) => p.group === 'animal')).toHaveLength(6)
-    expect(PRIZES.filter((p) => p.group === 'car')).toHaveLength(2)
+    expect(PRIZES.filter((p) => p.group === 'vehicle')).toHaveLength(10)
     for (const look of GIFT_LOOKS) expect(isPrizeId(look)).toBe(false)
   })
 
@@ -157,7 +181,7 @@ describe('prize cabinet', () => {
     expect(collectPrize(dup.play, 'dragon').play).toBe(dup.play)
   })
 
-  it('awards the first prize, half the set (5) and the whole set (10)', () => {
+  it('awards the first prize, half the set (9) and the whole set (18)', () => {
     let play = emptyPlay()
     const earned: string[] = []
     for (const p of PRIZES) {
@@ -166,6 +190,6 @@ describe('prize cabinet', () => {
       play = r.play
     }
     expect(earned).toEqual(['claw_first', 'claw_6', 'claw_all'])
-    expect(play.prizes).toHaveLength(10)
+    expect(play.prizes).toHaveLength(18)
   })
 })

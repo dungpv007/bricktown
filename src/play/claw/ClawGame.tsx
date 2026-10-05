@@ -54,7 +54,7 @@ type Vec3 = [number, number, number]
 const MACHINE_CAMERA: StageCamera = { position: [0, 12.5, 31], target: [0, 6.8, 0], fov: 40, fitWidth: 22 }
 /** Portrait phones: just the machine across the screen, a little lower (the pad sits under it). */
 const MACHINE_CAMERA_TALL: StageCamera = { position: [0, 12.5, 31], target: [0, 5.6, 0], fov: 40, fitWidth: 14.5 }
-const CABINET_CAMERA_TALL: StageCamera = { ...CABINET_CAMERA, fitWidth: 18.5 }
+const CABINET_CAMERA_TALL: StageCamera = { ...CABINET_CAMERA, fitWidth: 21 }
 const PORTRAIT = '(max-aspect-ratio: 4/5)'
 
 function usePortrait(): boolean {
@@ -327,7 +327,7 @@ function RevealPrize({ kind, gift, stage, gltf, target }: { kind: string; gift?:
         </group>
       )}
       <group ref={inner} scale={0.001}>
-        <PrizeModel kind={kind} gltf={gltf} />
+        <PrizeModel kind={kind} gltf={gltf} spin />
       </group>
     </group>
   )

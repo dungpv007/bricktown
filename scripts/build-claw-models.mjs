@@ -1,7 +1,8 @@
 // Builds public/models/claw/prizes.glb, the claw machine's prize models (src/play/claw/prizes.ts).
 //
 // Inputs: the unzipped Kenney packs (https://kenney.nl, licence CC0) in one folder:
-//   kenney_cube-pets_1.0/, kenney_holiday-kit/, kenney_toy-car-kit/  (each with "Models/GLB format/*.glb")
+//   kenney_cube-pets_1.0/, kenney_holiday-kit/, kenney_toy-car-kit/, kenney_car-kit/
+//   (each with "Models/GLB format/*.glb")
 // given as the first argument or KENNEY_DIR. Output: public/models/claw/prizes.glb (or the second argument).
 //
 // Each prize becomes a top-level node named by its prize id, scaled to fit a 1 x 1 x 1 box (centred on
@@ -23,7 +24,7 @@ if (!KENNEY) {
   globalThis.process.exit(1)
 }
 
-/** Prize id → source model (the procedural ones, beach_ball and star, are drawn in code). */
+/** Prize id → source model (the procedural ones, beach_ball, star, airplane and helicopter, are drawn in code). */
 const SOURCES = {
   bunny: 'kenney_cube-pets_1.0/Models/GLB format/animal-bunny.glb',
   cat: 'kenney_cube-pets_1.0/Models/GLB format/animal-cat.glb',
@@ -35,6 +36,12 @@ const SOURCES = {
   gift_round: 'kenney_holiday-kit/Models/GLB format/present-b-round.glb',
   monster_truck: 'kenney_toy-car-kit/Models/GLB format/vehicle-monster-truck.glb',
   racer: 'kenney_toy-car-kit/Models/GLB format/vehicle-racer.glb',
+  loader: 'kenney_car-kit/Models/GLB format/tractor-shovel.glb',
+  garbage_truck: 'kenney_car-kit/Models/GLB format/garbage-truck.glb',
+  tractor: 'kenney_car-kit/Models/GLB format/tractor.glb',
+  fire_truck: 'kenney_car-kit/Models/GLB format/firetruck.glb',
+  police_car: 'kenney_car-kit/Models/GLB format/police.glb',
+  ambulance: 'kenney_car-kit/Models/GLB format/ambulance.glb',
 }
 
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)

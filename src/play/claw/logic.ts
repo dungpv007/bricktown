@@ -1,4 +1,4 @@
-import { GIFT_CONTENTS, GIFT_LOOKS, PRIZES, type GiftLook } from './prizes'
+import { GIFT_ANIMALS, GIFT_LOOKS, NON_VEHICLES, PRIZES, VEHICLES, VEHICLE_SHARE, type GiftLook } from './prizes'
 
 /**
  * The claw machine's rules, pure (unit-tested; the scene only animates what they decide):
@@ -6,8 +6,10 @@ import { GIFT_CONTENTS, GIFT_LOOKS, PRIZES, type GiftLook } from './prizes'
  * - a drop grabs the prize nearest the claw when its top is within a generous radius (easy!);
  * - a grab slips one time in five (the prize falls back into the pit mid-lift), on any try; mercy:
  *   after two slips in a row, the next grab holds for sure (misses in between do not break the run);
- * - about a third of the pile are gift boxes, each hiding an animal or a car (weighted toward kinds
- *   the kid does not own yet), opened at the prize door;
+ * - about a third of the pile are gift boxes, each hiding an animal or a vehicle, opened at the prize
+ *   door;
+ * - vehicles are 60% of the draws (pit items and gift contents alike); within each group, kinds the
+ *   kid does not own yet come up more often;
  * - a round ("ván") is five free tries.
  *
  * Units are the scene's (studs), relative to the middle of the pit floor; +z is toward the kid.
@@ -95,7 +97,9 @@ export function pickKinds(rng: Rng, owned: readonly string[], count: number, fro
 export function makePile(rng: Rng, owned: readonly string[]): PitPrize[] {
   return SLOTS.map(([x, z], i) => {
     const gift = rng() < GIFT_SHARE ? GIFT_LOOKS[Math.floor(rng() * GIFT_LOOKS.length)] : undefined
-    const [kind] = pickKinds(rng, owned, 1, gift ? GIFT_CONTENTS : ALL_KINDS)
+    // First the group (vehicles 60%), then a kind within it.
+    const group = rng() < VEHICLE_SHARE ? VEHICLES : gift ? GIFT_ANIMALS : NON_VEHICLES
+    const [kind] = pickKinds(rng, owned, 1, group)
     const p: PitPrize = { id: i, kind, x: x + (rng() - 0.5) * 0.5, z: z + (rng() - 0.5) * 0.5, rot: (rng() - 0.5) * 1.2 }
     if (gift) p.gift = gift
     return p
